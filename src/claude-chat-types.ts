@@ -7,7 +7,7 @@ export type ClaudeChatSubmitPayload = {
 
 export type AgentContextScope = 'user' | 'project'
 
-export type AgentContextSource = 'claude' | 'agent' | 'cursor'
+export type AgentContextSource = 'claude' | 'agent' | 'agents' | 'cursor'
 
 export type AgentContextSlashKind = 'skill' | 'command'
 

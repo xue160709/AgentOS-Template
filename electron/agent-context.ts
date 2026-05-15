@@ -35,6 +35,7 @@ type RuntimeContext = {
 const SOURCE_DIRECTORIES: Array<{ directoryName: string; source: AgentContextSource }> = [
   { directoryName: '.claude', source: 'claude' },
   { directoryName: '.agent', source: 'agent' },
+  { directoryName: '.agents', source: 'agents' },
   { directoryName: '.cursor', source: 'cursor' },
 ]
 
@@ -421,13 +422,13 @@ async function buildAppendSystemPrompt(catalog: AgentContextCatalog): Promise<st
 
   let remaining = MAX_INSTRUCTION_TOTAL_CHARS
   const sections = [
-    'The host application loaded additional project instructions and compatibility metadata from AGENT/AGENTS, .agent, and .cursor files. Treat these as lower priority than explicit user instructions and higher priority than generic defaults.',
+    'The host application loaded additional project instructions and compatibility metadata from AGENT/AGENTS, .agent, .agents, and .cursor files. Treat these as lower priority than explicit user instructions and higher priority than generic defaults.',
   ]
 
   if (hostSkills.length > 0) {
     sections.push(
       [
-        'Host-compatible slash commands from .agent/.cursor:',
+        'Host-compatible slash commands from .agent/.agents/.cursor:',
         ...hostSkills.map((skill) => `- /${skill.command} (${formatScope(skill.scope)}, ${skill.source}): ${skill.description || skill.relativePath}`),
       ].join('\n'),
     )
@@ -611,15 +612,43 @@ function dedupeInstructionFiles(items: AgentInstructionFile[]): AgentInstruction
 }
 
 function sortSlashItems(items: AgentContextSlashItem[]): AgentContextSlashItem[] {
-  return [...items].sort((a, b) => a.command.localeCompare(b.command) || a.relativePath.localeCompare(b.relativePath))
+  return [...items].sort(
+    (a, b) =>
+      scopeRank(a.scope) - scopeRank(b.scope) ||
+      sourceRank(a.source) - sourceRank(b.source) ||
+      a.command.localeCompare(b.command) ||
+      a.relativePath.localeCompare(b.relativePath),
+  )
 }
 
 function sortAgentItems(items: AgentContextAgentItem[]): AgentContextAgentItem[] {
-  return [...items].sort((a, b) => a.name.localeCompare(b.name) || a.relativePath.localeCompare(b.relativePath))
+  return [...items].sort(
+    (a, b) =>
+      scopeRank(a.scope) - scopeRank(b.scope) ||
+      sourceRank(a.source) - sourceRank(b.source) ||
+      a.name.localeCompare(b.name) ||
+      a.relativePath.localeCompare(b.relativePath),
+  )
 }
 
 function sortInstructionFiles(items: AgentInstructionFile[]): AgentInstructionFile[] {
-  return [...items].sort((a, b) => a.relativePath.localeCompare(b.relativePath))
+  return [...items].sort(
+    (a, b) =>
+      scopeRank(a.scope) - scopeRank(b.scope) ||
+      sourceRank(a.source) - sourceRank(b.source) ||
+      a.relativePath.localeCompare(b.relativePath),
+  )
+}
+
+function scopeRank(scope: AgentContextScope): number {
+  return scope === 'project' ? 0 : 1
+}
+
+function sourceRank(source: AgentContextSource): number {
+  if (source === 'claude') return 0
+  if (source === 'agents') return 1
+  if (source === 'agent') return 2
+  return 3
 }
 
 function matchesQuery(name: string, relativePath: string, query: string): boolean {

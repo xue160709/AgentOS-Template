@@ -38,7 +38,7 @@
 - **消息展示**：用户/助手文本；助手侧 **Markdown**（`marked`）转 HTML 后经 **DOMPurify** 消毒；数据模型中还支持 **工具调用**、**thinking**、**活动/状态** 等时间线条目（见 `src/components/types.ts`）。
 - **工作目录**：发送时会带上当前选中项目的 **`cwd`**（项目路径），供 Agent 在该目录上下文中运行。
 - **输入增强**：输入框支持类 Codex 的 `/` slash command 菜单与 `@` mention 菜单；`/` 聚合内置命令、全局/项目 skills 与 commands，`@` 可搜索当前项目文件并引用 subagent。
-- **Skills / Agents 发现**：主进程扫描 `~/.claude`、项目 `.claude`，并兼容 `~/.agent`、项目 `.agent`、`~/.cursor`、项目 `.cursor` 下的 `skills/`、`commands/`、`agents/`。
+- **Skills / Agents 发现**：主进程扫描 `~/.claude`、项目 `.claude`，并兼容 `~/.agent`、`~/.agents`、项目 `.agent`、项目 `.agents`、`~/.cursor`、项目 `.cursor` 下的 `skills/`、`commands/`、`agents/`。
 - **项目指令读取**：Claude 原生 `CLAUDE.md` 通过 SDK `settingSources: ['user', 'project', 'local']` 加载；模板额外把 `AGENT.md` / `AGENTS.md`、`.agent`、`.cursor/rules` 作为 host append prompt 注入。
 - **模型选择**：聊天输入区旁的模型菜单与 Agent 设置里的「当前对话所用配置」一致并持久化；与设置页里「正在编辑哪一条厂商配置」相互独立（见 `ClaudeAgentSettingsPage`）。
 
@@ -105,9 +105,9 @@ cp .env.example .env.local
 
 这套模板把「发现、展示、提交」拆成三层：
 
-- **发现层**：`electron/agent-context.ts` 读取全局与当前项目目录，支持 `.claude/skills/<name>/SKILL.md`、`.claude/commands/*.md`、`.claude/agents/*.md`，并用同样规则兼容 `.agent`、`.cursor`。
+- **发现层**：`electron/agent-context.ts` 读取全局与当前项目目录，支持 `.claude/skills/<name>/SKILL.md`、`.claude/commands/*.md`、`.claude/agents/*.md`，并用同样规则兼容 `.agent`、`.agents`、`.cursor`。
 - **交互层**：`ChatPage` 在输入 `/` 时打开命令菜单，在输入 `@` 时打开文件/agent 菜单；选择项只替换当前 token，不直接提交，用户可以继续补充上下文。
-- **运行层**：`claude-agent-runner` 交给 Claude Agent SDK 原生加载 `.claude` 的 skills、commands、agents、CLAUDE.md；对 `.agent/.cursor` 的 slash command 做 host-side 展开，对 agents 转成 SDK `agents` 配置。
+- **运行层**：`claude-agent-runner` 交给 Claude Agent SDK 原生加载 `.claude` 的 skills、commands、agents、CLAUDE.md；对 `.agent/.agents/.cursor` 的 slash command 做 host-side 展开，对 agents 转成 SDK `agents` 配置。
 
 兼容目录约定：
 
@@ -120,13 +120,15 @@ cp .env.example .env.local
 <project>/.claude/agents/<name>.md
 <project>/.agent/skills/<name>/SKILL.md
 <project>/.agent/agents/<name>.md
+<project>/.agents/skills/<name>/SKILL.md
+<project>/.agents/agents/<name>.md
 <project>/.cursor/skills/<name>/SKILL.md
 <project>/.cursor/agents/<name>.md
 <project>/AGENT.md
 <project>/AGENTS.md
 ```
 
-`.claude` 是 Claude SDK 原生路径；`.agent` / `.cursor` 是模板兼容层。兼容层支持 frontmatter 的 `name`、`description`、`argument-hint`、`model`、`tools`、`allowed-tools`、`skills` 等常见字段。
+`.claude` 是 Claude SDK 原生路径；`.agent` / `.agents` / `.cursor` 是模板兼容层。兼容层支持 frontmatter 的 `name`、`description`、`argument-hint`、`model`、`tools`、`allowed-tools`、`skills` 等常见字段。
 
 ## 预加载与 IPC
 

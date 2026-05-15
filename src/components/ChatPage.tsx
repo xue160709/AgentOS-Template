@@ -17,6 +17,7 @@ import type {
   AgentContextAgentItem,
   AgentContextCatalog,
   AgentContextSlashItem,
+  AgentContextSource,
   ClaudeAgentModelProvider,
   ClaudeAgentSettings,
   ClaudeAgentSettingsSnapshot,
@@ -43,6 +44,7 @@ marked.setOptions({
 })
 
 const SETTINGS_CHANGED_EVENT = 'claude-agent-settings:changed'
+const MAX_COMPOSER_SUGGESTIONS = 64
 
 export type ChatPageHandle = {
   startNewThread: () => Promise<void>
@@ -1519,7 +1521,7 @@ function buildSlashSuggestions(query: string, catalog: AgentContextCatalog | nul
     .filter((suggestion) =>
       matchesSuggestion(normalizedQuery, suggestion.title, suggestion.subtitle, suggestion.insertText),
     )
-    .slice(0, 14)
+    .slice(0, MAX_COMPOSER_SUGGESTIONS)
 }
 
 function buildMentionSuggestions(
@@ -1551,7 +1553,7 @@ function buildMentionSuggestions(
     .filter((suggestion) =>
       matchesSuggestion(normalizedQuery, suggestion.title, suggestion.subtitle, suggestion.insertText),
     )
-    .slice(0, 14)
+    .slice(0, MAX_COMPOSER_SUGGESTIONS)
 }
 
 function matchesSuggestion(query: string, ...values: string[]): boolean {
@@ -1572,9 +1574,10 @@ function formatContextScope(scope: 'user' | 'project'): string {
   return scope === 'user' ? 'User' : 'Project'
 }
 
-function formatContextSource(source: 'claude' | 'agent' | 'cursor'): string {
+function formatContextSource(source: AgentContextSource): string {
   if (source === 'claude') return '.claude'
   if (source === 'agent') return '.agent'
+  if (source === 'agents') return '.agents'
   return '.cursor'
 }
 
