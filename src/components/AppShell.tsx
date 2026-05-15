@@ -1,33 +1,14 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { IconInline } from '../icon-inline'
+import {
+  SIDEBAR_WIDTH_STORAGE_KEY,
+  SIDEBAR_MAX_RATIO,
+  VIEW_HEADINGS,
+  viewFromLocation,
+} from './app-shell-constants'
 import type { AppViewId } from './types'
-import { ChatPage, type ChatPageHandle } from './ChatPage'
-import { DocsPage } from './DocsPage'
-import { SettingsPage } from './SettingsPage'
-
-const SIDEBAR_WIDTH_STORAGE_KEY = 'CodeX-UI-Template-sidebar-width-px'
-const SIDEBAR_MAX_RATIO = 0.3
-
-const VIEW_HEADINGS: Record<AppViewId, string> = {
-  home: 'Codex Chatbot',
-  docs: '文档',
-  settings: '设置',
-}
-
-const NAV_LABELS: Record<'home' | 'docs', string> = {
-  home: '聊天',
-  docs: '文档',
-}
-
-const NAV_VIEW_IDS = ['home', 'docs'] as const
-
-function normalizeViewId(value: string): AppViewId {
-  return value === 'docs' || value === 'settings' ? value : 'home'
-}
-
-function viewFromLocation(): AppViewId {
-  return normalizeViewId(window.location.hash.replace(/^#/, ''))
-}
+import { AppShellSidebar } from './AppShellSidebar'
+import { AppShellWorkspace } from './AppShellWorkspace'
+import { type ChatPageHandle } from './ChatPage'
 
 export function AppShell() {
   const [activeViewId, setActiveViewId] = useState<AppViewId>(() => viewFromLocation())
@@ -167,111 +148,23 @@ export function AppShell() {
       ref={shellRef}
     >
       <div className="app-body" ref={appBodyRef}>
-        <div className="app-chrome-toolbar no-drag" aria-label="窗口导航">
-          <button
-            type="button"
-            className="btn btn-toolbar"
-            id="btn-toggle-sidebar"
-            title="切换侧栏"
-            aria-label="切换侧栏"
-            onClick={() => setSidebarCollapsed((c) => !c)}
-          >
-            <IconInline name="sidebar" />
-          </button>
-          <button
-            type="button"
-            className="btn btn-toolbar"
-            id="btn-back"
-            title="后退"
-            aria-label="后退"
-            disabled={!canBack}
-            onClick={() => window.history.back()}
-          >
-            <IconInline name="back" />
-          </button>
-          <button
-            type="button"
-            className="btn btn-toolbar"
-            id="btn-forward"
-            title="前进"
-            aria-label="前进"
-            disabled={!canForward}
-            onClick={() => window.history.forward()}
-          >
-            <IconInline name="forward" />
-          </button>
-        </div>
-        <aside className="app-sidebar" aria-label="侧栏导航" ref={appSidebarRef}>
-          <div className="app-sidebar-scroll">
-            <div className="app-sidebar-inner">
-              <div className="app-sidebar-section-label">工作区</div>
-              {NAV_VIEW_IDS.map((id) => (
-                <button
-                  key={id}
-                  type="button"
-                  className={`app-nav-item${activeViewId === id ? ' is-active' : ''}`}
-                  data-view={id}
-                  onClick={() => {
-                    window.location.hash = id === 'home' ? '' : id
-                  }}
-                >
-                  {NAV_LABELS[id]}
-                </button>
-              ))}
-            </div>
-          </div>
-          <footer className="app-sidebar-footer">
-            <button
-              type="button"
-              className={`btn btn-toolbar${activeViewId === 'settings' ? ' is-active' : ''}`}
-              id="btn-footer-settings"
-              title="设置"
-              aria-label="设置"
-              onClick={() => {
-                window.location.hash = 'settings'
-              }}
-            >
-              <IconInline name="settings" />
-            </button>
-            <span className="user-select-none text-token-secondary">CodeX-UI-Template</span>
-          </footer>
-        </aside>
-        <div
-          className="app-sidebar-splitter no-drag"
-          id="app-sidebar-splitter"
-          ref={sidebarSplitterRef}
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="调整侧栏宽度"
-          onPointerDown={handleSidebarPointerDown}
+        <AppShellSidebar
+          activeViewId={activeViewId}
+          canBack={canBack}
+          canForward={canForward}
+          onToggleCollapsed={() => setSidebarCollapsed((c) => !c)}
+          sidebarRef={appSidebarRef}
+          splitterRef={sidebarSplitterRef}
+          onSplitterPointerDown={handleSidebarPointerDown}
         />
-        <div className="app-workspace">
-          <header className="app-workspace-header" role="banner">
-            <span className="app-workspace-title no-drag" id="workspace-title">
-              {workspaceTitle}
-            </span>
-            <div className="app-workspace-drag-gap draggable" aria-hidden="true" />
-            <div className="app-workspace-actions no-drag">
-              <button
-                type="button"
-                className="btn btn-ghost"
-                id="btn-new-thread"
-                onClick={() => void chatRef.current?.startNewThread()}
-              >
-                <IconInline name="plus" />
-                <span>新对话</span>
-              </button>
-              <span className="status-pill user-select-none" id="ipc-status" title="Claude Agent 状态">
-                {headerStatus}
-              </span>
-            </div>
-          </header>
-          <main className="app-main" role="main">
-            <ChatPage ref={chatRef} hidden={activeViewId !== 'home'} onStatusChange={setHeaderStatus} />
-            <DocsPage hidden={activeViewId !== 'docs'} />
-            <SettingsPage hidden={activeViewId !== 'settings'} />
-          </main>
-        </div>
+        <AppShellWorkspace
+          workspaceTitle={workspaceTitle}
+          headerStatus={headerStatus}
+          activeViewId={activeViewId}
+          chatRef={chatRef}
+          onStatusChange={setHeaderStatus}
+          onNewThread={() => void chatRef.current?.startNewThread()}
+        />
       </div>
     </div>
   )
