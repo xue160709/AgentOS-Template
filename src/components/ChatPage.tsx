@@ -37,13 +37,6 @@ marked.setOptions({
 
 const SETTINGS_CHANGED_EVENT = 'claude-agent-settings:changed'
 
-const SUGGESTIONS = [
-  'Replace electron-builder placeholders before the first packaged build ships wrong metadata',
-  'Make the 文档 tab render codex-ui-framework-notes.md instead of an empty placeholder',
-  '审查我最近的提交记录是否存在正确性风险和可维护性隐患',
-  '将你常用的应用连接到 Codex',
-] as const
-
 export type ChatPageHandle = {
   startNewThread: () => Promise<void>
   focusComposer: () => void
@@ -878,7 +871,6 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
                 >
                   <IconInline name="plus" />
                   <span className="chat-project-option-copy">
-                    <span>从空白开始</span>
                     <span>创建一个新的本地项目</span>
                   </span>
                 </button>
@@ -905,24 +897,6 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
             <span>此项目新对话</span>
           </button>
         </div>
-      </div>
-      <div className="chat-suggestions" id="chat-suggestions" aria-label="建议提示" hidden={hasMessages}>
-        {SUGGESTIONS.map((prompt) => (
-          <button
-            key={prompt}
-            type="button"
-            data-prompt={prompt}
-            onClick={() => {
-              setInputValue(prompt)
-              requestAnimationFrame(() => {
-                chatInputRef.current?.focus()
-                resizeComposer()
-              })
-            }}
-          >
-            {prompt}
-          </button>
-        ))}
       </div>
     </section>
   )

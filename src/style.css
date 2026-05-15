@@ -85,6 +85,7 @@ a:hover {
   height: var(--height-toolbar);
 }
 .icon-xs {
+  display: block;
   width: 16px;
   height: 16px;
   flex-shrink: 0;
@@ -296,6 +297,13 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
   background: var(--color-token-list-hover-background);
 }
 
+.app-sidebar-new-thread > span:not(:last-child) {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  line-height: 0;
+}
+
 .app-sidebar-new-thread:focus-visible,
 .app-project-select:focus-visible,
 .app-project-new-thread:focus-visible,
@@ -361,10 +369,6 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
   line-height: 0;
 }
 
-.app-project-select > span:first-child .icon-xs {
-  display: block;
-}
-
 .app-project-copy {
   display: flex;
   flex-direction: column;
@@ -425,6 +429,12 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
   background: var(--color-token-list-hover-background);
 }
 
+.app-project-new-thread > span {
+  display: inline-flex;
+  align-items: center;
+  line-height: 0;
+}
+
 .app-thread-list {
   display: flex;
   flex-direction: column;
@@ -452,6 +462,12 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
 .app-thread-row.is-active {
   background: var(--color-token-list-active-selection-background);
   color: var(--color-token-text-primary);
+}
+
+.app-thread-pin > span {
+  display: inline-flex;
+  align-items: center;
+  line-height: 0;
 }
 
 .app-thread-pin {
@@ -485,16 +501,18 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
 }
 
 .app-thread-select {
-  display: block;
+  display: flex;
+  align-items: center;
   width: 100%;
-  padding: calc(var(--spacing) * 1.25) calc(var(--spacing) * 1.5);
+  min-height: inherit;
+  padding: 0 calc(var(--spacing) * 1.5);
   border-radius: inherit;
 }
 
 .app-thread-title {
   display: block;
-  font-size: var(--text-sm);
-  line-height: 20px;
+  font-size: 13px;
+  line-height: 18px;
   font-weight: var(--font-weight-normal);
 }
 
@@ -504,13 +522,22 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
 }
 
 .app-thread-time {
+  display: flex;
+  align-items: center;
+  align-self: center;
   flex: 0 0 auto;
   padding-inline: calc(var(--spacing) * 1);
   color: var(--color-token-text-tertiary);
-  font-size: var(--text-sm);
-  line-height: 20px;
+  font-size: var(--text-xs);
+  line-height: 18px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.app-thread-archive > span:has(.icon-xs) {
+  display: inline-flex;
+  align-items: center;
+  line-height: 0;
 }
 
 .app-thread-archive {
