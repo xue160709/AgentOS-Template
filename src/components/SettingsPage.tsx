@@ -297,7 +297,7 @@ export function SettingsPage({ hidden, settingsCategory }: SettingsPageProps) {
                   <IconInline name="settings" />
                   配置名称
                 </label>
-                <p className="settings-field-row__hint">可选备注，列表仍优先显示 Model。</p>
+                <p className="settings-field-row__hint">可选备注；用于在左侧列表中显示更易识别的标题。</p>
               </div>
               <input
                 id="claude-provider-name"
@@ -346,25 +346,6 @@ export function SettingsPage({ hidden, settingsCategory }: SettingsPageProps) {
                 placeholder="https://open.bigmodel.cn/api/anthropic"
                 value={editingProvider?.baseUrl ?? ''}
                 onChange={(event) => updateEditingProvider('baseUrl', event.target.value)}
-              />
-            </div>
-            <div className="settings-field-row">
-              <div className="settings-field-row__meta">
-                <label htmlFor="claude-model" className="settings-field-row__label">
-                  <IconInline name="chip" />
-                  Model
-                </label>
-                <p className="settings-field-row__hint">对应 ANTHROPIC_MODEL；显示在模型列表与聊天输入框旁的模型菜单中。</p>
-              </div>
-              <input
-                id="claude-model"
-                type="text"
-                className="settings-input"
-                autoComplete="off"
-                spellCheck={false}
-                placeholder="glm-5.1"
-                value={editingProvider?.model ?? ''}
-                onChange={(event) => updateEditingProvider('model', event.target.value)}
               />
             </div>
             <div className="settings-field-row">

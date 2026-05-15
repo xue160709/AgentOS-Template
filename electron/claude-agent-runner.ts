@@ -123,6 +123,7 @@ export class ClaudeAgentRunner {
           model: config.model || undefined,
           permissionMode: 'dontAsk',
           resume: this.sessionId,
+          settingSources: [],
           tools: READ_ONLY_TOOLS,
         },
       })
