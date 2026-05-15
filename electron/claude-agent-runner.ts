@@ -1,5 +1,7 @@
 import type { WebContents } from 'electron'
 import { randomUUID } from 'node:crypto'
+import os from 'node:os'
+import path from 'node:path'
 import { query, type Query, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import type {
   ClaudeAgentResolvedConfig,
@@ -14,6 +16,7 @@ type ActiveRequest = {
   requestId: string
   assistantMessageId: string
   threadId: string
+  cwd: string
   abortController: AbortController
   query?: Query
   cancelled: boolean
@@ -68,10 +71,13 @@ export class ClaudeAgentRunner {
       this.cancel(this.activeRequest.requestId)
     }
 
+    const cwd = resolveWorkspaceCwd(payload.cwd, this.cwd)
+
     const activeRequest: ActiveRequest = {
       requestId,
       assistantMessageId: `assistant-${requestId}`,
       threadId,
+      cwd,
       abortController: new AbortController(),
       cancelled: false,
       didEmitText: false,
@@ -138,7 +144,7 @@ export class ClaudeAgentRunner {
         options: {
           abortController: activeRequest.abortController,
           allowedTools: READ_ONLY_TOOLS,
-          cwd: this.cwd,
+          cwd: activeRequest.cwd,
           env: this.buildSdkEnv(config),
           forwardSubagentText: true,
           includeHookEvents: true,
@@ -241,7 +247,7 @@ export class ClaudeAgentRunner {
         requestId: activeRequest.requestId,
         sessionId: message.session_id,
         model: threadState.model,
-        cwd: message.cwd || this.cwd,
+        cwd: message.cwd || activeRequest.cwd,
         tools,
         skills,
         mcpServers,
@@ -987,4 +993,13 @@ function previewHash(value: unknown): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
+}
+
+function resolveWorkspaceCwd(requested: string | undefined, fallback: string): string {
+  const raw = requested?.trim() || fallback.trim()
+  if (!raw) return path.resolve(fallback)
+  if (raw.startsWith('~/')) {
+    return path.resolve(path.join(os.homedir(), raw.slice(2)))
+  }
+  return path.resolve(raw)
 }

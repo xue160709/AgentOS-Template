@@ -75,6 +75,8 @@ function ChatMessage({ item }: { item: ChatMessageItem }) {
     return `<p>${escapeHtml(item.content).replace(/\n/g, '<br>')}</p>`
   }, [item.content, item.role, item.status])
 
+  if (item.role === 'assistant' && !item.content.trim() && item.status === 'streaming') return null
+
   const suffix = item.role === 'assistant' && item.status === 'streaming' ? '<span class="typing-dot"></span>' : ''
 
   return (
@@ -94,27 +96,56 @@ function ToolRow({ item }: { item: ChatToolItem }) {
     error: '出错',
     running: '运行中',
   }
+  const hasDetails = Boolean(item.detail || item.inputPreview)
+  const [isOpen, setIsOpen] = useState(item.status === 'running')
+
+  useEffect(() => {
+    setIsOpen(item.status === 'running')
+  }, [item.status])
+
   return (
-    <div className={`tool-row tool-row--${item.status}`}>
-      <span className="tool-row__dot" />
-      <span className="tool-row__name">{item.name}</span>
-      <span className="tool-row__status">{statusLabel[item.status]}</span>
-      {item.detail ? <span className="tool-row__detail">{item.detail}</span> : null}
-      {item.inputPreview ? <code>{item.inputPreview}</code> : null}
-    </div>
+    <details
+      className={`tool-row tool-row--${item.status}`}
+      open={isOpen}
+      onToggle={(event) => setIsOpen(event.currentTarget.open)}
+    >
+      <summary className="status-row__summary">
+        <span className="status-row__chevron" aria-hidden="true" />
+        <span className="tool-row__dot" />
+        <span className="tool-row__name">{item.name}</span>
+        <span className="tool-row__status">{statusLabel[item.status]}</span>
+        {item.detail ? <span className="tool-row__detail">{item.detail}</span> : null}
+      </summary>
+      {hasDetails ? (
+        <div className="status-row__body">
+          {item.inputPreview ? <code>{item.inputPreview}</code> : null}
+        </div>
+      ) : null}
+    </details>
   )
 }
 
 function ThinkingRow({ item }: { item: ChatThinkingItem }) {
+  const [isOpen, setIsOpen] = useState(item.status === 'running')
+
+  useEffect(() => {
+    setIsOpen(item.status === 'running')
+  }, [item.status])
+
   return (
-    <div className={`thinking-row thinking-row--${item.status}`}>
-      <div className="thinking-row__header">
+    <details
+      className={`thinking-row thinking-row--${item.status}`}
+      open={isOpen}
+      onToggle={(event) => setIsOpen(event.currentTarget.open)}
+    >
+      <summary className="thinking-row__header">
+        <span className="status-row__chevron" aria-hidden="true" />
         <span className="thinking-row__dot" />
         <span className="thinking-row__title">{item.title}</span>
         <span className="thinking-row__status">{item.status === 'running' ? '思考中' : '完成'}</span>
-      </div>
+      </summary>
       {item.content ? <pre>{item.content}</pre> : null}
-    </div>
+    </details>
   )
 }
 
@@ -125,16 +156,27 @@ function ActivityRow({ item }: { item: ChatActivityItem }) {
     info: '状态',
     running: '进行中',
   }
+  const [isOpen, setIsOpen] = useState(item.status === 'running')
+
+  useEffect(() => {
+    setIsOpen(item.status === 'running')
+  }, [item.status])
+
   return (
-    <div className={`activity-row activity-row--${item.status}`}>
-      <div className="activity-row__main">
+    <details
+      className={`activity-row activity-row--${item.status}`}
+      open={isOpen}
+      onToggle={(event) => setIsOpen(event.currentTarget.open)}
+    >
+      <summary className="activity-row__main">
+        <span className="status-row__chevron" aria-hidden="true" />
         <span className="activity-row__dot" />
         <span className="activity-row__title">{item.title}</span>
         <span className="activity-row__status">{statusLabel[item.status]}</span>
         {item.detail ? <span className="activity-row__detail">{item.detail}</span> : null}
-      </div>
+      </summary>
       {item.preview ? <pre>{item.preview}</pre> : null}
-    </div>
+    </details>
   )
 }
 
@@ -486,6 +528,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
             const it = items[idx] as ChatMessageItem
             const next = [...items]
             next[idx] = { ...it, content: it.content + event.text, status: 'streaming' }
+            activeAssistantMessageIdRef.current = messageId
             return { ...prev, items: next }
           }
 
@@ -499,6 +542,11 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
             return { ...prev, items: next }
           }
 
+          if (!event.text) {
+            activeAssistantMessageIdRef.current = messageId
+            return prev
+          }
+
           const msg: ChatMessageItem = {
             type: 'message',
             id: messageId,
@@ -506,6 +554,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
             content: event.text,
             status: 'streaming',
           }
+          activeAssistantMessageIdRef.current = messageId
           return { ...prev, items: [...items, msg] }
         })
         return
@@ -650,13 +699,28 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
           setThreadChatState(eventThreadId, (prev) => {
             const expectedId = `assistant-${event.requestId}`
             const pendingId = activeAssistantMessageIdRef.current
-            const items = prev.items.map((item): TranscriptItem => {
+            let found = false
+            const mapped = prev.items.map((item): TranscriptItem => {
               if (item.type !== 'message' || item.role !== 'assistant') return item
               if (item.id !== expectedId && item.id !== pendingId) return item
+              found = true
               const content =
                 !item.content.trim() && event.result.trim() ? event.result : item.content
               return { ...item, content, status: 'done' }
             })
+            const items: TranscriptItem[] =
+              found || !event.result.trim()
+                ? mapped
+                : [
+                    ...mapped,
+                    {
+                      type: 'message',
+                      id: expectedId,
+                      role: 'assistant',
+                      content: event.result,
+                      status: 'done',
+                    },
+                  ]
             return { ...prev, sessionId: event.sessionId, items }
           })
         })
@@ -703,12 +767,26 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
         flushSync(() => {
           setThreadChatState(eventThreadId, (prev) => {
             const pendingId = activeAssistantMessageIdRef.current
-            const items = prev.items.map((item): TranscriptItem => {
+            let found = false
+            const mapped = prev.items.map((item): TranscriptItem => {
               if (item.type !== 'message' || item.role !== 'assistant') return item
               if (item.id !== expectedId && item.id !== pendingId) return item
+              found = true
               const content = !item.content.trim() ? '已停止。' : item.content
               return { ...item, content, status: 'cancelled' }
             })
+            const items: TranscriptItem[] = found
+              ? mapped
+              : [
+                  ...mapped,
+                  {
+                    type: 'message',
+                    id: expectedId,
+                    role: 'assistant',
+                    content: '已停止。',
+                    status: 'cancelled',
+                  },
+                ]
             return { ...prev, items }
           })
         })
@@ -743,12 +821,13 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     },
   }), [onNewThread, onStatusChange])
 
-	  const submitPrompt = async (rawText: string) => {
-	    const text = rawText.trim()
-	    if (!text || isRunningRef.current) return
-	    const submittingThreadId = activeThreadIdRef.current
+  const submitPrompt = async (rawText: string) => {
+    const text = rawText.trim()
+    if (!text || isRunningRef.current) return
+    const submittingThreadId = activeThreadIdRef.current
+    const projectForSubmit =
+      projects.find((project) => project.id === activeThread.projectId) ?? activeProject
 
-	    const optimisticAssistantId = `assistant-pending-${Date.now()}`
     const userMessage: ChatMessageItem = {
       type: 'message',
       id: `user-${Date.now()}`,
@@ -756,40 +835,33 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       content: text,
       status: 'done',
     }
-    const assistantMessage: ChatMessageItem = {
-      type: 'message',
-      id: optimisticAssistantId,
-      role: 'assistant',
-      content: '',
-      status: 'streaming',
-    }
 
-	    scrollIntentRef.current = 'force-bottom'
-	    onThreadPromptSubmit(submittingThreadId, text)
-	    setThreadChatState(submittingThreadId, (prev) => ({
-	      ...prev,
-	      items: [...prev.items, userMessage, assistantMessage],
-	    }))
+    scrollIntentRef.current = 'force-bottom'
+    onThreadPromptSubmit(submittingThreadId, text)
+    setThreadChatState(submittingThreadId, (prev) => ({
+      ...prev,
+      items: [...prev.items, userMessage],
+    }))
     setInputValue('')
     setIsRunning(true)
     isRunningRef.current = true
-    activeAssistantMessageIdRef.current = optimisticAssistantId
+    activeAssistantMessageIdRef.current = undefined
     onStatusChange('处理中')
 
-	    if (!window.claudeChat) {
-	      scrollIntentRef.current = 'force-bottom'
-	      setThreadChatState(submittingThreadId, (prev) => ({
-	        ...prev,
-	        items: prev.items.map((item) => {
-          if (item.type === 'message' && item.id === optimisticAssistantId) {
-            return {
-              ...item,
-              status: 'error',
-              content: 'Claude bridge unavailable. 请在 Electron 环境中运行应用。',
-            }
-          }
-          return item
-        }),
+    if (!window.claudeChat) {
+      scrollIntentRef.current = 'force-bottom'
+      setThreadChatState(submittingThreadId, (prev) => ({
+        ...prev,
+        items: [
+          ...prev.items,
+          {
+            type: 'message',
+            id: `assistant-error-${Date.now()}`,
+            role: 'assistant',
+            content: 'Claude bridge unavailable. 请在 Electron 环境中运行应用。',
+            status: 'error',
+          },
+        ],
       }))
       setIsRunning(false)
       isRunningRef.current = false
@@ -798,36 +870,29 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       return
     }
 
-	    try {
-	      const { requestId } = await window.claudeChat.submit({ text, threadId: submittingThreadId })
-	      requestThreadIdsRef.current.set(requestId, submittingThreadId)
-	      const newAssistantId = `assistant-${requestId}`
-	      scrollIntentRef.current = 'force-bottom'
-	      setThreadChatState(submittingThreadId, (prev) => ({
-	        ...prev,
-	        items: prev.items.map((item) => {
-          if (item.type === 'message' && item.id === optimisticAssistantId) {
-            return { ...item, id: newAssistantId }
-          }
-          return item
-        }),
-      }))
+    try {
+      const { requestId } = await window.claudeChat.submit({
+        text,
+        threadId: submittingThreadId,
+        cwd: projectForSubmit.path,
+      })
+      requestThreadIdsRef.current.set(requestId, submittingThreadId)
       activeRequestIdRef.current = requestId
-      activeAssistantMessageIdRef.current = newAssistantId
-	    } catch (error) {
-	      scrollIntentRef.current = 'force-bottom'
-	      setThreadChatState(submittingThreadId, (prev) => ({
-	        ...prev,
-	        items: prev.items.map((item) => {
-          if (item.type === 'message' && item.id === optimisticAssistantId) {
-            return {
-              ...item,
-              status: 'error',
-              content: error instanceof Error ? error.message : String(error),
-            }
-          }
-          return item
-        }),
+      activeAssistantMessageIdRef.current = `assistant-${requestId}`
+    } catch (error) {
+      scrollIntentRef.current = 'force-bottom'
+      setThreadChatState(submittingThreadId, (prev) => ({
+        ...prev,
+        items: [
+          ...prev.items,
+          {
+            type: 'message',
+            id: `assistant-error-${Date.now()}`,
+            role: 'assistant',
+            content: error instanceof Error ? error.message : String(error),
+            status: 'error',
+          },
+        ],
       }))
       setIsRunning(false)
       isRunningRef.current = false

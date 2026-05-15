@@ -445,6 +445,7 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
   min-height: 32px;
   border-radius: var(--radius-md);
   color: var(--color-token-text-secondary);
+  user-select: none;
   transition:
     background var(--transition-duration-basic) var(--transition-ease-basic),
     color var(--transition-duration-basic) var(--transition-ease-basic);
@@ -518,16 +519,13 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
 }
 
 .app-thread-trailing {
-  display: grid;
-  justify-self: end;
-  margin-right: calc(var(--spacing) * 1.1);
-}
-
-.app-thread-trailing > .app-thread-time,
-.app-thread-trailing > .app-thread-archive {
-  grid-area: 1 / 1;
-  align-self: center;
-  justify-self: end;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  min-height: 32px;
+  margin-right: calc(var(--spacing) * 1);
 }
 
 .app-thread-time {
@@ -539,16 +537,20 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
   line-height: 18px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  user-select: none;
   transition: opacity var(--transition-duration-basic) var(--transition-ease-basic);
 }
 
 .app-thread-archive {
+  position: absolute;
+  right: 0;
+  top: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 24px;
+  width: 24px;
   height: 24px;
-  padding: 0 calc(var(--spacing) * 0.5);
+  padding: 0;
   border: 0;
   border-radius: var(--radius-sm);
   color: var(--color-token-text-secondary);
@@ -559,10 +561,17 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
   opacity: 0;
   pointer-events: none;
   cursor: pointer;
+  transform: translateY(-50%);
   transition:
     opacity var(--transition-duration-basic) var(--transition-ease-basic),
     background var(--transition-duration-basic) var(--transition-ease-basic),
     color var(--transition-duration-basic) var(--transition-ease-basic);
+}
+
+.app-thread-archive::before {
+  content: '';
+  position: absolute;
+  inset: -4px -6px;
 }
 
 .app-thread-archive > span:has(.icon-xs) {
@@ -574,6 +583,7 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
 .app-thread-row:hover .app-thread-time,
 .app-thread-row.is-confirming-archive .app-thread-time {
   opacity: 0;
+  pointer-events: none;
 }
 
 .app-thread-row:hover .app-thread-archive,
@@ -588,9 +598,22 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
   background: var(--color-token-list-hover-background);
 }
 
+.app-thread-row.is-confirming-archive .app-thread-trailing {
+  min-width: 36px;
+}
+
 .app-thread-archive.is-confirming {
+  width: max-content;
+  min-width: 36px;
+  height: 24px;
+  padding-inline: calc(var(--spacing) * 1);
+  white-space: nowrap;
   color: var(--gray-0);
   background: var(--red-500);
+}
+
+.app-thread-archive.is-confirming > span {
+  white-space: nowrap;
 }
 
 .app-thread-empty {
@@ -1828,12 +1851,47 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
 
 .tool-row {
   width: min(760px, 100%);
-  display: flex;
-  align-items: center;
-  gap: calc(var(--spacing) * 2);
   color: var(--color-token-text-secondary);
   font-size: var(--text-sm);
   min-height: 28px;
+}
+
+.status-row__summary {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  gap: calc(var(--spacing) * 2);
+  cursor: pointer;
+  list-style: none;
+}
+
+.status-row__summary::-webkit-details-marker,
+.activity-row__main::-webkit-details-marker,
+.thinking-row__header::-webkit-details-marker {
+  display: none;
+}
+
+.status-row__summary::marker,
+.activity-row__main::marker,
+.thinking-row__header::marker {
+  content: '';
+}
+
+.status-row__chevron {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  opacity: 0.56;
+  transform: rotate(-45deg);
+  transition: transform 0.16s ease;
+}
+
+.tool-row[open] .status-row__chevron,
+.activity-row[open] .status-row__chevron,
+.thinking-row[open] .status-row__chevron {
+  transform: rotate(45deg);
 }
 
 .tool-row__dot {
@@ -1875,15 +1933,21 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
 }
 
 .tool-row code {
+  display: block;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
-  padding: 1px 6px;
+  line-height: 1.55;
+  padding: calc(var(--spacing) * 2);
   border-radius: var(--radius-sm);
   background: var(--color-token-list-hover-background);
+}
+
+.status-row__body {
+  margin: calc(var(--spacing) * 1) 0 0 calc(var(--spacing) * 7);
 }
 
 .activity-row,
@@ -1899,6 +1963,8 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
   align-items: center;
   min-height: 28px;
   gap: calc(var(--spacing) * 2);
+  cursor: pointer;
+  list-style: none;
 }
 
 .activity-row__dot,
@@ -1948,7 +2014,7 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
 
 .activity-row pre,
 .thinking-row pre {
-  margin: calc(var(--spacing) * 1) 0 0 calc(var(--spacing) * 4);
+  margin: calc(var(--spacing) * 1) 0 0 calc(var(--spacing) * 7);
   max-height: 220px;
   overflow: auto;
   white-space: pre-wrap;

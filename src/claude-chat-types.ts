@@ -1,6 +1,8 @@
 export type ClaudeChatSubmitPayload = {
   text: string
   threadId?: string
+  /** 工作区项目文件夹绝对路径；未传时回退到应用根目录 */
+  cwd?: string
 }
 
 export type ClaudeAgentConfigSource = 'settings' | 'env'
