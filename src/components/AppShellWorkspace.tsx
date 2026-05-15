@@ -16,11 +16,13 @@ type AppShellWorkspaceProps = {
   projects: WorkspaceProject[]
   chatRef: RefObject<ChatPageHandle | null>
   onStatusChange: (text: string) => void
-  onNewThread: () => void
+  onNewThread: (projectId?: string) => string | void
   onSelectProject: (projectId: string) => void
   onCreateProject: (mode: 'scratch' | 'existing') => void | Promise<void>
   onThreadChatStateChange: (threadId: string, update: ChatState | ((prev: ChatState) => ChatState)) => void
   onThreadPromptSubmit: (threadId: string, prompt: string) => void
+  showProjectSkillsInSidebar: boolean
+  onShowProjectSkillsInSidebarChange: (enabled: boolean) => void
 }
 
 export function AppShellWorkspace({
@@ -38,6 +40,8 @@ export function AppShellWorkspace({
   onCreateProject,
   onThreadChatStateChange,
   onThreadPromptSubmit,
+  showProjectSkillsInSidebar,
+  onShowProjectSkillsInSidebarChange,
 }: AppShellWorkspaceProps) {
   const isSettingsChromeHidden = activeViewId === 'settings'
   const [filePanelOpen, setFilePanelOpen] = useState(false)
@@ -92,7 +96,12 @@ export function AppShellWorkspace({
             onThreadPromptSubmit={onThreadPromptSubmit}
           />
           <DocsPage hidden={activeViewId !== 'docs'} />
-          <SettingsPage hidden={activeViewId !== 'settings'} settingsCategory={settingsCategory} />
+          <SettingsPage
+            hidden={activeViewId !== 'settings'}
+            settingsCategory={settingsCategory}
+            showProjectSkillsInSidebar={showProjectSkillsInSidebar}
+            onShowProjectSkillsInSidebarChange={onShowProjectSkillsInSidebarChange}
+          />
         </main>
         <AppFilePanel open={filePanelOpen} project={activeProject} onClose={() => setFilePanelOpen(false)} />
       </div>

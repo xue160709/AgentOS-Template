@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import {
   createEmptyChatState,
   createId,
@@ -7,6 +7,7 @@ import {
   persistChatWorkspaceState,
 } from '../chat-workspace-persistence'
 import {
+  SIDEBAR_PROJECT_SKILLS_STORAGE_KEY,
   SIDEBAR_WIDTH_STORAGE_KEY,
   SIDEBAR_MAX_RATIO,
   VIEW_HEADINGS,
@@ -18,6 +19,7 @@ import type {
   AppViewId,
   ChatState,
   ChatWorkspaceState,
+  ProjectSkillListState,
   SettingsCategoryId,
   WorkspaceProject,
   WorkspaceThread,
@@ -34,8 +36,13 @@ export function AppShell() {
   const [canForward, setCanForward] = useState(false)
   const [headerStatus, setHeaderStatus] = useState('Claude Agent')
   const [chatWorkspace, setChatWorkspace] = useState<ChatWorkspaceState | null>(null)
+  const [showProjectSkillsInSidebar, setShowProjectSkillsInSidebar] = useState(() =>
+    readStoredBoolean(SIDEBAR_PROJECT_SKILLS_STORAGE_KEY, false),
+  )
+  const [projectSkillStates, setProjectSkillStates] = useState<Record<string, ProjectSkillListState>>({})
 
   const chatRef = useRef<ChatPageHandle>(null)
+  const projectSkillStatesRef = useRef(projectSkillStates)
   const shellRef = useRef<HTMLDivElement>(null)
   const appBodyRef = useRef<HTMLDivElement>(null)
   const appSidebarRef = useRef<HTMLElement>(null)
@@ -44,6 +51,11 @@ export function AppShell() {
 
   const updateChatWorkspace = useCallback((update: (prev: ChatWorkspaceState) => ChatWorkspaceState) => {
     setChatWorkspace((prev) => (prev ? update(prev) : prev))
+  }, [])
+
+  const updateShowProjectSkillsInSidebar = useCallback((enabled: boolean) => {
+    setShowProjectSkillsInSidebar(enabled)
+    writeStoredBoolean(SIDEBAR_PROJECT_SKILLS_STORAGE_KEY, enabled)
   }, [])
 
   const activeProject =
@@ -55,6 +67,10 @@ export function AppShell() {
         latestVisibleThreadForProject(chatWorkspace, activeProject?.id ?? '') ??
         chatWorkspace.threads[0])) ||
     undefined
+  const projectSkillProjectKey = useMemo(
+    () => chatWorkspace?.projects.map((project) => `${project.id}:${project.path}`).join('\n') ?? '',
+    [chatWorkspace?.projects],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -65,6 +81,102 @@ export function AppShell() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (!chatWorkspace) return
+
+    setProjectSkillStates((current) => {
+      const projectIds = new Set(chatWorkspace.projects.map((project) => project.id))
+      let changed = false
+      const next: Record<string, ProjectSkillListState> = {}
+      for (const [projectId, state] of Object.entries(current)) {
+        if (!projectIds.has(projectId)) {
+          changed = true
+          continue
+        }
+        next[projectId] = state
+      }
+      return changed ? next : current
+    })
+  }, [projectSkillProjectKey])
+
+  useEffect(() => {
+    projectSkillStatesRef.current = projectSkillStates
+  }, [projectSkillStates])
+
+  useEffect(() => {
+    if (!showProjectSkillsInSidebar || !chatWorkspace) return
+
+    const listAgentContext = window.desktop?.listAgentContext
+    let cancelled = false
+
+    const markUnavailable = (project: WorkspaceProject) => {
+      setProjectSkillStates((current) => ({
+        ...current,
+        [project.id]: {
+          path: project.path,
+          loading: false,
+          loaded: true,
+          skills: [],
+          message: '当前运行环境无法读取项目 skills',
+        },
+      }))
+    }
+
+    for (const project of chatWorkspace.projects) {
+      const existing = projectSkillStatesRef.current[project.id]
+      if (existing?.path === project.path && (existing.loading || existing.loaded)) continue
+
+      if (!listAgentContext) {
+        markUnavailable(project)
+        continue
+      }
+
+      setProjectSkillStates((current) => ({
+        ...current,
+        [project.id]: {
+          path: project.path,
+          loading: true,
+          loaded: false,
+          skills: [],
+        },
+      }))
+
+      listAgentContext(project.path)
+        .then((result) => {
+          if (cancelled) return
+          setProjectSkillStates((current) => ({
+            ...current,
+            [project.id]: {
+              path: project.path,
+              loading: false,
+              loaded: true,
+              skills: result.ok
+                ? result.skills.filter((skill) => skill.scope === 'project' && skill.kind === 'skill')
+                : [],
+              message: result.ok ? undefined : result.message,
+            },
+          }))
+        })
+        .catch((error) => {
+          if (cancelled) return
+          setProjectSkillStates((current) => ({
+            ...current,
+            [project.id]: {
+              path: project.path,
+              loading: false,
+              loaded: true,
+              skills: [],
+              message: error instanceof Error ? error.message : '无法读取项目 skills',
+            },
+          }))
+        })
+    }
+
+    return () => {
+      cancelled = true
+    }
+  }, [projectSkillProjectKey, showProjectSkillsInSidebar])
 
   useEffect(() => {
     if (!chatWorkspace) return
@@ -145,6 +257,17 @@ export function AppShell() {
     },
     [goHome, updateChatWorkspace],
   )
+
+  const runProjectSkill = useCallback((projectId: string, prompt: string) => {
+    const submit = chatRef.current?.submitPromptInNewThread(projectId, prompt)
+    if (!submit) {
+      createThreadInProject(projectId)
+      return
+    }
+    void submit.then((submitted) => {
+      if (!submitted) setHeaderStatus('当前对话处理中')
+    })
+  }, [createThreadInProject])
 
   const selectProject = useCallback(
     (projectId: string) => {
@@ -452,12 +575,15 @@ export function AppShell() {
           threads={chatWorkspace.threads}
           activeProjectId={chatWorkspace.activeProjectId}
           activeThreadId={chatWorkspace.activeThreadId}
+          showProjectSkills={showProjectSkillsInSidebar}
+          projectSkillStates={projectSkillStates}
           canBack={canBack}
           canForward={canForward}
           onNewThread={() => createThreadInProject()}
           onSelectProject={selectProject}
           onSelectThread={selectThread}
           onCreateThreadInProject={createThreadInProject}
+          onRunProjectSkill={runProjectSkill}
           onToggleThreadPinned={toggleThreadPinned}
           onArchiveThread={archiveThread}
           onToggleCollapsed={() => setSidebarCollapsed((c) => !c)}
@@ -475,11 +601,13 @@ export function AppShell() {
           projects={chatWorkspace.projects}
           chatRef={chatRef}
           onStatusChange={setHeaderStatus}
-          onNewThread={() => createThreadInProject()}
+          onNewThread={createThreadInProject}
           onSelectProject={selectProject}
           onCreateProject={createProject}
           onThreadChatStateChange={updateThreadChatState}
           onThreadPromptSubmit={handleThreadPromptSubmit}
+          showProjectSkillsInSidebar={showProjectSkillsInSidebar}
+          onShowProjectSkillsInSidebarChange={updateShowProjectSkillsInSidebar}
         />
       </div>
     </div>
@@ -507,3 +635,21 @@ function pathBasename(path: string): string {
   return parts[parts.length - 1] || path || 'Untitled Project'
 }
 
+function readStoredBoolean(key: string, fallback: boolean): boolean {
+  try {
+    const raw = localStorage.getItem(key)
+    if (raw === '1' || raw === 'true') return true
+    if (raw === '0' || raw === 'false') return false
+  } catch {
+    /* ignore */
+  }
+  return fallback
+}
+
+function writeStoredBoolean(key: string, value: boolean): void {
+  try {
+    localStorage.setItem(key, value ? '1' : '0')
+  } catch {
+    /* ignore */
+  }
+}

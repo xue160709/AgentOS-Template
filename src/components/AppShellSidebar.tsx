@@ -1,6 +1,6 @@
 import { useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
 import { IconInline } from '../icon-inline'
-import type { AppViewId, SettingsCategoryId, WorkspaceProject, WorkspaceThread } from './types'
+import type { AppViewId, ProjectSkillListState, SettingsCategoryId, WorkspaceProject, WorkspaceThread } from './types'
 import { SETTINGS_SIDEBAR_NAV } from './app-shell-constants.ts'
 
 type AppShellSidebarProps = {
@@ -10,12 +10,15 @@ type AppShellSidebarProps = {
   threads: WorkspaceThread[]
   activeProjectId: string
   activeThreadId: string
+  showProjectSkills: boolean
+  projectSkillStates: Record<string, ProjectSkillListState>
   canBack: boolean
   canForward: boolean
   onNewThread: () => void
   onSelectProject: (projectId: string) => void
   onSelectThread: (threadId: string) => void
   onCreateThreadInProject: (projectId: string) => void
+  onRunProjectSkill: (projectId: string, prompt: string) => void
   onToggleThreadPinned: (threadId: string) => void
   onArchiveThread: (threadId: string) => void
   onToggleCollapsed: () => void
@@ -31,12 +34,15 @@ export function AppShellSidebar({
   threads,
   activeProjectId,
   activeThreadId,
+  showProjectSkills,
+  projectSkillStates,
   canBack,
   canForward,
   onNewThread,
   onSelectProject,
   onSelectThread,
   onCreateThreadInProject,
+  onRunProjectSkill,
   onToggleThreadPinned,
   onArchiveThread,
   onToggleCollapsed,
@@ -155,6 +161,8 @@ export function AppShellSidebar({
                   {projects.map((project) => {
                     const projectThreads = threadsByProject.get(project.id) ?? []
                     const projectActive = activeProjectId === project.id
+                    const projectSkillState = projectSkillStates[project.id]
+                    const projectSkills = projectSkillState?.skills ?? []
                     return (
                       <section key={project.id} className={`app-project-group${projectActive ? ' is-active' : ''}`}>
                         <div className="app-project-row">
@@ -186,6 +194,44 @@ export function AppShellSidebar({
                             <IconInline name="plus" />
                           </button>
                         </div>
+                        {showProjectSkills ? (
+                          <div className="app-project-skill-block" aria-label={`${project.name} Skills`}>
+                            <div className="app-sidebar-divider">
+                              <span>Skills</span>
+                            </div>
+                            <div className="app-skill-list">
+                              {projectSkillState?.loading ? (
+                                <div className="app-skill-empty">扫描中</div>
+                              ) : projectSkills.length > 0 ? (
+                                projectSkills.map((skill) => (
+                                  <button
+                                    key={skill.path}
+                                    type="button"
+                                    className="app-skill-row"
+                                    title={skill.description || skill.relativePath}
+                                    onClick={() => {
+                                      setConfirmingArchiveThreadId(null)
+                                      onRunProjectSkill(project.id, skill.title)
+                                    }}
+                                  >
+                                    <IconInline name="chip" />
+                                    <span className="app-skill-copy">
+                                      <span className="app-skill-title">{skill.title}</span>
+                                      <span className="app-skill-meta">{formatSkillMeta(skill.relativePath)}</span>
+                                    </span>
+                                  </button>
+                                ))
+                              ) : (
+                                <div className="app-skill-empty">
+                                  {projectSkillState?.message ? '无法读取项目 skills' : '没有项目 skills'}
+                                </div>
+                              )}
+                            </div>
+                            <div className="app-sidebar-divider app-sidebar-divider--threads">
+                              <span>对话历史</span>
+                            </div>
+                          </div>
+                        ) : null}
                         <div className="app-thread-list" aria-label={`${project.name} 对话`}>
                           {projectThreads.map((thread) => {
                             const isThreadActive = activeThreadId === thread.id
@@ -287,4 +333,13 @@ function formatThreadTime(timestamp: number): string {
   if (diff < 3_600_000) return `${Math.max(1, Math.floor(diff / 60_000))} 分`
   if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} 小时`
   return new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' }).format(timestamp)
+}
+
+function formatSkillMeta(relativePath: string): string {
+  return relativePath
+    .replace(/\/SKILL\.md$/i, '')
+    .replace(/^\.agents\/skills\//, '')
+    .replace(/^\.agent\/skills\//, '')
+    .replace(/^\.claude\/skills\//, '')
+    .replace(/^\.cursor\/skills\//, '')
 }

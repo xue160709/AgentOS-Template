@@ -2,6 +2,7 @@ import type { IconName } from '../icons'
 import type { AppViewId, SettingsCategoryId } from './types'
 
 export const SIDEBAR_WIDTH_STORAGE_KEY = 'CodeX-UI-Template-sidebar-width-px'
+export const SIDEBAR_PROJECT_SKILLS_STORAGE_KEY = 'CodeX-UI-Template-sidebar-project-skills-v1'
 export const SIDEBAR_MAX_RATIO = 0.3
 
 export const DEFAULT_SETTINGS_CATEGORY: SettingsCategoryId = 'general'
@@ -14,6 +15,7 @@ export const SETTINGS_SIDEBAR_NAV: {
   disabled?: boolean
 }[] = [
   { id: 'general', label: '模型', icon: 'settings' },
+  { id: 'skills', label: 'Skills', icon: 'chip' },
   { id: 'appearance', label: '外观', icon: 'laptop' },
 ]
 
@@ -24,7 +26,9 @@ export const VIEW_HEADINGS: Record<AppViewId, string> = {
 }
 
 export function settingsWorkspaceTitle(category: SettingsCategoryId): string {
-  return category === 'appearance' ? '设置 · 外观' : '设置 · 模型'
+  if (category === 'appearance') return '设置 · 外观'
+  if (category === 'skills') return '设置 · Skills'
+  return '设置 · 模型'
 }
 
 export const NAV_LABELS: Record<'home' | 'docs', string> = {
@@ -48,5 +52,6 @@ export function settingsCategoryFromLocation(): SettingsCategoryId {
   const parts = window.location.hash.replace(/^#\/?/, '').split('/').filter(Boolean)
   if (parts[0] !== 'settings') return DEFAULT_SETTINGS_CATEGORY
   const sub = parts[1]
+  if (sub === 'skills') return 'skills'
   return sub === 'appearance' ? 'appearance' : DEFAULT_SETTINGS_CATEGORY
 }

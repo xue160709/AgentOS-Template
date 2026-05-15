@@ -1,7 +1,9 @@
+import type { AgentContextSlashItem } from '../claude-chat-types'
+
 export type AppViewId = 'home' | 'docs' | 'settings'
 
 /** Settings 侧栏 `#settings/<id>`，与 Codex 分组导航对齐 */
-export type SettingsCategoryId = 'general' | 'appearance'
+export type SettingsCategoryId = 'general' | 'skills' | 'appearance'
 
 export type MessageStatus = 'done' | 'streaming' | 'error' | 'cancelled'
 export type ToolStatus = 'running' | 'done' | 'error' | 'denied'
@@ -99,4 +101,12 @@ export type ChatWorkspaceState = {
   activeThreadId: string
   projects: WorkspaceProject[]
   threads: WorkspaceThread[]
+}
+
+export type ProjectSkillListState = {
+  path: string
+  loading: boolean
+  loaded: boolean
+  skills: AgentContextSlashItem[]
+  message?: string
 }

@@ -49,6 +49,7 @@ const MAX_COMPOSER_SUGGESTIONS = 64
 export type ChatPageHandle = {
   startNewThread: () => Promise<void>
   focusComposer: () => void
+  submitPromptInNewThread: (projectId: string, prompt: string) => Promise<boolean>
 }
 
 type ChatPageProps = {
@@ -57,11 +58,16 @@ type ChatPageProps = {
   activeThread: WorkspaceThread
   projects: WorkspaceProject[]
   onStatusChange: (text: string) => void
-  onNewThread: () => void
+  onNewThread: (projectId?: string) => string | void
   onSelectProject: (projectId: string) => void
   onCreateProject: (mode: 'scratch' | 'existing') => void | Promise<void>
   onThreadChatStateChange: (threadId: string, update: ChatState | ((prev: ChatState) => ChatState)) => void
   onThreadPromptSubmit: (threadId: string, prompt: string) => void
+}
+
+type SubmitPromptTarget = {
+  threadId?: string
+  project?: WorkspaceProject
 }
 
 type ChatModelMenuRow = {
@@ -1005,30 +1011,12 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     }
   }, [handleClaudeEvent])
 
-  useImperativeHandle(ref, () => ({
-    startNewThread: async () => {
-      onNewThread()
-      scrollIntentRef.current = 'force-bottom'
-      isFirstTranscriptLayoutRef.current = true
-      activeRequestIdRef.current = undefined
-      activeAssistantMessageIdRef.current = undefined
-      isRunningRef.current = false
-      setIsRunning(false)
-      onStatusChange(compactModelName(globalDisplayModelRef.current))
-      setInputValue('')
-      requestAnimationFrame(() => chatInputRef.current?.focus())
-    },
-    focusComposer: () => {
-      requestAnimationFrame(() => chatInputRef.current?.focus())
-    },
-  }), [onNewThread, onStatusChange])
-
-  const submitPrompt = async (rawText: string) => {
+  const submitPrompt = async (rawText: string, target?: SubmitPromptTarget) => {
     const text = rawText.trim()
     if (!text || isRunningRef.current) return
-    const submittingThreadId = activeThreadIdRef.current
+    const submittingThreadId = target?.threadId ?? activeThreadIdRef.current
     const projectForSubmit =
-      projects.find((project) => project.id === activeThread.projectId) ?? activeProject
+      target?.project ?? projects.find((project) => project.id === activeThread.projectId) ?? activeProject
 
     const userMessage: ChatMessageItem = {
       type: 'message',
@@ -1103,6 +1091,42 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       onStatusChange('发送失败')
     }
   }
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      startNewThread: async () => {
+        onNewThread()
+        scrollIntentRef.current = 'force-bottom'
+        isFirstTranscriptLayoutRef.current = true
+        activeRequestIdRef.current = undefined
+        activeAssistantMessageIdRef.current = undefined
+        isRunningRef.current = false
+        setIsRunning(false)
+        onStatusChange(compactModelName(globalDisplayModelRef.current))
+        setInputValue('')
+        requestAnimationFrame(() => chatInputRef.current?.focus())
+      },
+      focusComposer: () => {
+        requestAnimationFrame(() => chatInputRef.current?.focus())
+      },
+      submitPromptInNewThread: async (projectId: string, prompt: string) => {
+        if (isRunningRef.current) return false
+        const projectForSubmit = projects.find((project) => project.id === projectId)
+        if (!projectForSubmit) return false
+        const threadId = onNewThread(projectId)
+        if (!threadId) return false
+
+        activeThreadIdRef.current = threadId
+        isFirstTranscriptLayoutRef.current = true
+        scrollIntentRef.current = 'force-bottom'
+        await submitPrompt(prompt, { threadId, project: projectForSubmit })
+        requestAnimationFrame(() => chatInputRef.current?.focus())
+        return true
+      },
+    }),
+    [onNewThread, onStatusChange, projects],
+  )
 
   const cancelActiveRequest = async () => {
     if (!isRunningRef.current || !window.claudeChat) return
