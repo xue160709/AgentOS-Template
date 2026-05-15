@@ -20,42 +20,21 @@ import type {
   ClaudeChatEvent,
 } from '../claude-chat-types'
 import { IconInline } from '../icon-inline'
+import type {
+  ChatMessageItem,
+  ChatState,
+  ChatToolItem,
+  ToolStatus,
+  TranscriptItem,
+  WorkspaceProject,
+  WorkspaceThread,
+} from './types'
 
 marked.setOptions({
   breaks: true,
   gfm: true,
 })
 
-type MessageStatus = 'done' | 'streaming' | 'error' | 'cancelled'
-type ToolStatus = 'running' | 'done' | 'error' | 'denied'
-
-type ChatMessageItem = {
-  type: 'message'
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  status: MessageStatus
-}
-
-type ChatToolItem = {
-  type: 'tool'
-  id: string
-  toolUseId: string
-  name: string
-  inputPreview: string
-  status: ToolStatus
-}
-
-type TranscriptItem = ChatMessageItem | ChatToolItem
-
-type ChatState = {
-  sessionId?: string
-  model: string
-  cwd?: string
-  items: TranscriptItem[]
-}
-
-const CHAT_STATE_STORAGE_KEY = 'CodeX-UI-Template-chat-state-v1'
 const SETTINGS_CHANGED_EVENT = 'claude-agent-settings:changed'
 
 const SUGGESTIONS = [
@@ -67,11 +46,20 @@ const SUGGESTIONS = [
 
 export type ChatPageHandle = {
   startNewThread: () => Promise<void>
+  focusComposer: () => void
 }
 
 type ChatPageProps = {
   hidden: boolean
+  activeProject: WorkspaceProject
+  activeThread: WorkspaceThread
+  projects: WorkspaceProject[]
   onStatusChange: (text: string) => void
+  onNewThread: () => void
+  onSelectProject: (projectId: string) => void
+  onCreateProject: (mode: 'scratch' | 'existing') => void
+  onThreadChatStateChange: (threadId: string, update: ChatState | ((prev: ChatState) => ChatState)) => void
+  onThreadPromptSubmit: (threadId: string, prompt: string) => void
 }
 
 type ChatModelMenuRow = {
@@ -121,23 +109,38 @@ function ToolRow({ item }: { item: ChatToolItem }) {
 }
 
 export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatPage(
-  { hidden, onStatusChange },
+  {
+    hidden,
+    activeProject,
+    activeThread,
+    projects,
+    onStatusChange,
+    onNewThread,
+    onSelectProject,
+    onCreateProject,
+    onThreadChatStateChange,
+    onThreadPromptSubmit,
+  },
   ref,
 ) {
-  const [chatState, setChatState] = useState<ChatState>(() => loadChatState())
+  const chatState = activeThread.chatState
   const [isRunning, setIsRunning] = useState(false)
   const [inputValue, setInputValue] = useState('')
   const [isComposingText, setIsComposingText] = useState(false)
   const [showScrollButton, setShowScrollButton] = useState(false)
   const [modelPickerOpen, setModelPickerOpen] = useState(false)
+  const [projectPickerOpen, setProjectPickerOpen] = useState(false)
   const [modelMenuRows, setModelMenuRows] = useState<ChatModelMenuRow[]>([])
   const [modelMenuSelectionKey, setModelMenuSelectionKey] = useState('')
 
   const scrollRegionRef = useRef<HTMLDivElement>(null)
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
   const modelPickerRef = useRef<HTMLDivElement>(null)
+  const projectPickerRef = useRef<HTMLDivElement>(null)
   const modelPopoverAnchorRef = useRef<HTMLButtonElement>(null)
   const modelPopoverSurfaceRef = useRef<HTMLDivElement>(null)
+  const activeThreadIdRef = useRef(activeThread.id)
+  const requestThreadIdsRef = useRef(new Map<string, string>())
 
   /** fixed 锚定触发按钮，避免被 .chat-composer / .app-main-inner 裁切 */
   const [modelPopoverBox, setModelPopoverBox] = useState<{
@@ -153,18 +156,31 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   const activeAssistantMessageIdRef = useRef<string | undefined>(undefined)
 
   const hasMessages = chatState.items.length > 0
+  const setThreadChatState = useCallback(
+    (threadId: string, update: ChatState | ((prev: ChatState) => ChatState)) => {
+      onThreadChatStateChange(threadId, update)
+    },
+    [onThreadChatStateChange],
+  )
+  const setActiveChatState = useCallback(
+    (update: ChatState | ((prev: ChatState) => ChatState)) => {
+      setThreadChatState(activeThreadIdRef.current, update)
+    },
+    [setThreadChatState],
+  )
 
   useEffect(() => {
     isRunningRef.current = isRunning
   }, [isRunning])
 
   useEffect(() => {
-    try {
-      localStorage.setItem(CHAT_STATE_STORAGE_KEY, JSON.stringify(chatState))
-    } catch {
-      /* ignore */
-    }
-  }, [chatState])
+    activeThreadIdRef.current = activeThread.id
+    isFirstTranscriptLayoutRef.current = true
+    scrollIntentRef.current = 'force-bottom'
+    setShowScrollButton(false)
+    setModelPickerOpen(false)
+    setProjectPickerOpen(false)
+  }, [activeThread.id])
 
   useEffect(() => {
     const applySettingsModel = (snapshot: ClaudeAgentSettingsSnapshot) => {
@@ -176,7 +192,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
 
       const model = resolvedChatDisplayModel(settings)
 
-      setChatState((prev) => ({ ...prev, model }))
+      setActiveChatState((prev) => ({ ...prev, model }))
       onStatusChange(compactModelName(model))
     }
 
@@ -189,7 +205,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     }
     window.addEventListener(SETTINGS_CHANGED_EVENT, onSettingsChanged)
     return () => window.removeEventListener(SETTINGS_CHANGED_EVENT, onSettingsChanged)
-  }, [onStatusChange])
+  }, [onStatusChange, setActiveChatState])
 
   const pickChatMenuRow = useCallback(async (row: ChatModelMenuRow) => {
     if (!window.claudeChat || isRunningRef.current) return
@@ -259,6 +275,25 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       window.removeEventListener('keydown', onKeyDown)
     }
   }, [modelPickerOpen])
+
+  useEffect(() => {
+    if (!projectPickerOpen) return
+    const onPointerDown = (event: MouseEvent) => {
+      const t = event.target as Node | null
+      if (!t) return
+      if (projectPickerRef.current?.contains(t)) return
+      setProjectPickerOpen(false)
+    }
+    const onKeyDown = (event: WindowEventMap['keydown']) => {
+      if (event.key === 'Escape') setProjectPickerOpen(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [projectPickerOpen])
 
   const syncScrollButtonVisibility = useCallback(() => {
     const sr = scrollRegionRef.current
@@ -341,6 +376,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       if (activeRequestIdRef.current && activeRequestIdRef.current !== requestId) return
       activeRequestIdRef.current = undefined
       activeAssistantMessageIdRef.current = undefined
+      requestThreadIdsRef.current.delete(requestId)
       isRunningRef.current = false
       setIsRunning(false)
       onStatusChange(statusText)
@@ -350,8 +386,9 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
 
   const handleClaudeEvent = useCallback(
     (event: ClaudeChatEvent) => {
+      const eventThreadId = requestThreadIdsRef.current.get(event.requestId) ?? activeThreadIdRef.current
       if (event.type === 'session_start') {
-        setChatState((prev) => ({
+        setThreadChatState(eventThreadId, (prev) => ({
           ...prev,
           sessionId: event.sessionId,
           model: event.model || 'Claude Agent',
@@ -362,7 +399,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       }
 
       if (event.type === 'assistant_delta') {
-        setChatState((prev) => {
+        setThreadChatState(eventThreadId, (prev) => {
           const messageId = event.messageId
           let { items } = prev
           const idx = items.findIndex((it) => it.type === 'message' && it.id === messageId)
@@ -396,7 +433,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       }
 
       if (event.type === 'tool_start') {
-        setChatState((prev) => {
+        setThreadChatState(eventThreadId, (prev) => {
           const existingIdx = prev.items.findIndex((it) => it.type === 'tool' && it.toolUseId === event.toolUseId)
           if (existingIdx >= 0) {
             const next = [...prev.items]
@@ -418,7 +455,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       }
 
       if (event.type === 'tool_done') {
-        setChatState((prev) => {
+        setThreadChatState(eventThreadId, (prev) => {
           const idx = prev.items.findIndex((it) => it.type === 'tool' && it.toolUseId === event.toolUseId)
           if (idx < 0) return prev
           const next = [...prev.items]
@@ -432,7 +469,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       if (event.type === 'result') {
         let modelLabel = 'Claude Agent'
         flushSync(() => {
-          setChatState((prev) => {
+          setThreadChatState(eventThreadId, (prev) => {
             const expectedId = `assistant-${event.requestId}`
             const pendingId = activeAssistantMessageIdRef.current
             const items = prev.items.map((item): TranscriptItem => {
@@ -455,7 +492,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
         scrollIntentRef.current = 'force-bottom'
         const expectedId = `assistant-${event.requestId}`
         flushSync(() => {
-          setChatState((prev) => {
+          setThreadChatState(eventThreadId, (prev) => {
             const pendingId = activeAssistantMessageIdRef.current
             let found = false
             const mapped = prev.items.map((item): TranscriptItem => {
@@ -488,7 +525,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
         scrollIntentRef.current = 'force-bottom'
         const expectedId = `assistant-${event.requestId}`
         flushSync(() => {
-          setChatState((prev) => {
+          setThreadChatState(eventThreadId, (prev) => {
             const pendingId = activeAssistantMessageIdRef.current
             const items = prev.items.map((item): TranscriptItem => {
               if (item.type !== 'message' || item.role !== 'assistant') return item
@@ -502,7 +539,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
         finishRequest(event.requestId, '已停止')
       }
     },
-    [finishRequest, onStatusChange],
+    [finishRequest, onStatusChange, setThreadChatState],
   )
 
   useEffect(() => {
@@ -514,27 +551,28 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
 
   useImperativeHandle(ref, () => ({
     startNewThread: async () => {
-      if (window.claudeChat) {
-        await window.claudeChat.newThread()
-      }
+      onNewThread()
       scrollIntentRef.current = 'force-bottom'
       isFirstTranscriptLayoutRef.current = true
       activeRequestIdRef.current = undefined
       activeAssistantMessageIdRef.current = undefined
       isRunningRef.current = false
       setIsRunning(false)
-      setChatState({ model: 'Claude Agent', items: [] })
       onStatusChange('Claude Agent')
       setInputValue('')
       requestAnimationFrame(() => chatInputRef.current?.focus())
     },
-  }))
+    focusComposer: () => {
+      requestAnimationFrame(() => chatInputRef.current?.focus())
+    },
+  }), [onNewThread, onStatusChange])
 
-  const submitPrompt = async (rawText: string) => {
-    const text = rawText.trim()
-    if (!text || isRunningRef.current) return
+	  const submitPrompt = async (rawText: string) => {
+	    const text = rawText.trim()
+	    if (!text || isRunningRef.current) return
+	    const submittingThreadId = activeThreadIdRef.current
 
-    const optimisticAssistantId = `assistant-pending-${Date.now()}`
+	    const optimisticAssistantId = `assistant-pending-${Date.now()}`
     const userMessage: ChatMessageItem = {
       type: 'message',
       id: `user-${Date.now()}`,
@@ -550,22 +588,23 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       status: 'streaming',
     }
 
-    scrollIntentRef.current = 'force-bottom'
-    setChatState((prev) => ({
-      ...prev,
-      items: [...prev.items, userMessage, assistantMessage],
-    }))
+	    scrollIntentRef.current = 'force-bottom'
+	    onThreadPromptSubmit(submittingThreadId, text)
+	    setThreadChatState(submittingThreadId, (prev) => ({
+	      ...prev,
+	      items: [...prev.items, userMessage, assistantMessage],
+	    }))
     setInputValue('')
     setIsRunning(true)
     isRunningRef.current = true
     activeAssistantMessageIdRef.current = optimisticAssistantId
     onStatusChange('处理中')
 
-    if (!window.claudeChat) {
-      scrollIntentRef.current = 'force-bottom'
-      setChatState((prev) => ({
-        ...prev,
-        items: prev.items.map((item) => {
+	    if (!window.claudeChat) {
+	      scrollIntentRef.current = 'force-bottom'
+	      setThreadChatState(submittingThreadId, (prev) => ({
+	        ...prev,
+	        items: prev.items.map((item) => {
           if (item.type === 'message' && item.id === optimisticAssistantId) {
             return {
               ...item,
@@ -583,13 +622,14 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       return
     }
 
-    try {
-      const { requestId } = await window.claudeChat.submit({ text })
-      const newAssistantId = `assistant-${requestId}`
-      scrollIntentRef.current = 'force-bottom'
-      setChatState((prev) => ({
-        ...prev,
-        items: prev.items.map((item) => {
+	    try {
+	      const { requestId } = await window.claudeChat.submit({ text, threadId: submittingThreadId })
+	      requestThreadIdsRef.current.set(requestId, submittingThreadId)
+	      const newAssistantId = `assistant-${requestId}`
+	      scrollIntentRef.current = 'force-bottom'
+	      setThreadChatState(submittingThreadId, (prev) => ({
+	        ...prev,
+	        items: prev.items.map((item) => {
           if (item.type === 'message' && item.id === optimisticAssistantId) {
             return { ...item, id: newAssistantId }
           }
@@ -598,11 +638,11 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       }))
       activeRequestIdRef.current = requestId
       activeAssistantMessageIdRef.current = newAssistantId
-    } catch (error) {
-      scrollIntentRef.current = 'force-bottom'
-      setChatState((prev) => ({
-        ...prev,
-        items: prev.items.map((item) => {
+	    } catch (error) {
+	      scrollIntentRef.current = 'force-bottom'
+	      setThreadChatState(submittingThreadId, (prev) => ({
+	        ...prev,
+	        items: prev.items.map((item) => {
           if (item.type === 'message' && item.id === optimisticAssistantId) {
             return {
               ...item,
@@ -785,25 +825,86 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
           </div>
         </form>
 
-        {/* 关掉，需要再打开
         <div className="chat-context-strip" aria-label="当前上下文">
-          <span>
-            <IconInline name="folder" />
-            <span>CodeX-UI-Template</span>
-            <IconInline name="chevron" />
-          </span>
-          <span>
-            <IconInline name="laptop" />
-            <span>本地模式</span>
-            <IconInline name="chevron" />
-          </span>
-          <span>
-            <IconInline name="branch" />
-            <span>main</span>
-            <IconInline name="chevron" />
-          </span>
+          <div className="chat-project-picker" ref={projectPickerRef}>
+            <button
+              type="button"
+              className={`chat-project-trigger${projectPickerOpen ? ' is-open' : ''}`}
+              aria-haspopup="menu"
+              aria-expanded={projectPickerOpen}
+              title="切换项目"
+              onClick={() => setProjectPickerOpen((open) => !open)}
+            >
+              <IconInline name="folder" />
+              <span>{activeProject.name}</span>
+              <IconInline name="chevron" />
+            </button>
+            {projectPickerOpen ? (
+              <div className="chat-project-popover" role="menu" aria-label="项目">
+                <div className="chat-project-popover-title">项目</div>
+                <div className="chat-project-options">
+                  {projects.map((project) => {
+                    const selected = project.id === activeProject.id
+                    return (
+                      <button
+                        key={project.id}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={selected}
+                        className={`chat-project-option${selected ? ' is-selected' : ''}`}
+                        onClick={() => {
+                          onSelectProject(project.id)
+                          setProjectPickerOpen(false)
+                        }}
+                      >
+                        <IconInline name="folder" />
+                        <span className="chat-project-option-copy">
+                          <span>{project.name}</span>
+                          <span>{project.path}</span>
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+                <div className="chat-project-popover-title">新增项目</div>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="chat-project-option"
+                  onClick={() => {
+                    onCreateProject('scratch')
+                    setProjectPickerOpen(false)
+                  }}
+                >
+                  <IconInline name="plus" />
+                  <span className="chat-project-option-copy">
+                    <span>从空白开始</span>
+                    <span>创建一个新的本地项目</span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="chat-project-option"
+                  onClick={() => {
+                    onCreateProject('existing')
+                    setProjectPickerOpen(false)
+                  }}
+                >
+                  <IconInline name="folder" />
+                  <span className="chat-project-option-copy">
+                    <span>使用已有文件夹</span>
+                    <span>把文件夹加入项目列表</span>
+                  </span>
+                </button>
+              </div>
+            ) : null}
+          </div>
+          <button type="button" className="chat-context-action" onClick={onNewThread}>
+            <IconInline name="plus" />
+            <span>此项目新对话</span>
+          </button>
         </div>
-        */}
       </div>
       <div className="chat-suggestions" id="chat-suggestions" aria-label="建议提示" hidden={hasMessages}>
         {SUGGESTIONS.map((prompt) => (
@@ -827,60 +928,12 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   )
 })
 
-function loadChatState(): ChatState {
-  try {
-    const raw = localStorage.getItem(CHAT_STATE_STORAGE_KEY)
-    if (!raw) return { model: 'Claude Agent', items: [] }
-    const parsed = JSON.parse(raw) as Partial<ChatState>
-    return {
-      sessionId: typeof parsed.sessionId === 'string' ? parsed.sessionId : undefined,
-      model: typeof parsed.model === 'string' ? parsed.model : 'Claude Agent',
-      cwd: typeof parsed.cwd === 'string' ? parsed.cwd : undefined,
-      items: Array.isArray(parsed.items) ? normalizeTranscriptItems(parsed.items) : [],
-    }
-  } catch {
-    return { model: 'Claude Agent', items: [] }
-  }
-}
-
 function renderMarkdown(markdown: string): string {
   const html = marked.parse(markdown, { async: false }) as string
   return DOMPurify.sanitize(html, {
     ADD_ATTR: ['target', 'rel'],
     USE_PROFILES: { html: true },
   })
-}
-
-function normalizeTranscriptItems(items: unknown[]): TranscriptItem[] {
-  const normalized: TranscriptItem[] = []
-
-  for (const item of items) {
-    if (!isRecord(item) || typeof item.id !== 'string' || typeof item.type !== 'string') continue
-
-    if (item.type === 'message' && (item.role === 'user' || item.role === 'assistant')) {
-      normalized.push({
-        type: 'message',
-        id: item.id,
-        role: item.role,
-        content: typeof item.content === 'string' ? item.content : '',
-        status: item.status === 'error' || item.status === 'cancelled' ? item.status : 'done',
-      })
-      continue
-    }
-
-    if (item.type === 'tool' && typeof item.toolUseId === 'string' && typeof item.name === 'string') {
-      normalized.push({
-        type: 'tool',
-        id: item.id,
-        toolUseId: item.toolUseId,
-        name: item.name,
-        inputPreview: typeof item.inputPreview === 'string' ? item.inputPreview : '',
-        status: item.status === 'error' || item.status === 'denied' ? item.status : 'done',
-      })
-    }
-  }
-
-  return normalized
 }
 
 function providerAcceptsAnthropicId(provider: ClaudeAgentModelProvider, modelId: string): boolean {
@@ -969,10 +1022,6 @@ function escapeHtml(value: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;')
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
 }
 
 /** 贴底跟随：距底部小于此值视为在底部 */

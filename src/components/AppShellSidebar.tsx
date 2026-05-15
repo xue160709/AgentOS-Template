@@ -1,13 +1,23 @@
-import { type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
+import { useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
 import { IconInline } from '../icon-inline'
-import type { AppViewId, SettingsCategoryId } from './types'
-import { NAV_LABELS, NAV_VIEW_IDS, SETTINGS_SIDEBAR_NAV } from './app-shell-constants.ts'
+import type { AppViewId, SettingsCategoryId, WorkspaceProject, WorkspaceThread } from './types'
+import { SETTINGS_SIDEBAR_NAV } from './app-shell-constants.ts'
 
 type AppShellSidebarProps = {
   activeViewId: AppViewId
   settingsCategory: SettingsCategoryId
+  projects: WorkspaceProject[]
+  threads: WorkspaceThread[]
+  activeProjectId: string
+  activeThreadId: string
   canBack: boolean
   canForward: boolean
+  onNewThread: () => void
+  onSelectProject: (projectId: string) => void
+  onSelectThread: (threadId: string) => void
+  onCreateThreadInProject: (projectId: string) => void
+  onToggleThreadPinned: (threadId: string) => void
+  onArchiveThread: (threadId: string) => void
   onToggleCollapsed: () => void
   sidebarRef: RefObject<HTMLElement | null>
   splitterRef: RefObject<HTMLDivElement | null>
@@ -17,17 +27,51 @@ type AppShellSidebarProps = {
 export function AppShellSidebar({
   activeViewId,
   settingsCategory,
+  projects,
+  threads,
+  activeProjectId,
+  activeThreadId,
   canBack,
   canForward,
+  onNewThread,
+  onSelectProject,
+  onSelectThread,
+  onCreateThreadInProject,
+  onToggleThreadPinned,
+  onArchiveThread,
   onToggleCollapsed,
   sidebarRef,
   splitterRef,
   onSplitterPointerDown,
 }: AppShellSidebarProps) {
   const isSettingsSidebar = activeViewId === 'settings'
+  const [confirmingArchiveThreadId, setConfirmingArchiveThreadId] = useState<string | null>(null)
 
   const goLeaveSettings = () => {
     window.location.hash = ''
+  }
+
+  const visibleThreads = threads.filter((thread) => !thread.archivedAt)
+  const threadsByProject = new Map<string, WorkspaceThread[]>()
+  for (const thread of visibleThreads) {
+    const list = threadsByProject.get(thread.projectId) ?? []
+    list.push(thread)
+    threadsByProject.set(thread.projectId, list)
+  }
+  for (const list of threadsByProject.values()) {
+    list.sort((a, b) => {
+      const pinDiff = (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0)
+      return pinDiff || b.updatedAt - a.updatedAt
+    })
+  }
+
+  const requestArchive = (threadId: string) => {
+    if (confirmingArchiveThreadId === threadId) {
+      onArchiveThread(threadId)
+      setConfirmingArchiveThreadId(null)
+      return
+    }
+    setConfirmingArchiveThreadId(threadId)
   }
 
   return (
@@ -102,20 +146,105 @@ export function AppShellSidebar({
               </>
             ) : (
               <>
-                <div className="app-sidebar-section-label">工作区</div>
-                {NAV_VIEW_IDS.map((id) => (
-                  <button
-                    key={id}
-                    type="button"
-                    className={`app-nav-item${activeViewId === id ? ' is-active' : ''}`}
-                    data-view={id}
-                    onClick={() => {
-                      window.location.hash = id === 'home' ? '' : id
-                    }}
-                  >
-                    {NAV_LABELS[id]}
-                  </button>
-                ))}
+                <button type="button" className="app-sidebar-new-thread" id="btn-sidebar-new-thread" onClick={onNewThread}>
+                  <IconInline name="plus" />
+                  <span>新对话</span>
+                </button>
+                <div className="app-sidebar-section-label">项目</div>
+                <div className="app-project-list">
+                  {projects.map((project) => {
+                    const projectThreads = threadsByProject.get(project.id) ?? []
+                    const projectActive = activeProjectId === project.id
+                    return (
+                      <section key={project.id} className={`app-project-group${projectActive ? ' is-active' : ''}`}>
+                        <div className="app-project-row">
+                          <button
+                            type="button"
+                            className="app-project-select"
+                            aria-current={projectActive ? 'true' : undefined}
+                            onClick={() => {
+                              setConfirmingArchiveThreadId(null)
+                              onSelectProject(project.id)
+                            }}
+                          >
+                            <IconInline name="folder" />
+                            <span className="app-project-copy">
+                              <span className="app-project-name">{project.name}</span>
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            className="app-project-new-thread"
+                            title="在此项目中新建对话"
+                            aria-label={`在 ${project.name} 中新建对话`}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              setConfirmingArchiveThreadId(null)
+                              onCreateThreadInProject(project.id)
+                            }}
+                          >
+                            <IconInline name="plus" />
+                          </button>
+                        </div>
+                        <div className="app-thread-list" aria-label={`${project.name} 对话`}>
+                          {projectThreads.map((thread) => {
+                            const isThreadActive = activeThreadId === thread.id
+                            const isConfirming = confirmingArchiveThreadId === thread.id
+                            const isPinned = Boolean(thread.pinnedAt)
+                            return (
+                              <div
+                                key={thread.id}
+                                className={`app-thread-row${isThreadActive ? ' is-active' : ''}${isPinned ? ' is-pinned' : ''}${isConfirming ? ' is-confirming-archive' : ''}`}
+                              >
+                                <button
+                                  type="button"
+                                  className={`app-thread-pin${isPinned ? ' is-pinned' : ''}`}
+                                  title={isPinned ? '取消置顶' : '置顶'}
+                                  aria-label={isPinned ? `取消置顶 ${thread.title}` : `置顶 ${thread.title}`}
+                                  aria-pressed={isPinned}
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    setConfirmingArchiveThreadId(null)
+                                    onToggleThreadPinned(thread.id)
+                                  }}
+                                >
+                                  <IconInline name="pin" />
+                                </button>
+                                <button
+                                  type="button"
+                                  className="app-thread-select"
+                                  aria-current={isThreadActive ? 'page' : undefined}
+                                  onClick={() => {
+                                    setConfirmingArchiveThreadId(null)
+                                    onSelectThread(thread.id)
+                                  }}
+                                >
+                                  <span className="app-thread-title">{thread.title}</span>
+                                </button>
+                                <span className="app-thread-time" aria-label={`最后聊天时间 ${formatThreadTime(thread.updatedAt)}`}>
+                                  {formatThreadTime(thread.updatedAt)}
+                                </span>
+                                <button
+                                  type="button"
+                                  className={`app-thread-archive${isConfirming ? ' is-confirming' : ''}`}
+                                  title={isConfirming ? '确认归档' : '归档'}
+                                  aria-label={isConfirming ? `确认归档 ${thread.title}` : `归档 ${thread.title}`}
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    requestArchive(thread.id)
+                                  }}
+                                >
+                                  {isConfirming ? <span>确认</span> : <IconInline name="trash" />}
+                                </button>
+                              </div>
+                            )
+                          })}
+                          {projectThreads.length === 0 ? <div className="app-thread-empty">还没有对话</div> : null}
+                        </div>
+                      </section>
+                    )
+                  })}
+                </div>
               </>
             )}
           </div>
@@ -148,4 +277,12 @@ export function AppShellSidebar({
       />
     </>
   )
+}
+
+function formatThreadTime(timestamp: number): string {
+  const diff = Date.now() - timestamp
+  if (diff < 60_000) return '刚刚'
+  if (diff < 3_600_000) return `${Math.max(1, Math.floor(diff / 60_000))} 分`
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} 小时`
+  return new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' }).format(timestamp)
 }

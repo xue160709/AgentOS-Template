@@ -1,6 +1,6 @@
 import { type RefObject } from 'react'
 import { IconInline } from '../icon-inline'
-import type { AppViewId, SettingsCategoryId } from './types'
+import type { AppViewId, ChatState, SettingsCategoryId, WorkspaceProject, WorkspaceThread } from './types'
 import { ChatPage, type ChatPageHandle } from './ChatPage'
 import { DocsPage } from './DocsPage'
 import { SettingsPage } from './SettingsPage'
@@ -10,9 +10,16 @@ type AppShellWorkspaceProps = {
   headerStatus: string
   activeViewId: AppViewId
   settingsCategory: SettingsCategoryId
+  activeProject: WorkspaceProject
+  activeThread: WorkspaceThread
+  projects: WorkspaceProject[]
   chatRef: RefObject<ChatPageHandle | null>
   onStatusChange: (text: string) => void
   onNewThread: () => void
+  onSelectProject: (projectId: string) => void
+  onCreateProject: (mode: 'scratch' | 'existing') => void
+  onThreadChatStateChange: (threadId: string, update: ChatState | ((prev: ChatState) => ChatState)) => void
+  onThreadPromptSubmit: (threadId: string, prompt: string) => void
 }
 
 export function AppShellWorkspace({
@@ -20,9 +27,16 @@ export function AppShellWorkspace({
   headerStatus: _headerStatus,
   activeViewId,
   settingsCategory,
+  activeProject,
+  activeThread,
+  projects,
   chatRef,
   onStatusChange,
   onNewThread,
+  onSelectProject,
+  onCreateProject,
+  onThreadChatStateChange,
+  onThreadPromptSubmit,
 }: AppShellWorkspaceProps) {
   const isSettingsChromeHidden = activeViewId === 'settings'
 
@@ -45,7 +59,19 @@ export function AppShellWorkspace({
         </header>
       )}
       <main className="app-main" role="main">
-        <ChatPage ref={chatRef} hidden={activeViewId !== 'home'} onStatusChange={onStatusChange} />
+        <ChatPage
+          ref={chatRef}
+          hidden={activeViewId !== 'home'}
+          activeProject={activeProject}
+          activeThread={activeThread}
+          projects={projects}
+          onStatusChange={onStatusChange}
+          onNewThread={onNewThread}
+          onSelectProject={onSelectProject}
+          onCreateProject={onCreateProject}
+          onThreadChatStateChange={onThreadChatStateChange}
+          onThreadPromptSubmit={onThreadPromptSubmit}
+        />
         <DocsPage hidden={activeViewId !== 'docs'} />
         <SettingsPage hidden={activeViewId !== 'settings'} settingsCategory={settingsCategory} />
       </main>

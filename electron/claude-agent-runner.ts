@@ -13,6 +13,7 @@ export const CLAUDE_CHAT_EVENT_CHANNEL = 'claude-chat:event'
 type ActiveRequest = {
   requestId: string
   assistantMessageId: string
+  threadId: string
   abortController: AbortController
   query?: Query
   cancelled: boolean
@@ -22,11 +23,16 @@ type ActiveRequest = {
 
 const READ_ONLY_TOOLS = ['Read', 'Glob', 'Grep']
 
+type ThreadRuntimeState = {
+  sessionId?: string
+  model: string
+  configSignature?: string
+}
+
 export class ClaudeAgentRunner {
   private activeRequest?: ActiveRequest
-  private sessionId?: string
-  private model = 'Claude Agent'
-  private configSignature?: string
+  private readonly defaultThreadId = 'default'
+  private readonly threadRuntimeStates = new Map<string, ThreadRuntimeState>()
 
   constructor(
     private readonly webContents: WebContents,
@@ -37,6 +43,7 @@ export class ClaudeAgentRunner {
   submit(payload: ClaudeChatSubmitPayload): ClaudeChatSubmitResult {
     const text = payload.text.trim()
     const requestId = randomUUID()
+    const threadId = this.normalizeThreadId(payload.threadId)
 
     if (!text) {
       this.emit({
@@ -55,6 +62,7 @@ export class ClaudeAgentRunner {
     const activeRequest: ActiveRequest = {
       requestId,
       assistantMessageId: `assistant-${requestId}`,
+      threadId,
       abortController: new AbortController(),
       cancelled: false,
       didEmitText: false,
@@ -82,20 +90,22 @@ export class ClaudeAgentRunner {
     })
   }
 
-  async newThread(): Promise<void> {
-    await this.cancel()
-    this.sessionId = undefined
-    this.model = 'Claude Agent'
-    this.configSignature = undefined
+  async newThread(threadId?: string): Promise<void> {
+    const normalizedThreadId = this.normalizeThreadId(threadId)
+    if (!threadId || this.activeRequest?.threadId === normalizedThreadId) {
+      await this.cancel()
+    }
+    this.threadRuntimeStates.delete(normalizedThreadId)
   }
 
   private async run(prompt: string, activeRequest: ActiveRequest): Promise<void> {
     const config = this.resolveConfig()
+    const threadState = this.getThreadRuntimeState(activeRequest.threadId)
     const nextConfigSignature = getConfigSignature(config)
-    if (this.configSignature && this.configSignature !== nextConfigSignature) {
-      this.sessionId = undefined
+    if (threadState.configSignature && threadState.configSignature !== nextConfigSignature) {
+      threadState.sessionId = undefined
     }
-    this.configSignature = nextConfigSignature
+    threadState.configSignature = nextConfigSignature
 
     if (!config.apiKey && !config.authToken) {
       this.emit({
@@ -122,7 +132,7 @@ export class ClaudeAgentRunner {
           includePartialMessages: true,
           model: config.model || undefined,
           permissionMode: 'dontAsk',
-          resume: this.sessionId,
+          resume: threadState.sessionId,
           settingSources: [],
           tools: READ_ONLY_TOOLS,
         },
@@ -176,7 +186,8 @@ export class ClaudeAgentRunner {
     }
 
     if (message.type === 'result') {
-      this.sessionId = message.session_id
+      const threadState = this.getThreadRuntimeState(activeRequest.threadId)
+      threadState.sessionId = message.session_id
       const result = 'result' in message ? message.result : message.errors.join('\n')
       if (result && !activeRequest.didEmitText) {
         this.emitAssistantDelta(activeRequest, result)
@@ -194,13 +205,14 @@ export class ClaudeAgentRunner {
 
   private handleSystemMessage(message: Extract<SDKMessage, { type: 'system' }>, activeRequest: ActiveRequest): void {
     if (message.subtype === 'init') {
-      this.sessionId = message.session_id
-      this.model = message.model || 'Claude Agent'
+      const threadState = this.getThreadRuntimeState(activeRequest.threadId)
+      threadState.sessionId = message.session_id
+      threadState.model = message.model || 'Claude Agent'
       this.emit({
         type: 'session_start',
         requestId: activeRequest.requestId,
         sessionId: message.session_id,
-        model: this.model,
+        model: threadState.model,
         cwd: message.cwd || this.cwd,
       })
       return
@@ -292,6 +304,19 @@ export class ClaudeAgentRunner {
   private emit(event: ClaudeChatEvent): void {
     if (this.webContents.isDestroyed()) return
     this.webContents.send(CLAUDE_CHAT_EVENT_CHANNEL, event)
+  }
+
+  private normalizeThreadId(threadId?: string): string {
+    const trimmed = threadId?.trim()
+    return trimmed || this.defaultThreadId
+  }
+
+  private getThreadRuntimeState(threadId: string): ThreadRuntimeState {
+    const existing = this.threadRuntimeStates.get(threadId)
+    if (existing) return existing
+    const next: ThreadRuntimeState = { model: 'Claude Agent' }
+    this.threadRuntimeStates.set(threadId, next)
+    return next
   }
 
   private buildSdkEnv(config: ClaudeAgentResolvedConfig): Record<string, string | undefined> {

@@ -1,5 +1,6 @@
 export type ClaudeChatSubmitPayload = {
   text: string
+  threadId?: string
 }
 
 export type ClaudeAgentConfigSource = 'settings' | 'env'
@@ -111,7 +112,7 @@ export type ClaudeChatEventHandler = (event: ClaudeChatEvent) => void
 export type ClaudeChatAPI = {
   submit(payload: ClaudeChatSubmitPayload): Promise<ClaudeChatSubmitResult>
   cancel(requestId?: string): Promise<void>
-  newThread(): Promise<void>
+  newThread(threadId?: string): Promise<void>
   getSettings(): Promise<ClaudeAgentSettingsSnapshot>
   saveSettings(settings: ClaudeAgentSettings): Promise<ClaudeAgentSettingsSnapshot>
   setActiveChatPick(payload: ActiveChatPickPayload): Promise<ClaudeAgentSettingsSnapshot>

@@ -46,8 +46,8 @@ contextBridge.exposeInMainWorld('claudeChat', {
   cancel(requestId?: string) {
     return ipcRenderer.invoke('claude-chat:cancel', requestId)
   },
-  newThread() {
-    return ipcRenderer.invoke('claude-chat:new-thread')
+  newThread(threadId?: string) {
+    return ipcRenderer.invoke('claude-chat:new-thread', threadId)
   },
   getSettings() {
     return ipcRenderer.invoke('claude-agent-settings:get')

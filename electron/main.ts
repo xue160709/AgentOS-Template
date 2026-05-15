@@ -129,8 +129,8 @@ app.whenReady().then(() => {
   ipcMain.handle('claude-chat:cancel', (_event, requestId?: string) => {
     return getClaudeAgentRunner().cancel(requestId)
   })
-  ipcMain.handle('claude-chat:new-thread', () => {
-    return getClaudeAgentRunner().newThread()
+  ipcMain.handle('claude-chat:new-thread', (_event, threadId?: string) => {
+    return getClaudeAgentRunner().newThread(threadId)
   })
   ipcMain.handle('claude-agent-settings:get', () => {
     return getClaudeAgentSettingsStore().getSnapshot()

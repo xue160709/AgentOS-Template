@@ -25,6 +25,8 @@ export const Icons = {
     '<svg class="icon-xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="5" y="5" width="14" height="10" rx="1.5"/><path stroke-linecap="round" d="M3 19h18"/></svg>',
   folder:
     '<svg class="icon-xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linejoin="round" d="M4 7.5A2.5 2.5 0 016.5 5H10l2 2h5.5A2.5 2.5 0 0120 9.5v6A2.5 2.5 0 0117.5 18h-11A2.5 2.5 0 014 15.5v-8z"/></svg>',
+  pin:
+    '<svg class="icon-xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M14.5 4.5l5 5-3.25 3.25.5 4.25-1.25 1.25-4.25-4.25L7 18.5 5.5 17l4.5-4.25-4.25-4.25L7 7.25l4.25.5L14.5 4.5z"/><path stroke-linecap="round" d="M9.75 14.25L5 19"/></svg>',
   arrowDown:
     '<svg class="icon-xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12l7 7 7-7"/></svg>',
   save:
