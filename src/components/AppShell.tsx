@@ -3,15 +3,18 @@ import {
   SIDEBAR_WIDTH_STORAGE_KEY,
   SIDEBAR_MAX_RATIO,
   VIEW_HEADINGS,
+  settingsCategoryFromLocation,
+  settingsWorkspaceTitle,
   viewFromLocation,
-} from './app-shell-constants'
-import type { AppViewId } from './types'
+} from './app-shell-constants.ts'
+import type { AppViewId, SettingsCategoryId } from './types'
 import { AppShellSidebar } from './AppShellSidebar'
 import { AppShellWorkspace } from './AppShellWorkspace'
 import { type ChatPageHandle } from './ChatPage'
 
 export function AppShell() {
   const [activeViewId, setActiveViewId] = useState<AppViewId>(() => viewFromLocation())
+  const [settingsCategory, setSettingsCategory] = useState<SettingsCategoryId>(() => settingsCategoryFromLocation())
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [canBack, setCanBack] = useState(false)
   const [canForward, setCanForward] = useState(false)
@@ -79,6 +82,7 @@ export function AppShell() {
   useEffect(() => {
     const onHash = () => {
       setActiveViewId(viewFromLocation())
+      setSettingsCategory(settingsCategoryFromLocation())
       syncHistoryButtons()
     }
     window.addEventListener('hashchange', onHash)
@@ -139,17 +143,19 @@ export function AppShell() {
     }
   }
 
-  const workspaceTitle = VIEW_HEADINGS[activeViewId]
+  const workspaceTitle =
+    activeViewId === 'settings' ? settingsWorkspaceTitle(settingsCategory) : VIEW_HEADINGS[activeViewId]
 
   return (
     <div
-      className={`app-shell${sidebarCollapsed ? ' is-sidebar-collapsed' : ''}`}
+      className={`app-shell${sidebarCollapsed ? ' is-sidebar-collapsed' : ''}${activeViewId === 'settings' ? ' is-shell-settings' : ''}`}
       id="app-shell"
       ref={shellRef}
     >
       <div className="app-body" ref={appBodyRef}>
         <AppShellSidebar
           activeViewId={activeViewId}
+          settingsCategory={settingsCategory}
           canBack={canBack}
           canForward={canForward}
           onToggleCollapsed={() => setSidebarCollapsed((c) => !c)}
@@ -161,6 +167,7 @@ export function AppShell() {
           workspaceTitle={workspaceTitle}
           headerStatus={headerStatus}
           activeViewId={activeViewId}
+          settingsCategory={settingsCategory}
           chatRef={chatRef}
           onStatusChange={setHeaderStatus}
           onNewThread={() => void chatRef.current?.startNewThread()}

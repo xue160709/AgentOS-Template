@@ -4,11 +4,12 @@ import type {
   ClaudeAgentSettings,
   ClaudeAgentSettingsSnapshot,
 } from '../claude-chat-types'
+import type { SettingsCategoryId } from './types'
 import { IconInline } from '../icon-inline'
 
-type SettingsPageProps = { hidden: boolean }
+type SettingsPageProps = { hidden: boolean; settingsCategory: SettingsCategoryId }
 
-export function SettingsPage({ hidden }: SettingsPageProps) {
+export function SettingsPage({ hidden, settingsCategory }: SettingsPageProps) {
   const [configSource, setConfigSource] = useState<ClaudeAgentConfigSource>('settings')
   const [apiKey, setApiKey] = useState('')
   const [baseUrl, setBaseUrl] = useState('')
@@ -81,103 +82,165 @@ export function SettingsPage({ hidden }: SettingsPageProps) {
   }
 
   useEffect(() => {
+    if (hidden || settingsCategory !== 'general') return
     void load()
-  }, [load])
+  }, [hidden, load, settingsCategory])
+
+  if (hidden) {
+    return null
+  }
+
+  if (settingsCategory === 'appearance') {
+    return (
+      <section className="app-main-inner settings-page" id="panel-settings" aria-hidden={false}>
+        <header className="settings-page-header">
+          <div className="app-main-eyebrow">设置</div>
+          <h1 className="app-main-heading">外观</h1>
+          <p className="settings-lede">该分类尚未接入，后续可在此配置主题、字体与窗口效果等选项。</p>
+        </header>
+      </section>
+    )
+  }
 
   return (
-    <section className="app-main-inner settings-page" id="panel-settings" hidden={hidden} aria-hidden={hidden}>
-      <div className="app-main-eyebrow">设置</div>
-      <h1 className="app-main-heading">Claude Agent</h1>
-      <section className="app-panel settings-panel">
-        <form className="settings-form" id="claude-settings-form" onSubmit={handleSubmit}>
-          <div className="settings-source-grid" role="radiogroup" aria-label="Claude 配置来源">
-            <label className="settings-source-card">
+    <section className="app-main-inner settings-page" id="panel-settings" aria-hidden={false}>
+      <header className="settings-page-header">
+        <div className="app-main-eyebrow">设置</div>
+        <h1 className="app-main-heading">Claude Agent</h1>
+        <p className="settings-lede">
+          选择凭据与环境变量的优先级；下方表单值可覆盖同名环境变量，留空字段则继续沿用环境中的配置。
+        </p>
+      </header>
+
+      <form className="settings-stack" id="claude-settings-form" onSubmit={handleSubmit}>
+        <section className="settings-section" aria-labelledby="settings-section-source-heading">
+          <h2 id="settings-section-source-heading" className="settings-section-heading">
+            配置来源
+          </h2>
+          <div className="settings-segmented" role="radiogroup" aria-label="Claude 配置来源">
+            <label className={configSource === 'settings' ? 'settings-segment is-selected' : 'settings-segment'}>
               <input
                 type="radio"
                 name="configSource"
                 value="settings"
+                className="settings-segment-input"
                 checked={configSource === 'settings'}
                 onChange={() => setConfigSource('settings')}
               />
-              <span className="settings-source-card__title">
-                <IconInline name="settings" />
-                <span>设置页优先</span>
+              <span className="settings-segment-body">
+                <span className="settings-segment-top">
+                  <span className="settings-segment-title">
+                    <IconInline name="settings" />
+                    <span>设置优先</span>
+                  </span>
+                  <span className="settings-segment-radio" aria-hidden="true" />
+                </span>
+                <span className="settings-segment-desc">表单可覆盖同名环境变量，未填字段回退环境值。</span>
               </span>
-              <span className="settings-source-card__copy">表单里的值会覆盖同名环境变量，空字段继续沿用环境变量。</span>
             </label>
-            <label className="settings-source-card">
+            <label className={configSource === 'env' ? 'settings-segment is-selected' : 'settings-segment'}>
               <input
                 type="radio"
                 name="configSource"
                 value="env"
+                className="settings-segment-input"
                 checked={configSource === 'env'}
                 onChange={() => setConfigSource('env')}
               />
-              <span className="settings-source-card__title">
-                <IconInline name="server" />
-                <span>环境变量</span>
+              <span className="settings-segment-body">
+                <span className="settings-segment-top">
+                  <span className="settings-segment-title">
+                    <IconInline name="server" />
+                    <span>仅环境变量</span>
+                  </span>
+                  <span className="settings-segment-radio" aria-hidden="true" />
+                </span>
+                <span className="settings-segment-desc">只读取 Electron 主进程环境中的 ANTHROPIC_*。</span>
               </span>
-              <span className="settings-source-card__copy">只从 Electron 主进程环境读取 ANTHROPIC_* 配置。</span>
             </label>
           </div>
+        </section>
 
-          <label className="settings-field">
-            <span>
-              <IconInline name="key" />
-              <span>API Key</span>
-            </span>
-            <input
-              className="settings-input"
-              id="claude-api-key"
-              type="password"
-              autoComplete="off"
-              spellCheck={false}
-              placeholder="sk-ant-..."
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-            />
-          </label>
-
-          <label className="settings-field">
-            <span>
-              <IconInline name="server" />
-              <span>Base URL</span>
-            </span>
-            <input
-              className="settings-input"
-              id="claude-base-url"
-              type="url"
-              autoComplete="off"
-              spellCheck={false}
-              placeholder="https://api.anthropic.com"
-              value={baseUrl}
-              onChange={(e) => setBaseUrl(e.target.value)}
-            />
-          </label>
-
-          <label className="settings-field">
-            <span>
-              <IconInline name="chip" />
-              <span>Model</span>
-            </span>
-            <input
-              className="settings-input"
-              id="claude-model"
-              type="text"
-              autoComplete="off"
-              spellCheck={false}
-              placeholder="claude-sonnet-4-6"
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-            />
-          </label>
-
-          <div className="settings-env-summary" aria-label="环境变量状态">
-            <span id="env-api-key-status">{envApiKeyStatus}</span>
-            <span id="env-base-url-status">{envBaseUrlStatus}</span>
-            <span id="env-model-status">{envModelStatus}</span>
+        <section className="settings-section" aria-labelledby="settings-section-connection-heading">
+          <h2 id="settings-section-connection-heading" className="settings-section-heading">
+            连接与模型
+          </h2>
+          <div className="settings-group">
+            <div className="settings-field-row">
+              <div className="settings-field-row__meta">
+                <label htmlFor="claude-api-key" className="settings-field-row__label">
+                  <IconInline name="key" />
+                  API Key
+                </label>
+                <p className="settings-field-row__hint">保存在本地偏好中；不会在聊天 UI 明文展示。</p>
+              </div>
+              <input
+                id="claude-api-key"
+                type="password"
+                className="settings-input"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="sk-ant-..."
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+              />
+            </div>
+            <div className="settings-field-row">
+              <div className="settings-field-row__meta">
+                <label htmlFor="claude-base-url" className="settings-field-row__label">
+                  <IconInline name="server" />
+                  Base URL
+                </label>
+                <p className="settings-field-row__hint">自定义网关或服务端点时填写；默认留空可走官方终结点。</p>
+              </div>
+              <input
+                id="claude-base-url"
+                type="url"
+                className="settings-input"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="https://api.anthropic.com"
+                value={baseUrl}
+                onChange={(e) => setBaseUrl(e.target.value)}
+              />
+            </div>
+            <div className="settings-field-row">
+              <div className="settings-field-row__meta">
+                <label htmlFor="claude-model" className="settings-field-row__label">
+                  <IconInline name="chip" />
+                  Model
+                </label>
+                <p className="settings-field-row__hint">与 CLI / API 可用的模型标识一致。</p>
+              </div>
+              <input
+                id="claude-model"
+                type="text"
+                className="settings-input"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="claude-sonnet-4-6"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+              />
+            </div>
           </div>
+        </section>
 
+        <section className="settings-section" aria-labelledby="settings-section-env-heading">
+          <h2 id="settings-section-env-heading" className="settings-section-heading">
+            进程环境可读状态
+          </h2>
+          <p id="settings-section-env-desc" className="settings-section-caption">
+            下列为主进程环境下的当前摘要，仅供参考，不会因点击保存而改写。
+          </p>
+          <ul className="settings-env-tags" aria-describedby="settings-section-env-desc">
+            <li id="env-api-key-status">{envApiKeyStatus}</li>
+            <li id="env-base-url-status">{envBaseUrlStatus}</li>
+            <li id="env-model-status">{envModelStatus}</li>
+          </ul>
+        </section>
+
+        <div className="settings-footer">
           <div className="settings-actions">
             <button type="submit" className="btn btn-primary" id="btn-save-claude-settings" disabled={saveDisabled || busy}>
               <IconInline name="save" />
@@ -196,8 +259,8 @@ export function SettingsPage({ hidden }: SettingsPageProps) {
               {status}
             </span>
           </div>
-        </form>
-      </section>
+        </div>
+      </form>
     </section>
   )
 }

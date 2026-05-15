@@ -1,10 +1,11 @@
 import { type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
 import { IconInline } from '../icon-inline'
-import type { AppViewId } from './types'
-import { NAV_LABELS, NAV_VIEW_IDS } from './app-shell-constants'
+import type { AppViewId, SettingsCategoryId } from './types'
+import { NAV_LABELS, NAV_VIEW_IDS, SETTINGS_SIDEBAR_NAV } from './app-shell-constants.ts'
 
 type AppShellSidebarProps = {
   activeViewId: AppViewId
+  settingsCategory: SettingsCategoryId
   canBack: boolean
   canForward: boolean
   onToggleCollapsed: () => void
@@ -15,6 +16,7 @@ type AppShellSidebarProps = {
 
 export function AppShellSidebar({
   activeViewId,
+  settingsCategory,
   canBack,
   canForward,
   onToggleCollapsed,
@@ -22,6 +24,12 @@ export function AppShellSidebar({
   splitterRef,
   onSplitterPointerDown,
 }: AppShellSidebarProps) {
+  const isSettingsSidebar = activeViewId === 'settings'
+
+  const goLeaveSettings = () => {
+    window.location.hash = ''
+  }
+
   return (
     <>
       <div className="app-chrome-toolbar no-drag" aria-label="窗口导航">
@@ -58,40 +66,76 @@ export function AppShellSidebar({
           <IconInline name="forward" />
         </button>
       </div>
-      <aside className="app-sidebar" aria-label="侧栏导航" ref={sidebarRef}>
+      <aside
+        className={`app-sidebar${isSettingsSidebar ? ' is-settings-mode' : ''}`}
+        aria-label={isSettingsSidebar ? '设置导航' : '侧栏导航'}
+        ref={sidebarRef}
+      >
         <div className="app-sidebar-scroll">
           <div className="app-sidebar-inner">
-            <div className="app-sidebar-section-label">工作区</div>
-            {NAV_VIEW_IDS.map((id) => (
-              <button
-                key={id}
-                type="button"
-                className={`app-nav-item${activeViewId === id ? ' is-active' : ''}`}
-                data-view={id}
-                onClick={() => {
-                  window.location.hash = id === 'home' ? '' : id
-                }}
-              >
-                {NAV_LABELS[id]}
-              </button>
-            ))}
+            {isSettingsSidebar ? (
+              <>
+                <button type="button" className="app-settings-back-btn" id="btn-settings-back-app" onClick={goLeaveSettings}>
+                  <IconInline name="back" />
+                  <span>返回应用</span>
+                </button>
+                <div className="app-sidebar-section-label">设置</div>
+                {SETTINGS_SIDEBAR_NAV.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    disabled={item.disabled}
+                    title={item.disabled ? '尚未实现' : undefined}
+                    className={`app-settings-nav-item${settingsCategory === item.id ? ' is-active' : ''}`}
+                    data-settings-category={item.id}
+                    onClick={() => {
+                      if (item.disabled) {
+                        return
+                      }
+                      window.location.hash = `settings/${item.id}`
+                    }}
+                  >
+                    <IconInline name={item.icon} />
+                    <span>{item.label}</span>
+                  </button>
+                ))}
+              </>
+            ) : (
+              <>
+                <div className="app-sidebar-section-label">工作区</div>
+                {NAV_VIEW_IDS.map((id) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className={`app-nav-item${activeViewId === id ? ' is-active' : ''}`}
+                    data-view={id}
+                    onClick={() => {
+                      window.location.hash = id === 'home' ? '' : id
+                    }}
+                  >
+                    {NAV_LABELS[id]}
+                  </button>
+                ))}
+              </>
+            )}
           </div>
         </div>
-        <footer className="app-sidebar-footer">
-          <button
-            type="button"
-            className={`btn btn-toolbar${activeViewId === 'settings' ? ' is-active' : ''}`}
-            id="btn-footer-settings"
-            title="设置"
-            aria-label="设置"
-            onClick={() => {
-              window.location.hash = 'settings'
-            }}
-          >
-            <IconInline name="settings" />
-          </button>
-          <span className="user-select-none text-token-secondary">CodeX-UI-Template</span>
-        </footer>
+        {!isSettingsSidebar && (
+          <footer className="app-sidebar-footer">           
+              <button
+                type="button"
+                className="btn btn-toolbar"
+                id="btn-footer-settings"
+                title="设置"
+                aria-label="设置"
+                onClick={() => {
+                  window.location.hash = 'settings/general'
+                }}
+              >
+                <IconInline name="settings" />
+              </button>
+          </footer>
+        )}
       </aside>
       <div
         className="app-sidebar-splitter no-drag"

@@ -178,6 +178,15 @@ html[data-window-effects='mac-vibrancy'] .app-shell {
   -webkit-app-region: no-drag;
 }
 
+/** 设置页：与 Codex 一致去掉左侧三键与右侧顶栏标题行 */
+.app-shell.is-shell-settings .app-chrome-toolbar {
+  display: none !important;
+}
+
+.app-shell.is-shell-settings .app-sidebar-scroll {
+  padding-top: calc(var(--spacing-token-safe-header-top) + var(--padding-panel));
+}
+
 .app-sidebar {
   position: relative;
   z-index: 2;
@@ -276,6 +285,54 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
   outline: 1px solid var(--color-token-border);
 }
 
+.app-settings-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--spacing) * 1.5);
+  margin-bottom: calc(var(--spacing) * 2);
+  padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 2);
+  width: fit-content;
+  max-width: 100%;
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-token-text-primary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.app-settings-back-btn:hover {
+  background: var(--color-token-list-hover-background);
+}
+
+.app-settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--spacing) * 2);
+  padding: calc(var(--spacing) * 2);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--color-token-text-primary);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+}
+.app-settings-nav-item:hover:not(:disabled) {
+  background: var(--color-token-list-hover-background);
+}
+.app-settings-nav-item:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+.app-settings-nav-item.is-active:not(:disabled) {
+  background: color-mix(in oklab, var(--blue-400) 22%, transparent);
+  color: var(--color-token-text-primary);
+}
+
 .app-sidebar-footer {
   flex-shrink: 0;
   display: flex;
@@ -286,6 +343,10 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
   font-size: var(--text-xs);
   color: var(--color-token-text-secondary);
   border-top: 1px solid var(--color-token-sidebar-edge-border);
+}
+
+.app-sidebar.is-settings-mode .app-sidebar-footer {
+  justify-content: flex-end;
 }
 
 .app-workspace {
@@ -312,6 +373,18 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
   min-height: var(--height-toolbar-pane);
   padding: 0 calc(var(--spacing) * 3);
   border-bottom: 1px solid var(--color-token-border);
+  background: var(--color-token-main-surface-primary);
+}
+
+/** 无顶栏时用透明带保留拖拽（macOS hiddenInset） */
+.app-workspace-top-drag {
+  flex-shrink: 0;
+  height: var(--height-toolbar-pane);
+  min-height: var(--height-toolbar-pane);
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
   background: var(--color-token-main-surface-primary);
 }
 
@@ -493,76 +566,183 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
   width: min(960px, 100%);
 }
 
-.settings-panel {
-  max-width: 720px;
+/* Codex / VS Code–style preferences: grouped sections, segmented mode control, bordered row stack */
+
+.settings-page-header {
+  margin-bottom: calc(var(--spacing) * 6);
 }
 
-.settings-form {
+.settings-lede {
+  margin: calc(var(--spacing) * -1) 0 0;
+  max-width: min(42rem, 100%);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  color: var(--color-token-text-secondary);
+}
+
+.settings-stack {
+  max-width: min(36rem, 100%);
   display: flex;
   flex-direction: column;
-  gap: calc(var(--spacing) * 4);
+  gap: calc(var(--spacing) * 6);
 }
 
-.settings-source-grid {
+.settings-section-heading {
+  margin: 0 0 calc(var(--spacing) * 2);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.02em;
+  color: var(--color-token-text-primary);
+}
+
+.settings-section-caption {
+  margin: calc(var(--spacing) * -1) 0 calc(var(--spacing) * 2);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--color-token-description-foreground);
+}
+
+.settings-segmented {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: calc(var(--spacing) * 3);
+  gap: calc(var(--spacing) * 1);
+  padding: calc(var(--spacing) * 1);
+  border: 1px solid var(--color-token-border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in oklab, var(--color-token-foreground) 3.5%, var(--color-token-main-surface-primary));
 }
 
-.settings-source-card {
+.settings-segment {
   position: relative;
   display: flex;
-  flex-direction: column;
-  gap: calc(var(--spacing) * 1.5);
-  min-width: 0;
-  padding: calc(var(--spacing) * 3);
-  border: 1px solid var(--color-token-border);
-  border-radius: var(--radius-md);
-  background: color-mix(in oklab, var(--color-token-main-surface-primary) 96%, var(--color-token-foreground));
   cursor: pointer;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  outline: none;
+  transition:
+    background var(--transition-duration-basic) var(--transition-ease-basic),
+    border-color var(--transition-duration-basic) var(--transition-ease-basic),
+    box-shadow var(--transition-duration-basic) var(--transition-ease-basic);
 }
 
-.settings-source-card:hover {
+.settings-segment:hover {
   background: var(--color-token-list-hover-background);
 }
 
-.settings-source-card:has(input:checked) {
-  border-color: var(--color-focus-border);
-  outline: 1px solid color-mix(in oklab, var(--color-focus-border) 42%, transparent);
+.settings-segment:focus-within {
+  border-color: var(--color-token-border-heavy);
 }
 
-.settings-source-card input {
+.settings-segment.is-selected {
+  background: color-mix(in oklab, var(--color-token-main-surface-primary) 88%, var(--color-token-foreground));
+  border-color: var(--color-token-border-heavy);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--color-focus-border) 46%, transparent),
+    0 1px 2px color-mix(in oklab, var(--color-token-foreground) 10%, transparent);
+}
+
+.settings-segment-input {
   position: absolute;
-  opacity: 0;
-  pointer-events: none;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+  overflow: hidden;
 }
 
-.settings-source-card__title,
-.settings-field > span {
+.settings-segment-body {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--spacing) * 1);
+  flex: 1;
+  min-width: 0;
+  padding: calc(var(--spacing) * 3) calc(var(--spacing) * 2);
+}
+
+.settings-segment-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: calc(var(--spacing) * 2);
+  width: 100%;
+}
+
+.settings-segment-radio {
+  flex-shrink: 0;
+  width: 1.125rem;
+  height: 1.125rem;
+  margin-top: 2px;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--color-token-border-heavy);
+  background: transparent;
+  box-sizing: border-box;
+}
+
+.settings-segment.is-selected .settings-segment-radio {
+  border-color: var(--blue-400);
+  background-color: var(--blue-400);
+  box-shadow: inset 0 0 0 3px var(--color-token-main-surface-primary);
+}
+
+.settings-segment-title {
   display: inline-flex;
   align-items: center;
+  gap: calc(var(--spacing) * 1.5);
   min-width: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-token-text-primary);
+}
+
+.settings-segment-desc {
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--color-token-text-secondary);
+}
+
+.settings-group {
+  border: 1px solid var(--color-token-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: color-mix(in oklab, var(--color-token-main-surface-primary) 97%, var(--color-token-foreground));
+}
+
+.settings-field-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(11rem, 1.08fr);
+  gap: calc(var(--spacing) * 3);
+  align-items: start;
+  padding: calc(var(--spacing) * 3);
+}
+
+.settings-field-row + .settings-field-row {
+  border-top: 1px solid var(--color-token-border-light);
+}
+
+.settings-field-row__label {
+  display: inline-flex;
+  align-items: center;
   gap: calc(var(--spacing) * 1.5);
   font-size: var(--text-sm);
   font-weight: var(--font-weight-medium);
   color: var(--color-token-text-primary);
 }
 
-.settings-source-card__copy {
-  color: var(--color-token-text-secondary);
+.settings-field-row__hint {
+  margin: calc(var(--spacing) * 1) 0 0;
   font-size: var(--text-xs);
-  line-height: 1.5;
-}
-
-.settings-field {
-  display: grid;
-  gap: calc(var(--spacing) * 1.5);
+  line-height: 1.45;
+  color: var(--color-token-description-foreground);
 }
 
 .settings-input {
+  box-sizing: border-box;
   width: 100%;
-  height: 38px;
-  padding: 0 calc(var(--spacing) * 3);
+  min-height: calc(var(--spacing) * 9);
+  padding: calc(var(--spacing) * 1.75) calc(var(--spacing) * 3);
   border: 1px solid var(--color-token-input-border);
   border-radius: var(--radius-md);
   color: var(--color-token-input-foreground);
@@ -574,29 +754,40 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
 
 .settings-input:focus {
   border-color: var(--color-focus-border);
-  box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-focus-border) 20%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-focus-border) 22%, transparent);
 }
 
 .settings-input::placeholder {
   color: var(--color-token-input-placeholder-foreground);
 }
 
-.settings-env-summary {
+.settings-env-tags {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-wrap: wrap;
   gap: calc(var(--spacing) * 2);
-  color: var(--color-token-text-secondary);
-  font-size: var(--text-xs);
 }
 
-.settings-env-summary span {
+.settings-env-tags li {
   max-width: 100%;
-  padding: 2px 8px;
+  padding: calc(var(--spacing) * 0.75) calc(var(--spacing) * 3);
   border: 1px solid var(--color-token-border);
   border-radius: var(--radius-full);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+  color: var(--color-token-text-secondary);
+  background: color-mix(in oklab, var(--color-token-foreground) 4%, transparent);
+}
+
+.settings-footer {
+  padding-top: calc(var(--spacing) * 3);
+  border-top: 1px solid var(--color-token-border-light);
 }
 
 .settings-actions {
@@ -1092,7 +1283,11 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
     gap: calc(var(--spacing) * 3);
   }
 
-  .settings-source-grid {
-    grid-template-columns: 1fr;
+  .settings-segmented {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-field-row {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
