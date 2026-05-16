@@ -249,7 +249,6 @@ export function AppShell() {
           ...prev,
           activeProjectId: thread.projectId,
           activeThreadId: thread.id,
-          projects: touchProject(prev.projects, thread.projectId),
         }
       })
       goHome()
@@ -310,7 +309,6 @@ export function AppShell() {
             ...prev,
             activeProjectId: projectId,
             activeThreadId: existingThread.id,
-            projects: touchProject(prev.projects, projectId),
           }
         }
         const now = Date.now()
@@ -319,7 +317,6 @@ export function AppShell() {
           ...prev,
           activeProjectId: projectId,
           activeThreadId: fallbackThreadId,
-          projects: touchProject(prev.projects, projectId, now),
           threads: [
             {
               id: fallbackThreadId,
@@ -413,7 +410,6 @@ export function AppShell() {
             ...nextState,
             activeProjectId: nextActive.projectId,
             activeThreadId: nextActive.id,
-            projects: touchProject(prev.projects, nextActive.projectId),
           }
         }
 
