@@ -387,8 +387,7 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
 }
 
 .app-project-path,
-.app-thread-meta,
-.app-thread-empty {
+.app-thread-meta {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -508,16 +507,7 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
   line-height: 0;
 }
 
-.app-skill-copy {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  justify-content: center;
-  gap: 1px;
-}
-
 .app-skill-title,
-.app-skill-meta,
 .app-skill-empty {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -531,15 +521,11 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
   color: var(--color-token-text-primary);
 }
 
-.app-skill-meta,
 .app-skill-empty {
+  padding: calc(var(--spacing) * 0.75) calc(var(--spacing) * 2);
   font-size: var(--text-xs);
   line-height: 15px;
   color: var(--color-token-text-tertiary);
-}
-
-.app-skill-empty {
-  padding: calc(var(--spacing) * 0.75) calc(var(--spacing) * 2);
 }
 
 .app-thread-row {
@@ -718,10 +704,6 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
 
 .app-thread-archive.is-confirming > span {
   white-space: nowrap;
-}
-
-.app-thread-empty {
-  padding: calc(var(--spacing) * 0.75) calc(var(--spacing) * 2);
 }
 
 .app-nav-item {

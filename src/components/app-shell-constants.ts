@@ -15,8 +15,7 @@ export const SETTINGS_SIDEBAR_NAV: {
   disabled?: boolean
 }[] = [
   { id: 'general', label: '模型', icon: 'settings' },
-  { id: 'skills', label: 'Skills', icon: 'chip' },
-  { id: 'appearance', label: '外观', icon: 'laptop' },
+  { id: 'skills', label: '常规', icon: 'chip' },
 ]
 
 export const VIEW_HEADINGS: Record<AppViewId, string> = {
@@ -26,8 +25,7 @@ export const VIEW_HEADINGS: Record<AppViewId, string> = {
 }
 
 export function settingsWorkspaceTitle(category: SettingsCategoryId): string {
-  if (category === 'appearance') return '设置 · 外观'
-  if (category === 'skills') return '设置 · Skills'
+  if (category === 'skills') return '设置 · 常规'
   return '设置 · 模型'
 }
 
@@ -53,5 +51,5 @@ export function settingsCategoryFromLocation(): SettingsCategoryId {
   if (parts[0] !== 'settings') return DEFAULT_SETTINGS_CATEGORY
   const sub = parts[1]
   if (sub === 'skills') return 'skills'
-  return sub === 'appearance' ? 'appearance' : DEFAULT_SETTINGS_CATEGORY
+  return DEFAULT_SETTINGS_CATEGORY
 }

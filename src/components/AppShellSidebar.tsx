@@ -163,6 +163,8 @@ export function AppShellSidebar({
                     const projectActive = activeProjectId === project.id
                     const projectSkillState = projectSkillStates[project.id]
                     const projectSkills = projectSkillState?.skills ?? []
+                    const showSkillsSection = Boolean(projectSkillState?.loading) || projectSkills.length > 0
+                    const showThreadHistoryDivider = projectThreads.length > 0 && showProjectSkills
                     return (
                       <section key={project.id} className={`app-project-group${projectActive ? ' is-active' : ''}`}>
                         <div className="app-project-row">
@@ -194,7 +196,7 @@ export function AppShellSidebar({
                             <IconInline name="plus" />
                           </button>
                         </div>
-                        {showProjectSkills ? (
+                        {showProjectSkills && showSkillsSection ? (
                           <div className="app-project-skill-block" aria-label={`${project.name} Skills`}>
                             <div className="app-sidebar-divider">
                               <span>Skills</span>
@@ -202,7 +204,7 @@ export function AppShellSidebar({
                             <div className="app-skill-list">
                               {projectSkillState?.loading ? (
                                 <div className="app-skill-empty">扫描中</div>
-                              ) : projectSkills.length > 0 ? (
+                              ) : (
                                 projectSkills.map((skill) => (
                                   <button
                                     key={skill.path}
@@ -215,21 +217,16 @@ export function AppShellSidebar({
                                     }}
                                   >
                                     <IconInline name="chip" />
-                                    <span className="app-skill-copy">
-                                      <span className="app-skill-title">{skill.title}</span>
-                                      <span className="app-skill-meta">{formatSkillMeta(skill.relativePath)}</span>
-                                    </span>
+                                    <span className="app-skill-title">{skill.title}</span>
                                   </button>
                                 ))
-                              ) : (
-                                <div className="app-skill-empty">
-                                  {projectSkillState?.message ? '无法读取项目 skills' : '没有项目 skills'}
-                                </div>
                               )}
                             </div>
-                            <div className="app-sidebar-divider app-sidebar-divider--threads">
-                              <span>对话历史</span>
-                            </div>
+                          </div>
+                        ) : null}
+                        {showProjectSkills && showThreadHistoryDivider ? (
+                          <div className="app-sidebar-divider app-sidebar-divider--threads">
+                            <span>对话历史</span>
                           </div>
                         ) : null}
                         <div className="app-thread-list" aria-label={`${project.name} 对话`}>
@@ -287,7 +284,6 @@ export function AppShellSidebar({
                               </div>
                             )
                           })}
-                          {projectThreads.length === 0 ? <div className="app-thread-empty">还没有对话</div> : null}
                         </div>
                       </section>
                     )
@@ -335,11 +331,3 @@ function formatThreadTime(timestamp: number): string {
   return new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' }).format(timestamp)
 }
 
-function formatSkillMeta(relativePath: string): string {
-  return relativePath
-    .replace(/\/SKILL\.md$/i, '')
-    .replace(/^\.agents\/skills\//, '')
-    .replace(/^\.agent\/skills\//, '')
-    .replace(/^\.claude\/skills\//, '')
-    .replace(/^\.cursor\/skills\//, '')
-}

@@ -1,4 +1,3 @@
-import { AppearanceSettingsPage } from './AppearanceSettingsPage'
 import { ClaudeAgentSettingsPage } from './ClaudeAgentSettingsPage'
 import { ProjectSkillsSettingsPage } from './ProjectSkillsSettingsPage'
 import type { SettingsCategoryId } from './types'
@@ -27,10 +26,6 @@ export function SettingsPage({
         onEnabledChange={onShowProjectSkillsInSidebarChange}
       />
     )
-  }
-
-  if (settingsCategory === 'appearance') {
-    return <AppearanceSettingsPage />
   }
 
   return <ClaudeAgentSettingsPage />

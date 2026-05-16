@@ -7,21 +7,21 @@ type ProjectSkillsSettingsPageProps = {
 
 export function ProjectSkillsSettingsPage({ enabled, onEnabledChange }: ProjectSkillsSettingsPageProps) {
   return (
-    <section className="app-main-inner settings-page" id="panel-settings" aria-hidden={false}>
+    <section className="app-main-inner settings-page settings-page--models" id="panel-settings" aria-hidden={false}>
       <header className="settings-page-header">
-        <h1 className="app-main-heading">Skills</h1>
+        <h1 className="app-main-heading">常规</h1>
         <p className="settings-lede">
-          控制侧边栏是否显示当前项目内声明的 skills。这里不会读取全局 skills。
+          与应用相关的通用选项。
         </p>
       </header>
 
       <div className="settings-stack">
         <section className="settings-section" aria-labelledby="settings-section-project-skills-heading">
           <h2 id="settings-section-project-skills-heading" className="settings-section-heading">
-            侧边栏显示
+            项目 Skills
           </h2>
           <p className="settings-section-caption">
-            开启后，每个项目会在对话历史上方列出项目目录中的 skills，并用分割线区分两类内容。
+            开启后，每个项目会在对话历史上方列出项目目录中的 skills，并与对话历史用分割线区分。
           </p>
           <div className="settings-group">
             <label className="settings-switch-row">
