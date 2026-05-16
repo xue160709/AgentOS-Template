@@ -383,6 +383,23 @@ export function AppShell() {
     [goHome, updateChatWorkspace, t],
   )
 
+  useEffect(() => {
+    void window.desktop?.syncTrayLocale?.(getInitialLocale())
+  }, [])
+
+  useEffect(() => {
+    const subscribe = window.desktop?.onTrayMenuAction
+    if (!subscribe) return
+    return subscribe((action) => {
+      if (!chatWorkspace) return
+      if (action === 'new-thread') {
+        createThreadInProject()
+      } else if (action === 'open-project') {
+        void createProject('existing')
+      }
+    })
+  }, [chatWorkspace, createProject, createThreadInProject])
+
   const archiveThread = useCallback(
     (threadId: string) => {
       let createdThreadId: string | null = null

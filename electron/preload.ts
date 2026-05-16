@@ -1,4 +1,5 @@
 import { ipcRenderer, contextBridge, type IpcRendererEvent } from 'electron'
+import type { DesktopPreferences, TrayMenuAction } from '../src/desktop-types'
 import type {
   ActiveChatPickPayload,
   ClaudeAgentSettings,
@@ -9,6 +10,7 @@ import type {
 } from '../src/claude-chat-types'
 
 const CLAUDE_CHAT_EVENT_CHANNEL = 'claude-chat:event'
+const TRAY_MENU_ACTION_CHANNEL = 'desktop:tray-action'
 
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld('desktop', {
@@ -39,6 +41,23 @@ contextBridge.exposeInMainWorld('desktop', {
   },
   showItemInFolder(targetPath: string) {
     return ipcRenderer.invoke('desktop:show-item-in-folder', targetPath) as Promise<void>
+  },
+  getDesktopPreferences() {
+    return ipcRenderer.invoke('desktop-preferences:get') as Promise<DesktopPreferences>
+  },
+  setDesktopPreferences(partial: Partial<DesktopPreferences>) {
+    return ipcRenderer.invoke('desktop-preferences:set', partial) as Promise<DesktopPreferences>
+  },
+  syncTrayLocale(locale: 'zh' | 'en') {
+    return ipcRenderer.invoke('desktop:sync-tray-locale', locale) as Promise<void>
+  },
+  onTrayMenuAction(handler: (action: TrayMenuAction) => void) {
+    const listener = (_event: IpcRendererEvent, raw: unknown) => {
+      if (raw === 'new-thread') handler('new-thread')
+      else if (raw === 'open-project') handler('open-project')
+    }
+    ipcRenderer.on(TRAY_MENU_ACTION_CHANNEL, listener)
+    return () => ipcRenderer.off(TRAY_MENU_ACTION_CHANNEL, listener)
   },
 })
 

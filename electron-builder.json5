@@ -1,23 +1,26 @@
 // @see - https://www.electron.build/configuration/configuration
 {
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
-  "appId": "YourAppID",
+  "appId": "com.agentos.desktop",
   "asar": true,
-  "productName": "YourAppName",
+  "productName": "AgentOS",
   "directories": {
-    "output": "release/${version}"
+    "output": "release/${version}",
+    "buildResources": "build"
   },
   "files": [
     "dist",
     "dist-electron"
   ],
   "mac": {
+    "icon": "build/icons/icon.icns",
     "target": [
       "dmg"
     ],
     "artifactName": "${productName}-Mac-${version}-Installer.${ext}"
   },
   "win": {
+    "icon": "build/icons/icon.ico",
     "target": [
       {
         "target": "nsis",
@@ -35,6 +38,7 @@
     "deleteAppDataOnUninstall": false
   },
   "linux": {
+    "icon": "build/icons/icon.png",
     "target": [
       "AppImage"
     ],

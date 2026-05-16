@@ -79,7 +79,7 @@ export function createDefaultChatWorkspaceState(): ChatWorkspaceState {
     projects: [
       {
         id: activeProjectId,
-        name: 'CodeX-UI-Template',
+        name: 'AgentOS',
         path: '/Volumes/macOS/Github/CodeX-UI-Template',
         createdAt: now - 1000 * 60 * 60,
         updatedAt: now,

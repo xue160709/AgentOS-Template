@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="AgentOS tray icon">
+  <path d="M18.5 18.5 37 32 18.5 45.5" fill="none" stroke="#000000" stroke-width="10.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="47" cy="40.5" r="5.5" fill="#000000"/>
+</svg>

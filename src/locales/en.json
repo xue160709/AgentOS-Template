@@ -1,6 +1,6 @@
 {
   "shell": {
-    "viewHome": "Codex Chatbot",
+    "viewHome": "AgentOS",
     "viewDocs": "Docs",
     "viewSettings": "Settings",
     "workspaceSettingsModels": "Settings · Models",
@@ -13,6 +13,11 @@
   "nav": {
     "home": "Chat",
     "docs": "Docs"
+  },
+  "tray": {
+    "newThread": "New conversation",
+    "openProject": "Open project…",
+    "quit": "Quit"
   },
   "settingsCategory": {
     "models": "Models",
@@ -110,7 +115,14 @@
       "languageZh": "Chinese",
       "languageEn": "English",
       "languageRestartHint": "Language preference saved. Quit and reopen the app to apply it across the interface.",
-      "quitApp": "Quit app"
+      "languageRestartTitle": "Restart required",
+      "languageRestartLater": "Not now",
+      "quitApp": "Quit app",
+      "desktopHeading": "Desktop & startup",
+      "closeToTray": "Keep running in the menu bar tray after closing the window",
+      "closeToTrayHint": "When enabled, closing the main window hides it instead of quitting; use the tray menu to continue.",
+      "openAtLogin": "Open at login",
+      "openAtLoginHint": "Launch this app when you log in to your computer (also visible in system login items)."
     },
     "models": {
       "pageTitle": "Models",

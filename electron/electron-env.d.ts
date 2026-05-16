@@ -5,6 +5,7 @@ import type {
   AgentContextResult,
   ProjectFileSearchResult,
 } from '../src/claude-chat-types'
+import type { DesktopPreferences, TrayMenuAction } from '../src/desktop-types'
 import type { ChatWorkspaceState, FileTreeResult } from '../src/components/types'
 
 declare global {
@@ -48,6 +49,10 @@ declare global {
       quitApp?: () => Promise<void>
       /** 在系统文件管理器中显示路径（macOS 为访达） */
       showItemInFolder?: (targetPath: string) => Promise<void>
+      getDesktopPreferences?: () => Promise<DesktopPreferences>
+      setDesktopPreferences?: (partial: Partial<DesktopPreferences>) => Promise<DesktopPreferences>
+      syncTrayLocale?: (locale: 'zh' | 'en') => Promise<void>
+      onTrayMenuAction?: (handler: (action: TrayMenuAction) => void) => () => void
     }
   }
 }

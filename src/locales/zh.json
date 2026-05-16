@@ -1,6 +1,6 @@
 {
   "shell": {
-    "viewHome": "Codex Chatbot",
+    "viewHome": "AgentOS",
     "viewDocs": "文档",
     "viewSettings": "设置",
     "workspaceSettingsModels": "设置 · 模型",
@@ -13,6 +13,11 @@
   "nav": {
     "home": "聊天",
     "docs": "文档"
+  },
+  "tray": {
+    "newThread": "新建对话",
+    "openProject": "打开新项目",
+    "quit": "退出"
   },
   "settingsCategory": {
     "models": "模型",
@@ -110,7 +115,14 @@
       "languageZh": "中文",
       "languageEn": "英文",
       "languageRestartHint": "语言偏好已保存。请退出并重新打开应用后，界面将切换为所选语言。",
-      "quitApp": "退出应用"
+      "languageRestartTitle": "需要重启应用",
+      "languageRestartLater": "稍后",
+      "quitApp": "退出应用",
+      "desktopHeading": "桌面与启动",
+      "closeToTray": "关闭窗口后保留在托盘",
+      "closeToTrayHint": "开启后，关闭主窗口不会退出应用，可从托盘图标右键菜单继续操作。",
+      "openAtLogin": "登录时自动启动",
+      "openAtLoginHint": "登录本机系统后自动启动应用（可在系统「登录项」中查看或关闭）。"
     },
     "models": {
       "pageTitle": "模型",

@@ -1,12 +1,16 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, shell, Tray } from 'electron'
 import { fileURLToPath } from 'node:url'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import zh from '../src/locales/zh.json'
+import en from '../src/locales/en.json'
+import type { DesktopPreferences } from '../src/desktop-types'
 import { discoverAgentContext, searchProjectFiles } from './agent-context'
 import { ClaudeAgentRunner } from './claude-agent-runner'
 import { ClaudeAgentSettingsStore } from './claude-agent-settings'
 import { ChatWorkspaceStore } from './chat-workspace-store'
+import { DesktopPreferencesStore } from './desktop-preferences-store'
 import { loadMainProcessEnv } from './env-loader'
 import type {
   ActiveChatPickPayload,
@@ -37,10 +41,24 @@ export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
 
+const APP_NAME = 'AgentOS'
+const TRAY_ACTION_CHANNEL = 'desktop:tray-action'
+
+const TRAY_LOCALE_BUNDLE = { zh, en } as const
+type TrayLocale = keyof typeof TRAY_LOCALE_BUNDLE
+
 let win: BrowserWindow | null
+let tray: Tray | null = null
+let isQuitting = false
+let currentTrayLocale: TrayLocale = 'zh'
 let claudeAgentRunner: ClaudeAgentRunner | null = null
 let claudeAgentSettingsStore: ClaudeAgentSettingsStore | null = null
 let chatWorkspaceStore: ChatWorkspaceStore | null = null
+let desktopPreferencesStore: DesktopPreferencesStore | null = null
+
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+
+app.setName(APP_NAME)
 
 const FILE_TREE_MAX_DEPTH = 8
 const FILE_TREE_MAX_ENTRIES = 1200
@@ -63,6 +81,19 @@ function getWindowBackgroundColor() {
   return nativeTheme.shouldUseDarkColors ? '#181818' : '#f9f9f9'
 }
 
+function getAppIconPath() {
+  return path.join(process.env.VITE_PUBLIC, 'app-icon.png')
+}
+
+function applyDockBranding() {
+  app.setName(APP_NAME)
+  if (process.platform !== 'darwin' || !app.dock) return
+  const dockImage = nativeImage.createFromPath(getAppIconPath())
+  if (!dockImage.isEmpty()) {
+    app.dock.setIcon(dockImage)
+  }
+}
+
 function createWindow() {
   const isMac = process.platform === 'darwin'
 
@@ -72,7 +103,8 @@ function createWindow() {
     minWidth: 640,
     minHeight: 480,
     backgroundColor: isMac ? '#00000000' : getWindowBackgroundColor(),
-    icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
+    icon: getAppIconPath(),
+    title: APP_NAME,
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },
@@ -89,6 +121,15 @@ function createWindow() {
   })
 
   claudeAgentRunner = new ClaudeAgentRunner(win.webContents, process.env.APP_ROOT, () => getClaudeAgentSettingsStore().resolve())
+
+  win.on('close', (event) => {
+    if (isQuitting) return
+    const prefs = desktopPreferencesStore?.read() ?? { closeToTray: false, openAtLogin: false }
+    if (prefs.closeToTray) {
+      event.preventDefault()
+      win?.hide()
+    }
+  })
 
   if (!isMac) {
     const syncBackgroundColor = () => {
@@ -133,85 +174,213 @@ function getChatWorkspaceStore() {
   return chatWorkspaceStore
 }
 
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+function getDesktopPreferencesStore() {
+  if (!desktopPreferencesStore) {
+    throw new Error('Desktop preferences store is not ready.')
+  }
+  return desktopPreferencesStore
+}
+
+function trayMenuLabel(locale: TrayLocale, key: 'newThread' | 'openProject' | 'quit'): string {
+  const tray = TRAY_LOCALE_BUNDLE[locale].tray as Record<string, string> | undefined
+  const value = tray?.[key]
+  return typeof value === 'string' ? value : key
+}
+
+function getTrayImage() {
+  const iconName = process.platform === 'darwin' ? 'trayTemplate.png' : 'tray-icon.png'
+  const iconPath = path.join(process.env.VITE_PUBLIC, iconName)
+  let image = nativeImage.createFromPath(iconPath)
+  if (image.isEmpty()) {
+    image = nativeImage.createFromPath(path.join(process.env.APP_ROOT ?? '', 'public', iconName))
+  }
+  if (!image.isEmpty() && process.platform === 'darwin') {
+    image.setTemplateImage(true)
+  }
+  /** macOS：托盘图为空时用系统模板图兜底，避免菜单栏“看不见”。 */
+  if (image.isEmpty() && process.platform === 'darwin') {
+    try {
+      image = nativeImage.createFromNamedImage('NSImageNameBookmarksTemplate', [18, 18])
+      image.setTemplateImage(true)
+    } catch {
+      /* ignore */
+    }
+  }
+  /** 其它平台仍为空时用 16×16 纯色 PNG，避免 `new Tray` 无图标 */
+  if (image.isEmpty()) {
+    image = nativeImage.createFromDataURL(
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMUlEQVQ4T2NkYGAQYcAP3uCTZhw1gGGYhAGBZIA/nYCMg/BOMrgMERYA5KquhnSuCqmRBwBZ9A/TsQ5TAAAAAElFTkSuQmCC',
+    )
+  }
+  return image
+}
+
+function buildTrayContextMenu() {
+  const locale = currentTrayLocale
+  return Menu.buildFromTemplate([
+    {
+      label: trayMenuLabel(locale, 'newThread'),
+      click: () => {
+        if (win && !win.isDestroyed()) {
+          win.show()
+          win.focus()
+          win.webContents.send(TRAY_ACTION_CHANNEL, 'new-thread')
+        }
+      },
+    },
+    {
+      label: trayMenuLabel(locale, 'openProject'),
+      click: () => {
+        if (win && !win.isDestroyed()) {
+          win.show()
+          win.focus()
+          win.webContents.send(TRAY_ACTION_CHANNEL, 'open-project')
+        }
+      },
+    },
+    { type: 'separator' },
+    {
+      label: trayMenuLabel(locale, 'quit'),
+      click: () => {
+        app.quit()
+      },
+    },
+  ])
+}
+
+function ensureTray() {
+  if (!win || win.isDestroyed()) return
+  if (!tray) {
+    tray = new Tray(getTrayImage())
+    const name = app.getName()
+    tray.setToolTip(name)
+  }
+  tray.setContextMenu(buildTrayContextMenu())
+}
+
+function applyLoginItemSettingsFromPrefs(prefs: DesktopPreferences) {
+  app.setLoginItemSettings({
+    openAtLogin: prefs.openAtLogin,
+    path: process.execPath,
+  })
+}
+
+if (gotSingleInstanceLock) {
+  app.on('second-instance', () => {
+    if (win && !win.isDestroyed()) {
+      if (win.isMinimized()) win.restore()
+      win.show()
+      win.focus()
+    }
+  })
+
+  app.on('window-all-closed', () => {
+    const prefs = desktopPreferencesStore?.read() ?? { closeToTray: false, openAtLogin: false }
+    if (prefs.closeToTray) return
     app.quit()
     win = null
-  }
-})
+  })
 
-app.on('activate', () => {
-  // On OS X it's common to re-create a window in the app when the
-  // dock icon is clicked and there are no other windows open.
-  if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow()
-  }
-})
+  app.on('activate', () => {
+    if (win && !win.isDestroyed()) {
+      win.show()
+      return
+    }
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow()
+      ensureTray()
+    }
+  })
 
-app.whenReady().then(() => {
-  nativeTheme.themeSource = 'system'
-  const userDataPath = app.getPath('userData')
-  claudeAgentSettingsStore = new ClaudeAgentSettingsStore(userDataPath)
-  chatWorkspaceStore = new ChatWorkspaceStore(userDataPath)
-  ipcMain.handle('claude-chat:submit', (_event, payload: ClaudeChatSubmitPayload) => {
-    return getClaudeAgentRunner().submit(payload)
+  app.on('before-quit', () => {
+    isQuitting = true
+    tray?.destroy()
+    tray = null
   })
-  ipcMain.handle('claude-chat:cancel', (_event, requestId?: string) => {
-    return getClaudeAgentRunner().cancel(requestId)
-  })
-  ipcMain.handle('claude-chat:new-thread', (_event, threadId?: string) => {
-    return getClaudeAgentRunner().newThread(threadId)
-  })
-  ipcMain.handle('claude-chat:answer-permission-request', (_event, payload: ClaudePermissionResponsePayload) => {
-    return getClaudeAgentRunner().answerPermissionRequest(payload)
-  })
-  ipcMain.handle('claude-agent-settings:get', () => {
-    return getClaudeAgentSettingsStore().getSnapshot()
-  })
-  ipcMain.handle('claude-agent-settings:save', (_event, settings: ClaudeAgentSettings) => {
-    return getClaudeAgentSettingsStore().save(settings)
-  })
-  ipcMain.handle('claude-agent-settings:set-active-chat-pick', (_event, payload: ActiveChatPickPayload) => {
-    return getClaudeAgentSettingsStore().setActiveChatPick(payload)
-  })
-  ipcMain.handle('chat-workspace:get', () => {
-    return getChatWorkspaceStore().read()
-  })
-  ipcMain.handle('chat-workspace:save', (_event, state: unknown) => {
-    return getChatWorkspaceStore().save(state)
-  })
-  ipcMain.handle('desktop:pick-project-directory', async () => {
-    const parent = BrowserWindow.getFocusedWindow() ?? win
-    if (!parent) return null
-    const result = await dialog.showOpenDialog(parent, {
-      properties: ['openDirectory', 'createDirectory'],
-      title: '选择项目文件夹',
+
+  app.whenReady().then(() => {
+    nativeTheme.themeSource = 'system'
+    applyDockBranding()
+    const userDataPath = app.getPath('userData')
+    desktopPreferencesStore = new DesktopPreferencesStore(userDataPath)
+    claudeAgentSettingsStore = new ClaudeAgentSettingsStore(userDataPath)
+    chatWorkspaceStore = new ChatWorkspaceStore(userDataPath)
+    applyLoginItemSettingsFromPrefs(getDesktopPreferencesStore().read())
+    ipcMain.handle('desktop-preferences:get', () => {
+      return getDesktopPreferencesStore().read()
     })
-    if (result.canceled || result.filePaths.length === 0) return null
-    return result.filePaths[0] ?? null
+    ipcMain.handle('desktop-preferences:set', (_event, partial: Partial<DesktopPreferences>) => {
+      const next = getDesktopPreferencesStore().save(partial)
+      applyLoginItemSettingsFromPrefs(next)
+      ensureTray()
+      return next
+    })
+    ipcMain.handle('desktop:sync-tray-locale', (_event, raw: unknown) => {
+      if (raw === 'zh' || raw === 'en') {
+        currentTrayLocale = raw
+        ensureTray()
+      }
+    })
+    ipcMain.handle('claude-chat:submit', (_event, payload: ClaudeChatSubmitPayload) => {
+      return getClaudeAgentRunner().submit(payload)
+    })
+    ipcMain.handle('claude-chat:cancel', (_event, requestId?: string) => {
+      return getClaudeAgentRunner().cancel(requestId)
+    })
+    ipcMain.handle('claude-chat:new-thread', (_event, threadId?: string) => {
+      return getClaudeAgentRunner().newThread(threadId)
+    })
+    ipcMain.handle('claude-chat:answer-permission-request', (_event, payload: ClaudePermissionResponsePayload) => {
+      return getClaudeAgentRunner().answerPermissionRequest(payload)
+    })
+    ipcMain.handle('claude-agent-settings:get', () => {
+      return getClaudeAgentSettingsStore().getSnapshot()
+    })
+    ipcMain.handle('claude-agent-settings:save', (_event, settings: ClaudeAgentSettings) => {
+      return getClaudeAgentSettingsStore().save(settings)
+    })
+    ipcMain.handle('claude-agent-settings:set-active-chat-pick', (_event, payload: ActiveChatPickPayload) => {
+      return getClaudeAgentSettingsStore().setActiveChatPick(payload)
+    })
+    ipcMain.handle('chat-workspace:get', () => {
+      return getChatWorkspaceStore().read()
+    })
+    ipcMain.handle('chat-workspace:save', (_event, state: unknown) => {
+      return getChatWorkspaceStore().save(state)
+    })
+    ipcMain.handle('desktop:pick-project-directory', async () => {
+      const parent = BrowserWindow.getFocusedWindow() ?? win
+      if (!parent) return null
+      const result = await dialog.showOpenDialog(parent, {
+        properties: ['openDirectory', 'createDirectory'],
+        title: '选择项目文件夹',
+      })
+      if (result.canceled || result.filePaths.length === 0) return null
+      return result.filePaths[0] ?? null
+    })
+    ipcMain.handle('desktop:list-project-files', (_event, rootPath: string) => {
+      return readProjectFileTree(rootPath)
+    })
+    ipcMain.handle('desktop:search-project-files', (_event, rootPath: string, query: string) => {
+      return searchProjectFiles(rootPath, query)
+    })
+    ipcMain.handle('desktop:list-agent-context', (_event, rootPath: string) => {
+      return discoverAgentContext(rootPath)
+    })
+    ipcMain.handle('desktop:quit', () => {
+      app.quit()
+    })
+    ipcMain.handle('desktop:show-item-in-folder', (_event, rawPath: unknown) => {
+      if (typeof rawPath !== 'string' || !rawPath.trim()) return
+      const resolved = resolveProjectPath(rawPath)
+      shell.showItemInFolder(resolved)
+    })
+    createWindow()
+    ensureTray()
   })
-  ipcMain.handle('desktop:list-project-files', (_event, rootPath: string) => {
-    return readProjectFileTree(rootPath)
-  })
-  ipcMain.handle('desktop:search-project-files', (_event, rootPath: string, query: string) => {
-    return searchProjectFiles(rootPath, query)
-  })
-  ipcMain.handle('desktop:list-agent-context', (_event, rootPath: string) => {
-    return discoverAgentContext(rootPath)
-  })
-  ipcMain.handle('desktop:quit', () => {
-    app.quit()
-  })
-  ipcMain.handle('desktop:show-item-in-folder', (_event, rawPath: unknown) => {
-    if (typeof rawPath !== 'string' || !rawPath.trim()) return
-    const resolved = resolveProjectPath(rawPath)
-    shell.showItemInFolder(resolved)
-  })
-  createWindow()
-})
+} else {
+  app.quit()
+}
 
 async function readProjectFileTree(rootPath: string): Promise<FileTreeResult> {
   const resolvedRootPath = resolveProjectPath(rootPath)

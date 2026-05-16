@@ -1,4 +1,4 @@
-# CodeX-UI-Template
+# AgentOS
 
 面向 **类 Codex 桌面工作台** 体验的 **Electron + Vite + React + TypeScript** 模板：内置 **App Shell**（可 resize 侧栏、工作区顶栏、随系统的深浅色外观、基于 Hash 的视图切换），集成 **Claude Agent SDK**（主进程运行）、**多项目 / 多会话聊天工作区**、**本地项目文件树面板** 与持久化。在 **macOS** 上使用隐藏式标题栏、透明窗口与 `vibrancy: under-window`，侧栏区域可透出系统质感，工作区为不透明白底以便阅读与输入。
 
