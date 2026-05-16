@@ -9,7 +9,7 @@ type AgentModeMenuProps = {
 }
 
 export function AgentModeMenu({ project }: AgentModeMenuProps) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const [open, setOpen] = useState(false)
   const [enabled, setEnabled] = useState(false)
   const [todoEnabled, setTodoEnabled] = useState(false)
@@ -41,14 +41,14 @@ export function AgentModeMenu({ project }: AgentModeMenuProps) {
       return
     }
 
-    void getAgentModeStatus(project.path)
+    void getAgentModeStatus(project.path, locale)
       .then(applyStatus)
       .catch(() => {
         setEnabled(false)
         setTodoEnabled(false)
         setMessage(t('workspace.agentModeUnavailable'))
       })
-  }, [applyStatus, project.path, t])
+  }, [applyStatus, project.path, t, locale])
 
   useEffect(() => {
     if (!open) return
@@ -78,12 +78,12 @@ export function AgentModeMenu({ project }: AgentModeMenuProps) {
     setLoading(true)
     setMessage(t('workspace.agentModeEnabling'))
     try {
-      const result = await ensureAgentModeFiles(project.path)
+      const result = await ensureAgentModeFiles(project.path, locale)
       setLastResult(result)
       setEnabled(result.ok)
       setMessage(result.message)
       if (result.ok) {
-        void window.desktop?.getAgentModeStatus?.(project.path).then(applyStatus).catch(() => undefined)
+        void window.desktop?.getAgentModeStatus?.(project.path, locale).then(applyStatus).catch(() => undefined)
       }
     } catch (error) {
       setEnabled(false)
@@ -104,7 +104,7 @@ export function AgentModeMenu({ project }: AgentModeMenuProps) {
     setLastResult(null)
     setMessage(partial.todoEnabled === undefined ? t('workspace.agentModeDisabling') : t('workspace.todoModeUpdating'))
     try {
-      const result = await setAgentModeState(project.path, partial)
+      const result = await setAgentModeState(project.path, partial, locale)
       applyStatus(result)
       if (result.ok && partial.enabled === false) {
         setMessage(t('workspace.agentModeDisabled'))

@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import zh from '../src/locales/zh.json'
 import en from '../src/locales/en.json'
-import type { AgentModeProjectSettings, DesktopPreferences } from '../src/desktop-types'
+import type { AgentModeProjectSettings, AppUiLocale, DesktopPreferences } from '../src/desktop-types'
 import { ensureAgentModeFiles, getAgentModeStatus, setAgentModeState } from './agent-mode-files'
 import { AgentModeSettingsStore } from './agent-mode-settings-store'
 import { discoverAgentContext, searchProjectFiles } from './agent-context'
@@ -14,6 +14,7 @@ import { ClaudeAgentSettingsStore } from './claude-agent-settings'
 import { ChatWorkspaceStore } from './chat-workspace-store'
 import { DesktopPreferencesStore } from './desktop-preferences-store'
 import { loadMainProcessEnv } from './env-loader'
+import { normalizeUiLocale } from './ui-locale'
 import type {
   ActiveChatPickPayload,
   ClaudeChatAttachment,
@@ -141,11 +142,12 @@ function createWindow() {
     process.env.APP_ROOT,
     () => getClaudeAgentSettingsStore().resolve(),
     (rootPath) => getAgentModeSettingsStore().resolve(rootPath),
+    () => normalizeUiLocale(getDesktopPreferencesStore().read().locale),
   )
 
   win.on('close', (event) => {
     if (isQuitting) return
-    const prefs = desktopPreferencesStore?.read() ?? { closeToTray: false, openAtLogin: false }
+    const prefs = desktopPreferencesStore?.read() ?? { closeToTray: false, openAtLogin: false, locale: 'zh' }
     if (prefs.closeToTray) {
       event.preventDefault()
       win?.hide()
@@ -207,6 +209,11 @@ function getDesktopPreferencesStore() {
     throw new Error('Desktop preferences store is not ready.')
   }
   return desktopPreferencesStore
+}
+
+function resolveAgentModeIpcLocale(raw: unknown): AppUiLocale {
+  if (raw === 'zh' || raw === 'en') return raw
+  return normalizeUiLocale(getDesktopPreferencesStore().read().locale)
 }
 
 function trayMenuLabel(locale: TrayLocale, key: 'newThread' | 'openProject' | 'quit'): string {
@@ -315,7 +322,7 @@ if (gotSingleInstanceLock) {
   })
 
   app.on('window-all-closed', () => {
-    const prefs = desktopPreferencesStore?.read() ?? { closeToTray: false, openAtLogin: false }
+    const prefs = desktopPreferencesStore?.read() ?? { closeToTray: false, openAtLogin: false, locale: 'zh' }
     if (prefs.closeToTray) return
     app.quit()
     win = null
@@ -347,6 +354,7 @@ if (gotSingleInstanceLock) {
     agentModeSettingsStore = new AgentModeSettingsStore(userDataPath)
     chatWorkspaceStore = new ChatWorkspaceStore(userDataPath)
     applyLoginItemSettingsFromPrefs(getDesktopPreferencesStore().read())
+    currentTrayLocale = normalizeUiLocale(getDesktopPreferencesStore().read().locale)
     ipcMain.handle('desktop-preferences:get', () => {
       return getDesktopPreferencesStore().read()
     })
@@ -430,15 +438,18 @@ if (gotSingleInstanceLock) {
     ipcMain.handle('desktop:list-agent-context', (_event, rootPath: string) => {
       return discoverAgentContext(rootPath)
     })
-    ipcMain.handle('desktop:get-agent-mode-status', (_event, rootPath: string) => {
-      return getAgentModeStatus(rootPath, getAgentModeSettingsStore())
+    ipcMain.handle('desktop:get-agent-mode-status', (_event, rootPath: string, rawLocale?: unknown) => {
+      return getAgentModeStatus(rootPath, getAgentModeSettingsStore(), resolveAgentModeIpcLocale(rawLocale))
     })
-    ipcMain.handle('desktop:ensure-agent-mode-files', (_event, rootPath: string) => {
-      return ensureAgentModeFiles(rootPath, getAgentModeSettingsStore())
+    ipcMain.handle('desktop:ensure-agent-mode-files', (_event, rootPath: string, rawLocale?: unknown) => {
+      return ensureAgentModeFiles(rootPath, getAgentModeSettingsStore(), resolveAgentModeIpcLocale(rawLocale))
     })
-    ipcMain.handle('desktop:set-agent-mode-state', (_event, rootPath: string, partial: Partial<AgentModeProjectSettings>) => {
-      return setAgentModeState(rootPath, partial, getAgentModeSettingsStore())
-    })
+    ipcMain.handle(
+      'desktop:set-agent-mode-state',
+      (_event, rootPath: string, partial: Partial<AgentModeProjectSettings>, rawLocale?: unknown) => {
+        return setAgentModeState(rootPath, partial, getAgentModeSettingsStore(), resolveAgentModeIpcLocale(rawLocale))
+      },
+    )
     ipcMain.handle('desktop:get-agent-mode-settings', (_event, rootPath: string) => {
       return getAgentModeSettingsStore().getResult(rootPath)
     })

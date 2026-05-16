@@ -35,7 +35,7 @@ import { type ChatPageHandle } from './chat/ChatPage'
 const CHAT_WORKSPACE_SAVE_DEBOUNCE_MS = 750
 
 export function AppShell() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const [activeViewId, setActiveViewId] = useState<AppViewId>(() => viewFromLocation())
   const [settingsCategory, setSettingsCategory] = useState<SettingsCategoryId>(() => settingsCategoryFromLocation())
   const [canBack, setCanBack] = useState(false)
@@ -91,6 +91,12 @@ export function AppShell() {
       return { ...prev, [threadId]: state }
     })
   }, [])
+
+  useEffect(() => {
+    if (!window.desktop?.setDesktopPreferences) return
+    void window.desktop.setDesktopPreferences({ locale })
+    void window.desktop.syncTrayLocale?.(locale)
+  }, [locale])
 
   const activeProject =
     chatWorkspace?.projects.find((project) => project.id === chatWorkspace.activeProjectId) ??

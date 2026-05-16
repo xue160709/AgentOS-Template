@@ -33,6 +33,7 @@ export function ProjectSkillsSettingsPage({ enabled, onEnabledChange }: ProjectS
   }, [desktopPrefsAvailable])
 
   useEffect(() => {
+    void window.desktop?.setDesktopPreferences?.({ locale: pickerLocale })
     void window.desktop?.syncTrayLocale?.(pickerLocale)
   }, [pickerLocale])
 
@@ -80,6 +81,7 @@ export function ProjectSkillsSettingsPage({ enabled, onEnabledChange }: ProjectS
       } catch {
         /* ignore */
       }
+      void window.desktop?.setDesktopPreferences?.({ locale: next })
       if (next !== sessionLocale) {
         setLanguageRestartDialogOpen(true)
       }

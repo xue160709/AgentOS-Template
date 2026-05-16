@@ -17,7 +17,7 @@ import type {
   ClaudePermissionMode,
   ClaudePermissionResponsePayload,
 } from '../src/claude-chat-types'
-import type { AgentModeProjectSettings } from '../src/desktop-types'
+import type { AgentModeProjectSettings, AppUiLocale } from '../src/desktop-types'
 import { buildRuntimeContext, resolvePromptWithContext } from './agent-context'
 import {
   buildSdkEnv,
@@ -86,6 +86,7 @@ export class ClaudeAgentRunner {
     private readonly cwd: string,
     private readonly resolveConfig: () => ClaudeAgentResolvedConfig,
     private readonly resolveAgentModeSettings: (rootPath: string) => Promise<AgentModeProjectSettings>,
+    private readonly resolveUiLocale: () => AppUiLocale,
   ) {
     this.eventCoalescer = new ClaudeChatEventCoalescer((event) => this.sendEventNow(event))
     this.messageRouter = new ClaudeSdkMessageRouter(
@@ -246,6 +247,7 @@ export class ClaudeAgentRunner {
       const runtimeContext = await buildRuntimeContext(
         activeRequest.cwd,
         await this.resolveAgentModeSettings(activeRequest.cwd),
+        this.resolveUiLocale(),
       )
       const resolvedPrompt = await resolvePromptWithContext(prompt, runtimeContext.catalog)
       const promptInput = buildSdkPromptInput(resolvedPrompt, attachments)

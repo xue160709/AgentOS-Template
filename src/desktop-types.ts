@@ -1,7 +1,12 @@
+/** UI 文本语言 — 与会话偏好（重启后全文切换）对齐；主进程写入 Agent 模板与追加 prompt */
+export type AppUiLocale = 'zh' | 'en'
+
 /** 桌面端（Electron）偏好，由主进程持久化到 userData */
 export type DesktopPreferences = {
   closeToTray: boolean
   openAtLogin: boolean
+  /** 缺省或未识别时读取端按 zh 处理 */
+  locale?: AppUiLocale
 }
 
 /** 托盘菜单触发的动作（与主进程 IPC 载荷一致） */

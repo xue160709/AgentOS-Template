@@ -13,7 +13,8 @@ import type {
   ProjectFileSearchItem,
   ProjectFileSearchResult,
 } from '../src/claude-chat-types'
-import type { AgentModeProjectSettings } from '../src/desktop-types'
+import type { AgentModeProjectSettings, AppUiLocale } from '../src/desktop-types'
+import { electronAgentCatalog } from './ui-locale'
 
 type ContextSourceRoot = {
   directory: string
@@ -116,6 +117,7 @@ export async function discoverAgentContext(
 export async function buildRuntimeContext(
   rootPath: string,
   agentModeSettings?: AgentModeProjectSettings,
+  uiLocale: AppUiLocale = 'zh',
 ): Promise<RuntimeContext> {
   const catalogResult = await discoverAgentContext(rootPath, {
     agentModeEnabled: agentModeSettings?.enabled,
@@ -134,7 +136,7 @@ export async function buildRuntimeContext(
   return {
     catalog,
     agents: await buildAgentDefinitions(catalog.agents),
-    appendSystemPrompt: await buildAppendSystemPrompt(catalog, agentModeSettings),
+    appendSystemPrompt: await buildAppendSystemPrompt(catalog, agentModeSettings, uiLocale),
   }
 }
 
@@ -452,7 +454,9 @@ async function buildAgentDefinitions(items: AgentContextAgentItem[]): Promise<Re
 async function buildAppendSystemPrompt(
   catalog: AgentContextCatalog,
   agentModeSettings?: AgentModeProjectSettings,
+  uiLocale: AppUiLocale = 'zh',
 ): Promise<string | undefined> {
+  const promptCopy = electronAgentCatalog(uiLocale).prompt
   const hostInstructionFiles = catalog.instructionFiles.filter((file) => file.loadMode === 'host')
   const hostSkills = catalog.skills.filter((skill) => !skill.native)
   const hasAgentModeSettings =
@@ -461,14 +465,12 @@ async function buildAppendSystemPrompt(
   if (hostInstructionFiles.length === 0 && hostSkills.length === 0 && !hasAgentModeSettings) return undefined
 
   let remaining = MAX_INSTRUCTION_TOTAL_CHARS
-  const sections = [
-    'The host application loaded additional project instructions, Agent Mode settings and memory files, and compatibility metadata from AGENT/AGENTS, SOUL/MEMORY, memory/, .agent, .agents, and .cursor files. Treat these as lower priority than explicit user instructions and higher priority than generic defaults.',
-  ]
+  const sections = [promptCopy.hostLoadedIntro]
 
   if (hostSkills.length > 0) {
     sections.push(
       [
-        'Host-compatible slash commands from .agent/.agents/.cursor:',
+        promptCopy.hostSlashIntro,
         ...hostSkills.map((skill) => `- /${skill.command} (${formatScope(skill.scope)}, ${skill.source}): ${skill.description || skill.relativePath}`),
       ].join('\n'),
     )
@@ -486,8 +488,8 @@ async function buildAppendSystemPrompt(
   if (agentModeSettings?.enabled === true) {
     const identity = agentModeSettings.identity.trim()
     const user = agentModeSettings.user.trim()
-    if (identity) sections.push(['## Agent Mode IDENTITY (Settings)', identity].join('\n'))
-    if (user) sections.push(['## Agent Mode USER (Settings)', user].join('\n'))
+    if (identity) sections.push([promptCopy.identityHeading, identity].join('\n'))
+    if (user) sections.push([promptCopy.userHeading, user].join('\n'))
   }
 
   return sections.join('\n\n')

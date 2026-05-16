@@ -33,14 +33,14 @@ contextBridge.exposeInMainWorld('desktop', {
   listAgentContext(rootPath: string) {
     return ipcRenderer.invoke('desktop:list-agent-context', rootPath)
   },
-  getAgentModeStatus(rootPath: string) {
-    return ipcRenderer.invoke('desktop:get-agent-mode-status', rootPath)
+  getAgentModeStatus(rootPath: string, locale?: 'zh' | 'en') {
+    return ipcRenderer.invoke('desktop:get-agent-mode-status', rootPath, locale)
   },
-  ensureAgentModeFiles(rootPath: string) {
-    return ipcRenderer.invoke('desktop:ensure-agent-mode-files', rootPath)
+  ensureAgentModeFiles(rootPath: string, locale?: 'zh' | 'en') {
+    return ipcRenderer.invoke('desktop:ensure-agent-mode-files', rootPath, locale)
   },
-  setAgentModeState(rootPath: string, partial: unknown) {
-    return ipcRenderer.invoke('desktop:set-agent-mode-state', rootPath, partial)
+  setAgentModeState(rootPath: string, partial: unknown, locale?: 'zh' | 'en') {
+    return ipcRenderer.invoke('desktop:set-agent-mode-state', rootPath, partial, locale)
   },
   getAgentModeSettings(rootPath: string) {
     return ipcRenderer.invoke('desktop:get-agent-mode-settings', rootPath)

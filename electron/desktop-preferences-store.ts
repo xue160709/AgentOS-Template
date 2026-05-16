@@ -1,12 +1,14 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import type { DesktopPreferences } from '../src/desktop-types'
+import { normalizeUiLocale } from './ui-locale'
 
 const PREFS_FILE_NAME = 'desktop-preferences.json'
 
 const DEFAULT_PREFS: DesktopPreferences = {
   closeToTray: false,
   openAtLogin: false,
+  locale: 'zh',
 }
 
 function normalizePrefs(raw: unknown): DesktopPreferences {
@@ -15,6 +17,7 @@ function normalizePrefs(raw: unknown): DesktopPreferences {
   return {
     closeToTray: o.closeToTray === true,
     openAtLogin: o.openAtLogin === true,
+    locale: normalizeUiLocale(o.locale),
   }
 }
 

@@ -163,9 +163,9 @@ export function AgentModeSettingsPage({ project }: AgentModeSettingsPageProps) {
           </div>
         </div>
 
-        {/* <p className="settings-switch-status" role="status" aria-live="polite">
+        <p className="settings-switch-status" role="status" aria-live="polite">
           {status}
-        </p> */}
+        </p>
       </form>
     </section>
   )

@@ -11,6 +11,7 @@ import type {
   AgentModeProjectSettings,
   AgentModeSettingsResult,
   AgentModeStatusResult,
+  AppUiLocale,
   DesktopPreferences,
   TrayMenuAction,
 } from '../src/desktop-types'
@@ -53,11 +54,12 @@ declare global {
       listProjectFiles?: (rootPath: string) => Promise<FileTreeResult>
       searchProjectFiles?: (rootPath: string, query: string) => Promise<ProjectFileSearchResult>
       listAgentContext?: (rootPath: string) => Promise<AgentContextResult>
-      getAgentModeStatus?: (rootPath: string) => Promise<AgentModeStatusResult>
-      ensureAgentModeFiles?: (rootPath: string) => Promise<AgentModeFilesResult>
+      getAgentModeStatus?: (rootPath: string, locale?: AppUiLocale) => Promise<AgentModeStatusResult>
+      ensureAgentModeFiles?: (rootPath: string, locale?: AppUiLocale) => Promise<AgentModeFilesResult>
       setAgentModeState?: (
         rootPath: string,
         partial: Partial<Pick<AgentModeProjectSettings, 'enabled' | 'todoEnabled'>>,
+        locale?: AppUiLocale,
       ) => Promise<AgentModeStatusResult>
       getAgentModeSettings?: (rootPath: string) => Promise<AgentModeSettingsResult>
       saveAgentModeSettings?: (
