@@ -4,6 +4,7 @@ import type {
   ClaudeAgentSettings,
   ClaudeChatEvent,
   ClaudeChatEventHandler,
+  ClaudePermissionResponsePayload,
   ClaudeChatSubmitPayload,
 } from '../src/claude-chat-types'
 
@@ -35,6 +36,9 @@ contextBridge.exposeInMainWorld('desktop', {
   },
   quitApp() {
     return ipcRenderer.invoke('desktop:quit') as Promise<void>
+  },
+  showItemInFolder(targetPath: string) {
+    return ipcRenderer.invoke('desktop:show-item-in-folder', targetPath) as Promise<void>
   },
 })
 
@@ -69,6 +73,9 @@ contextBridge.exposeInMainWorld('claudeChat', {
   },
   newThread(threadId?: string) {
     return ipcRenderer.invoke('claude-chat:new-thread', threadId)
+  },
+  answerPermissionRequest(payload: ClaudePermissionResponsePayload) {
+    return ipcRenderer.invoke('claude-chat:answer-permission-request', payload)
   },
   getSettings() {
     return ipcRenderer.invoke('claude-agent-settings:get')

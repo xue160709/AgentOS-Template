@@ -61,6 +61,8 @@ export type WorkspaceProject = {
   path: string
   createdAt: number
   updatedAt: number
+  /** 置顶排序用；越大越靠前 */
+  pinnedAt?: number
 }
 
 export type WorkspaceThread = {

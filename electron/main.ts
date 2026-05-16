@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell } from 'electron'
 import { fileURLToPath } from 'node:url'
 import fs from 'node:fs/promises'
 import os from 'node:os'
@@ -12,6 +12,7 @@ import type {
   ActiveChatPickPayload,
   ClaudeAgentSettings,
   ClaudeChatSubmitPayload,
+  ClaudePermissionResponsePayload,
 } from '../src/claude-chat-types'
 import type { FileTreeNode, FileTreeResult } from '../src/components/types'
 
@@ -164,6 +165,9 @@ app.whenReady().then(() => {
   ipcMain.handle('claude-chat:new-thread', (_event, threadId?: string) => {
     return getClaudeAgentRunner().newThread(threadId)
   })
+  ipcMain.handle('claude-chat:answer-permission-request', (_event, payload: ClaudePermissionResponsePayload) => {
+    return getClaudeAgentRunner().answerPermissionRequest(payload)
+  })
   ipcMain.handle('claude-agent-settings:get', () => {
     return getClaudeAgentSettingsStore().getSnapshot()
   })
@@ -200,6 +204,11 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('desktop:quit', () => {
     app.quit()
+  })
+  ipcMain.handle('desktop:show-item-in-folder', (_event, rawPath: unknown) => {
+    if (typeof rawPath !== 'string' || !rawPath.trim()) return
+    const resolved = resolveProjectPath(rawPath)
+    shell.showItemInFolder(resolved)
   })
   createWindow()
 })

@@ -3,7 +3,35 @@ export type ClaudeChatSubmitPayload = {
   threadId?: string
   /** 工作区项目文件夹绝对路径；未传时回退到应用根目录 */
   cwd?: string
+  permissionMode?: ClaudePermissionMode
 }
+
+export type ClaudePermissionMode = 'auto' | 'default' | 'bypassPermissions'
+
+export type ClaudeAskUserQuestionOption = {
+  label: string
+  description: string
+  preview?: string
+}
+
+export type ClaudeAskUserQuestion = {
+  question: string
+  header: string
+  options: ClaudeAskUserQuestionOption[]
+  multiSelect: boolean
+}
+
+export type ClaudePermissionResponsePayload =
+  | {
+      permissionRequestId: string
+      behavior: 'allow'
+      updatedInput?: Record<string, unknown>
+    }
+  | {
+      permissionRequestId: string
+      behavior: 'deny'
+      message?: string
+    }
 
 export type AgentContextScope = 'user' | 'project'
 
@@ -202,6 +230,24 @@ export type ClaudeChatEvent =
       detail?: string
     }
   | {
+      type: 'ask_user_question'
+      requestId: string
+      permissionRequestId: string
+      toolUseId: string
+      questions: ClaudeAskUserQuestion[]
+    }
+  | {
+      type: 'permission_request'
+      requestId: string
+      permissionRequestId: string
+      toolUseId: string
+      toolName: string
+      title: string
+      displayName: string
+      description: string
+      inputPreview: string
+    }
+  | {
       type: 'agent_activity'
       requestId: string
       activityId: string
@@ -235,6 +281,7 @@ export type ClaudeChatAPI = {
   submit(payload: ClaudeChatSubmitPayload): Promise<ClaudeChatSubmitResult>
   cancel(requestId?: string): Promise<void>
   newThread(threadId?: string): Promise<void>
+  answerPermissionRequest(payload: ClaudePermissionResponsePayload): Promise<void>
   getSettings(): Promise<ClaudeAgentSettingsSnapshot>
   saveSettings(settings: ClaudeAgentSettings): Promise<ClaudeAgentSettingsSnapshot>
   setActiveChatPick(payload: ActiveChatPickPayload): Promise<ClaudeAgentSettingsSnapshot>

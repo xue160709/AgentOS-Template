@@ -18,10 +18,12 @@ import type {
   AgentContextCatalog,
   AgentContextSlashItem,
   AgentContextSource,
+  ClaudeAskUserQuestion,
   ClaudeAgentModelProvider,
   ClaudeAgentSettings,
   ClaudeAgentSettingsSnapshot,
   ClaudeChatEvent,
+  ClaudePermissionMode,
   ProjectFileSearchItem,
 } from '../claude-chat-types'
 import { IconInline } from '../icon-inline'
@@ -152,6 +154,237 @@ function getBuiltInSlashCommands(t: (path: string, vars?: Record<string, string 
       argumentHint: '',
     },
   ]
+}
+
+type PendingUserInputPrompt =
+  | Extract<ClaudeChatEvent, { type: 'ask_user_question' }>
+  | Extract<ClaudeChatEvent, { type: 'permission_request' }>
+
+type UserInputDecision =
+  | {
+      behavior: 'allow'
+      updatedInput?: Record<string, unknown>
+    }
+  | {
+      behavior: 'deny'
+      message?: string
+    }
+
+type PermissionModeRow = {
+  mode: ClaudePermissionMode
+  label: string
+  description: string
+}
+
+const PERMISSION_MODE_STORAGE_KEY = 'codex-ui-template:claude-permission-mode'
+
+function AgentInputPromptModal({
+  prompt,
+  onResolve,
+}: {
+  prompt: PendingUserInputPrompt
+  onResolve: (decision: UserInputDecision) => void
+}) {
+  const { t } = useI18n()
+
+  if (prompt.type === 'permission_request') {
+    return (
+      <div className="agent-input-backdrop" role="presentation">
+        <section className="agent-input-dialog" role="dialog" aria-modal="true" aria-labelledby="agent-permission-title">
+          <div className="agent-input-dialog__header">
+            <span>{prompt.displayName || prompt.toolName}</span>
+            <h2 id="agent-permission-title">{prompt.title || t('chat.permissionRequestTitle')}</h2>
+            {prompt.description ? <p>{prompt.description}</p> : null}
+          </div>
+          {prompt.inputPreview ? <pre className="agent-input-preview">{prompt.inputPreview}</pre> : null}
+          <div className="agent-input-actions">
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => onResolve({ behavior: 'deny', message: t('chat.permissionDeniedByUser') })}
+            >
+              {t('chat.permissionDeny')}
+            </button>
+            <button type="button" className="btn btn-primary" onClick={() => onResolve({ behavior: 'allow' })}>
+              {t('chat.permissionAllow')}
+            </button>
+          </div>
+        </section>
+      </div>
+    )
+  }
+
+  return <AskUserQuestionModal prompt={prompt} onResolve={onResolve} />
+}
+
+function AskUserQuestionModal({
+  prompt,
+  onResolve,
+}: {
+  prompt: Extract<PendingUserInputPrompt, { type: 'ask_user_question' }>
+  onResolve: (decision: UserInputDecision) => void
+}) {
+  const { t } = useI18n()
+  const [singleAnswers, setSingleAnswers] = useState<Record<string, string>>({})
+  const [multiAnswers, setMultiAnswers] = useState<Record<string, string[]>>({})
+  const [customAnswers, setCustomAnswers] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    setSingleAnswers({})
+    setMultiAnswers({})
+    setCustomAnswers({})
+  }, [prompt.permissionRequestId])
+
+  const canSubmit = prompt.questions.every((question) => {
+    const custom = customAnswers[question.question]?.trim()
+    if (custom) return true
+    if (question.multiSelect) return (multiAnswers[question.question] ?? []).length > 0
+    return Boolean(singleAnswers[question.question])
+  })
+
+  const submitAnswers = () => {
+    const answers: Record<string, string | string[]> = {}
+    for (const question of prompt.questions) {
+      const custom = customAnswers[question.question]?.trim()
+      if (question.multiSelect) {
+        const selected = multiAnswers[question.question] ?? []
+        answers[question.question] = custom ? [...selected, custom] : selected
+        continue
+      }
+      answers[question.question] = custom || singleAnswers[question.question] || question.options[0]?.label || ''
+    }
+
+    onResolve({
+      behavior: 'allow',
+      updatedInput: {
+        questions: prompt.questions,
+        answers,
+      },
+    })
+  }
+
+  return (
+    <div className="agent-input-backdrop" role="presentation">
+      <section className="agent-input-dialog agent-input-dialog--question" role="dialog" aria-modal="true" aria-labelledby="agent-question-title">
+        <div className="agent-input-dialog__header">
+          <span>{t('chat.askQuestionEyebrow')}</span>
+          <h2 id="agent-question-title">{t('chat.askQuestionTitle')}</h2>
+        </div>
+        <div className="agent-question-list">
+          {prompt.questions.map((question, questionIndex) => (
+            <AskUserQuestionBlock
+              key={`${question.question}-${questionIndex}`}
+              question={question}
+              customValue={customAnswers[question.question] ?? ''}
+              multiValue={multiAnswers[question.question] ?? []}
+              singleValue={singleAnswers[question.question] ?? ''}
+              onCustomChange={(value) =>
+                setCustomAnswers((prev) => ({
+                  ...prev,
+                  [question.question]: value,
+                }))
+              }
+              onMultiChange={(label, checked) =>
+                setMultiAnswers((prev) => {
+                  const current = prev[question.question] ?? []
+                  const next = checked ? [...new Set([...current, label])] : current.filter((item) => item !== label)
+                  return { ...prev, [question.question]: next }
+                })
+              }
+              onSingleChange={(label) =>
+                setSingleAnswers((prev) => ({
+                  ...prev,
+                  [question.question]: label,
+                }))
+              }
+            />
+          ))}
+        </div>
+        <div className="agent-input-actions">
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => onResolve({ behavior: 'deny', message: t('chat.askQuestionCancelled') })}
+          >
+            {t('chat.askQuestionCancel')}
+          </button>
+          <button type="button" className="btn btn-primary" disabled={!canSubmit} onClick={submitAnswers}>
+            {t('chat.askQuestionSubmit')}
+          </button>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function AskUserQuestionBlock({
+  question,
+  singleValue,
+  multiValue,
+  customValue,
+  onSingleChange,
+  onMultiChange,
+  onCustomChange,
+}: {
+  question: ClaudeAskUserQuestion
+  singleValue: string
+  multiValue: string[]
+  customValue: string
+  onSingleChange: (label: string) => void
+  onMultiChange: (label: string, checked: boolean) => void
+  onCustomChange: (value: string) => void
+}) {
+  const { t } = useI18n()
+  const inputName = `ask-${stableDomId(question.question)}`
+
+  return (
+    <fieldset className="agent-question-block">
+      <legend>
+        <span>{question.header}</span>
+        {question.question}
+      </legend>
+      <div className="agent-question-options">
+        {question.options.map((option) => {
+          const checked = question.multiSelect ? multiValue.includes(option.label) : singleValue === option.label
+          return (
+            <label key={option.label} className={`agent-question-option${checked ? ' is-selected' : ''}`}>
+              <input
+                type={question.multiSelect ? 'checkbox' : 'radio'}
+                name={inputName}
+                checked={checked}
+                onChange={(event) => {
+                  if (question.multiSelect) {
+                    onMultiChange(option.label, event.currentTarget.checked)
+                    return
+                  }
+                  onSingleChange(option.label)
+                }}
+              />
+              <span className="agent-question-option__copy">
+                <span>{option.label}</span>
+                <span>{option.description}</span>
+              </span>
+              {option.preview ? (
+                <div
+                  className="agent-question-option__preview markdown-body"
+                  dangerouslySetInnerHTML={{ __html: renderMarkdown(option.preview) }}
+                />
+              ) : null}
+            </label>
+          )
+        })}
+      </div>
+      <label className="agent-question-custom">
+        <span>{t('chat.askQuestionCustom')}</span>
+        <input
+          type="text"
+          value={customValue}
+          placeholder={t('chat.askQuestionCustomPlaceholder')}
+          onChange={(event) => onCustomChange(event.currentTarget.value)}
+        />
+      </label>
+    </fieldset>
+  )
 }
 
 function ChatMessage({ item }: { item: ChatMessageItem }) {
@@ -297,6 +530,9 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   const [modelMenuSelectionKey, setModelMenuSelectionKey] = useState('')
   const [agentContext, setAgentContext] = useState<AgentContextCatalog | null>(null)
   const [agentContextLoading, setAgentContextLoading] = useState(false)
+  const [permissionMode, setPermissionMode] = useState<ClaudePermissionMode>(() => readStoredPermissionMode())
+  const [permissionModeOpen, setPermissionModeOpen] = useState(false)
+  const [pendingUserInputPrompts, setPendingUserInputPrompts] = useState<PendingUserInputPrompt[]>([])
   const [composerSelection, setComposerSelection] = useState({ start: 0, end: 0 })
   const [dismissedAutocompleteKey, setDismissedAutocompleteKey] = useState('')
   const [fileMentionResults, setFileMentionResults] = useState<ProjectFileSearchItem[]>([])
@@ -307,17 +543,26 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   const scrollRegionRef = useRef<HTMLDivElement>(null)
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
   const modelPickerRef = useRef<HTMLDivElement>(null)
+  const permissionModePickerRef = useRef<HTMLDivElement>(null)
   const projectPickerRef = useRef<HTMLDivElement>(null)
   const composerAutocompleteSurfaceRef = useRef<HTMLDivElement>(null)
   const projectPopoverAnchorRef = useRef<HTMLButtonElement>(null)
   const projectPopoverSurfaceRef = useRef<HTMLDivElement>(null)
   const modelPopoverAnchorRef = useRef<HTMLButtonElement>(null)
   const modelPopoverSurfaceRef = useRef<HTMLDivElement>(null)
+  const permissionModePopoverAnchorRef = useRef<HTMLButtonElement>(null)
+  const permissionModePopoverSurfaceRef = useRef<HTMLDivElement>(null)
   const activeThreadIdRef = useRef(activeThread.id)
   const requestThreadIdsRef = useRef(new Map<string, string>())
 
   /** fixed 锚定触发按钮，避免被 .chat-composer / .app-main-inner 裁切 */
   const [modelPopoverBox, setModelPopoverBox] = useState<{
+    left: number
+    bottom: number
+    width: number
+    maxHeight: number
+  } | null>(null)
+  const [permissionModePopoverBox, setPermissionModePopoverBox] = useState<{
     left: number
     bottom: number
     width: number
@@ -344,6 +589,9 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   } | null>(null)
 
   const hasMessages = chatState.items.length > 0
+  const activeUserInputPrompt = pendingUserInputPrompts[0] ?? null
+  const permissionModeRows = useMemo(() => getPermissionModeRows(t), [t])
+  const permissionModeLabel = permissionModeRows.find((row) => row.mode === permissionMode)?.label ?? t('chat.permissionModeAuto')
   const setThreadChatState = useCallback(
     (threadId: string, update: ChatState | ((prev: ChatState) => ChatState)) => {
       onThreadChatStateChange(threadId, update)
@@ -376,6 +624,10 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   useEffect(() => {
     isRunningRef.current = isRunning
   }, [isRunning])
+
+  useEffect(() => {
+    window.localStorage.setItem(PERMISSION_MODE_STORAGE_KEY, permissionMode)
+  }, [permissionMode])
 
   useEffect(() => {
     globalDisplayModelRef.current = globalDisplayModel
@@ -567,6 +819,40 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   }, [modelPickerOpen, modelMenuRows.length])
 
   useLayoutEffect(() => {
+    if (!permissionModeOpen || !permissionModePopoverAnchorRef.current) {
+      setPermissionModePopoverBox(null)
+      return
+    }
+    const gap = 6
+    const pad = 8
+    const maxListPx = 260
+
+    const sync = () => {
+      const anchor = permissionModePopoverAnchorRef.current
+      if (!anchor) return
+      const r = anchor.getBoundingClientRect()
+      const spaceAbove = r.top - pad
+      const maxH = Math.min(maxListPx, Math.max(120, spaceAbove))
+      const minWidth = Math.max(r.width, 248)
+      const vw = window.innerWidth
+      let width = Math.min(Math.max(minWidth, 280), vw - pad * 2)
+      let left = r.left
+      if (left + width > vw - pad) left = vw - pad - width
+      if (left < pad) left = pad
+      const bottom = window.innerHeight - r.top + gap
+      setPermissionModePopoverBox({ left, bottom, width, maxHeight: maxH })
+    }
+
+    sync()
+    window.addEventListener('resize', sync)
+    document.addEventListener('scroll', sync, true)
+    return () => {
+      window.removeEventListener('resize', sync)
+      document.removeEventListener('scroll', sync, true)
+    }
+  }, [permissionModeOpen, permissionModeRows.length])
+
+  useLayoutEffect(() => {
     if (!projectPickerOpen || !projectPopoverAnchorRef.current) {
       setProjectPopoverBox(null)
       return
@@ -617,6 +903,26 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       window.removeEventListener('keydown', onKeyDown)
     }
   }, [modelPickerOpen])
+
+  useEffect(() => {
+    if (!permissionModeOpen) return
+    const onPointerDown = (event: MouseEvent) => {
+      const t = event.target as Node | null
+      if (!t) return
+      if (permissionModePickerRef.current?.contains(t)) return
+      if (permissionModePopoverSurfaceRef.current?.contains(t)) return
+      setPermissionModeOpen(false)
+    }
+    const onKeyDown = (event: WindowEventMap['keydown']) => {
+      if (event.key === 'Escape') setPermissionModeOpen(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [permissionModeOpen])
 
   useEffect(() => {
     if (!projectPickerOpen) return
@@ -722,6 +1028,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       requestThreadIdsRef.current.delete(requestId)
       isRunningRef.current = false
       setIsRunning(false)
+      setPendingUserInputPrompts((prev) => prev.filter((item) => item.requestId !== requestId))
       onStatusChange(statusText)
     },
     [onStatusChange],
@@ -884,6 +1191,14 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
           next[idx] = { ...it, status: event.status, detail: event.detail ?? it.detail }
           return { ...prev, items: next }
         })
+        return
+      }
+
+      if (event.type === 'ask_user_question' || event.type === 'permission_request') {
+        setPendingUserInputPrompts((prev) =>
+          prev.some((item) => item.permissionRequestId === event.permissionRequestId) ? prev : [...prev, event],
+        )
+        onStatusChange(event.type === 'ask_user_question' ? t('chat.waitingForAnswer') : t('chat.waitingForPermission'))
         return
       }
 
@@ -1078,6 +1393,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
         text,
         threadId: submittingThreadId,
         cwd: projectForSubmit.path,
+        permissionMode,
       })
       requestThreadIdsRef.current.set(requestId, submittingThreadId)
       activeRequestIdRef.current = requestId
@@ -1144,6 +1460,18 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   const cancelActiveRequest = async () => {
     if (!isRunningRef.current || !window.claudeChat) return
     await window.claudeChat.cancel(activeRequestIdRef.current)
+  }
+
+  const resolveActiveUserInputPrompt = async (decision: UserInputDecision) => {
+    const prompt = activeUserInputPrompt
+    if (!prompt) return
+
+    setPendingUserInputPrompts((prev) => prev.filter((item) => item.permissionRequestId !== prompt.permissionRequestId))
+    if (!window.claudeChat) return
+    await window.claudeChat.answerPermissionRequest({
+      permissionRequestId: prompt.permissionRequestId,
+      ...decision,
+    })
   }
 
   const syncComposerSelection = useCallback(() => {
@@ -1312,16 +1640,64 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
             : null}
           <div className="composer-footer">
             <div className="composer-actions">
-              {/* 关掉，需要再打开
-              <button type="button" className="composer-icon-button" id="btn-attach" title="添加上下文" aria-label="添加上下文">
-                <IconInline name="plus" />
-              </button>
-              <button type="button" className="composer-mode-button" title="权限模式：自动审查" aria-label="权限模式：自动审查">
-                <IconInline name="shield" />
-                <span>自动审查</span>
-                <IconInline name="chevron" />
-              </button>
-              */}
+              <div className="composer-mode-picker" ref={permissionModePickerRef}>
+                <button
+                  ref={permissionModePopoverAnchorRef}
+                  type="button"
+                  className={`composer-mode-button${permissionModeOpen ? ' is-open' : ''}`}
+                  title={t('chat.permissionModeTitle')}
+                  aria-label={t('chat.permissionModeAria')}
+                  aria-expanded={permissionModeOpen}
+                  aria-haspopup="menu"
+                  disabled={isRunning}
+                  onClick={() => {
+                    if (isRunning) return
+                    setPermissionModeOpen((open) => !open)
+                  }}
+                >
+                  <IconInline name="shield" />
+                  <span>{permissionModeLabel}</span>
+                  <IconInline name="chevron" />
+                </button>
+                {permissionModeOpen && permissionModePopoverBox
+                  ? createPortal(
+                      <div
+                        ref={permissionModePopoverSurfaceRef}
+                        className="composer-mode-popover"
+                        role="menu"
+                        aria-label={t('chat.permissionModeMenuAria')}
+                        style={{
+                          position: 'fixed',
+                          left: permissionModePopoverBox.left,
+                          bottom: permissionModePopoverBox.bottom,
+                          width: permissionModePopoverBox.width,
+                          maxHeight: permissionModePopoverBox.maxHeight,
+                        }}
+                      >
+                        {permissionModeRows.map((row) => {
+                          const checked = row.mode === permissionMode
+                          return (
+                            <button
+                              key={row.mode}
+                              type="button"
+                              role="menuitemradio"
+                              className={`composer-mode-option${checked ? ' is-selected' : ''}`}
+                              aria-checked={checked}
+                              onClick={() => {
+                                setPermissionMode(row.mode)
+                                setPermissionModeOpen(false)
+                              }}
+                            >
+                              <span className="composer-mode-option__label">{row.label}</span>
+                              <span className="composer-mode-option__meta">{row.description}</span>
+                            </button>
+                          )
+                        })}
+                      </div>,
+                      document.body,
+                    )
+                  : null}
+              </div>
             </div>
             <div className="composer-actions composer-actions--end">
               <span className={`composer-spinner${isRunning ? ' is-visible' : ''}`} id="composer-spinner" aria-hidden="true" />
@@ -1496,6 +1872,12 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
           </button>
         </div>
       </div>
+      {activeUserInputPrompt
+        ? createPortal(
+            <AgentInputPromptModal prompt={activeUserInputPrompt} onResolve={(decision) => void resolveActiveUserInputPrompt(decision)} />,
+            document.body,
+          )
+        : null}
     </section>
   )
 })
@@ -1621,6 +2003,43 @@ function formatContextSource(source: AgentContextSource): string {
   if (source === 'agent') return '.agent'
   if (source === 'agents') return '.agents'
   return '.cursor'
+}
+
+function readStoredPermissionMode(): ClaudePermissionMode {
+  const stored = window.localStorage.getItem(PERMISSION_MODE_STORAGE_KEY)
+  return isClaudePermissionMode(stored) ? stored : 'auto'
+}
+
+function isClaudePermissionMode(value: unknown): value is ClaudePermissionMode {
+  return value === 'auto' || value === 'default' || value === 'bypassPermissions'
+}
+
+function getPermissionModeRows(t: (path: string, vars?: Record<string, string | number>) => string): PermissionModeRow[] {
+  return [
+    {
+      mode: 'auto',
+      label: t('chat.permissionModeAuto'),
+      description: t('chat.permissionModeAutoDesc'),
+    },
+    {
+      mode: 'default',
+      label: t('chat.permissionModeDefault'),
+      description: t('chat.permissionModeDefaultDesc'),
+    },
+    {
+      mode: 'bypassPermissions',
+      label: t('chat.permissionModeFull'),
+      description: t('chat.permissionModeFullDesc'),
+    },
+  ]
+}
+
+function stableDomId(value: string): string {
+  let hash = 0
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0
+  }
+  return hash.toString(36)
 }
 
 function renderMarkdown(markdown: string): string {

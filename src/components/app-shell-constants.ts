@@ -3,6 +3,8 @@ import type { AppViewId, SettingsCategoryId } from './types'
 
 export const SIDEBAR_WIDTH_STORAGE_KEY = 'CodeX-UI-Template-sidebar-width-px'
 export const SIDEBAR_PROJECT_SKILLS_STORAGE_KEY = 'CodeX-UI-Template-sidebar-project-skills-v1'
+/** projectId → skill.path[] 侧栏隐藏（不再显示） */
+export const SIDEBAR_HIDDEN_SKILLS_STORAGE_KEY = 'CodeX-UI-Template-sidebar-hidden-skills-v1'
 export const SIDEBAR_MAX_RATIO = 0.3
 
 export const DEFAULT_SETTINGS_CATEGORY: SettingsCategoryId = 'general'

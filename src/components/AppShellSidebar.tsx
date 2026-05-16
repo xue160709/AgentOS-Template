@@ -1,9 +1,32 @@
-import { useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  type RefObject,
+} from 'react'
 import { IconInline } from '../icon-inline'
 import type { AppLocale } from '../i18n/i18n'
 import { useI18n } from '../i18n/i18n'
 import type { AppViewId, ProjectSkillListState, SettingsCategoryId, WorkspaceProject, WorkspaceThread } from './types'
 import { SETTINGS_SIDEBAR_NAV } from './app-shell-constants.ts'
+
+type ContextMenuItem = {
+  id: string
+  label: string
+  danger?: boolean
+  disabled?: boolean
+  onSelect: () => void
+}
+
+type ContextMenuState = {
+  x: number
+  y: number
+  items: ContextMenuItem[]
+}
 
 type AppShellSidebarProps = {
   activeViewId: AppViewId
@@ -14,6 +37,7 @@ type AppShellSidebarProps = {
   activeThreadId: string
   showProjectSkills: boolean
   projectSkillStates: Record<string, ProjectSkillListState>
+  hiddenSkillPathsByProject: Record<string, string[]>
   canBack: boolean
   canForward: boolean
   onNewThread: () => void
@@ -23,6 +47,10 @@ type AppShellSidebarProps = {
   onRunProjectSkill: (projectId: string, prompt: string) => void
   onToggleThreadPinned: (threadId: string) => void
   onArchiveThread: (threadId: string) => void
+  onToggleProjectPinned: (projectId: string) => void
+  onRemoveProject: (projectId: string) => void
+  onRevealProjectInFileManager: (projectPath: string) => void
+  onHideProjectSkill: (projectId: string, skillPath: string) => void
   onToggleCollapsed: () => void
   sidebarRef: RefObject<HTMLElement | null>
   splitterRef: RefObject<HTMLDivElement | null>
@@ -38,6 +66,7 @@ export function AppShellSidebar({
   activeThreadId,
   showProjectSkills,
   projectSkillStates,
+  hiddenSkillPathsByProject,
   canBack,
   canForward,
   onNewThread,
@@ -47,6 +76,10 @@ export function AppShellSidebar({
   onRunProjectSkill,
   onToggleThreadPinned,
   onArchiveThread,
+  onToggleProjectPinned,
+  onRemoveProject,
+  onRevealProjectInFileManager,
+  onHideProjectSkill,
   onToggleCollapsed,
   sidebarRef,
   splitterRef,
@@ -55,6 +88,50 @@ export function AppShellSidebar({
   const { locale, t } = useI18n()
   const isSettingsSidebar = activeViewId === 'settings'
   const [confirmingArchiveThreadId, setConfirmingArchiveThreadId] = useState<string | null>(null)
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+  const menuPanelRef = useRef<HTMLDivElement>(null)
+  const isDarwin = typeof window !== 'undefined' && window.desktop?.platform === 'darwin'
+
+  const sortedProjects = useMemo(() => {
+    return [...projects].sort((a, b) => {
+      const pinDiff = (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0)
+      return pinDiff || b.updatedAt - a.updatedAt
+    })
+  }, [projects])
+
+  const closeContextMenu = () => setContextMenu(null)
+
+  useEffect(() => {
+    if (!contextMenu) return
+    const onDocMouseDown = (event: MouseEvent) => {
+      const panel = menuPanelRef.current
+      if (panel && event.target instanceof Node && panel.contains(event.target)) return
+      closeContextMenu()
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeContextMenu()
+    }
+    document.addEventListener('mousedown', onDocMouseDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onDocMouseDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [contextMenu])
+
+  useLayoutEffect(() => {
+    if (!contextMenu) return
+    const panel = menuPanelRef.current
+    if (!panel) return
+    const rect = panel.getBoundingClientRect()
+    const pad = 8
+    let left = contextMenu.x
+    let top = contextMenu.y
+    if (left + rect.width > window.innerWidth - pad) left = Math.max(pad, window.innerWidth - pad - rect.width)
+    if (top + rect.height > window.innerHeight - pad) top = Math.max(pad, window.innerHeight - pad - rect.height)
+    panel.style.left = `${left}px`
+    panel.style.top = `${top}px`
+  }, [contextMenu])
 
   const goLeaveSettings = () => {
     window.location.hash = ''
@@ -81,6 +158,109 @@ export function AppShellSidebar({
       return
     }
     setConfirmingArchiveThreadId(threadId)
+  }
+
+  const openProjectMenu = (event: ReactMouseEvent, project: WorkspaceProject) => {
+    event.preventDefault()
+    event.stopPropagation()
+    const isPinned = Boolean(project.pinnedAt)
+    const canRemove = projects.length > 1
+    setContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      items: [
+        {
+          id: 'pin-project',
+          label: isPinned ? t('sidebar.menuUnpinProject') : t('sidebar.menuPinProject'),
+          onSelect: () => {
+            closeContextMenu()
+            setConfirmingArchiveThreadId(null)
+            onToggleProjectPinned(project.id)
+          },
+        },
+        {
+          id: 'reveal',
+          label: isDarwin ? t('sidebar.menuRevealInFinder') : t('sidebar.menuRevealInFileManager'),
+          disabled: !window.desktop?.showItemInFolder,
+          onSelect: () => {
+            closeContextMenu()
+            setConfirmingArchiveThreadId(null)
+            onRevealProjectInFileManager(project.path)
+          },
+        },
+        {
+          id: 'remove-project',
+          label: t('sidebar.menuRemoveProject'),
+          danger: true,
+          disabled: !canRemove,
+          onSelect: () => {
+            closeContextMenu()
+            setConfirmingArchiveThreadId(null)
+            if (canRemove) onRemoveProject(project.id)
+          },
+        },
+      ],
+    })
+  }
+
+  const openSkillMenu = (event: ReactMouseEvent, projectId: string, skill: { path: string; title: string }) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      items: [
+        {
+          id: 'run-skill',
+          label: t('sidebar.menuRunSkill'),
+          onSelect: () => {
+            closeContextMenu()
+            setConfirmingArchiveThreadId(null)
+            onRunProjectSkill(projectId, skill.title)
+          },
+        },
+        {
+          id: 'hide-skill',
+          label: t('sidebar.menuHideSkill'),
+          onSelect: () => {
+            closeContextMenu()
+            setConfirmingArchiveThreadId(null)
+            onHideProjectSkill(projectId, skill.path)
+          },
+        },
+      ],
+    })
+  }
+
+  const openThreadMenu = (event: ReactMouseEvent, thread: WorkspaceThread) => {
+    event.preventDefault()
+    event.stopPropagation()
+    const isPinned = Boolean(thread.pinnedAt)
+    setContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      items: [
+        {
+          id: 'pin-thread',
+          label: isPinned ? t('sidebar.menuUnpinThread') : t('sidebar.menuPinThread'),
+          onSelect: () => {
+            closeContextMenu()
+            setConfirmingArchiveThreadId(null)
+            onToggleThreadPinned(thread.id)
+          },
+        },
+        {
+          id: 'remove-thread',
+          label: t('sidebar.menuRemoveThread'),
+          danger: true,
+          onSelect: () => {
+            closeContextMenu()
+            setConfirmingArchiveThreadId(null)
+            onArchiveThread(thread.id)
+          },
+        },
+      ],
+    })
   }
 
   return (
@@ -161,16 +341,21 @@ export function AppShellSidebar({
                 </button>
                 <div className="app-sidebar-section-label">{t('sidebar.projectsSection')}</div>
                 <div className="app-project-list">
-                  {projects.map((project) => {
+                  {sortedProjects.map((project) => {
                     const projectThreads = threadsByProject.get(project.id) ?? []
                     const projectActive = activeProjectId === project.id
                     const projectSkillState = projectSkillStates[project.id]
                     const projectSkills = projectSkillState?.skills ?? []
-                    const showSkillsSection = Boolean(projectSkillState?.loading) || projectSkills.length > 0
+                    const hiddenPaths = new Set(hiddenSkillPathsByProject[project.id] ?? [])
+                    const visibleSkills = projectSkills.filter((skill) => !hiddenPaths.has(skill.path))
+                    const showSkillsSection = Boolean(projectSkillState?.loading) || visibleSkills.length > 0
                     const showThreadHistoryDivider = projectThreads.length > 0 && showProjectSkills
                     return (
-                      <section key={project.id} className={`app-project-group${projectActive ? ' is-active' : ''}`}>
-                        <div className="app-project-row">
+                      <section key={project.id} className={`app-project-group${projectActive ? ' is-active' : ''}${project.pinnedAt ? ' is-pinned' : ''}`}>
+                        <div
+                          className="app-project-row"
+                          onContextMenu={(event) => openProjectMenu(event, project)}
+                        >
                           <button
                             type="button"
                             className="app-project-select"
@@ -208,12 +393,13 @@ export function AppShellSidebar({
                               {projectSkillState?.loading ? (
                                 <div className="app-skill-empty">{t('sidebar.scanning')}</div>
                               ) : (
-                                projectSkills.map((skill) => (
+                                visibleSkills.map((skill) => (
                                   <button
                                     key={skill.path}
                                     type="button"
                                     className="app-skill-row"
                                     title={skill.description || skill.relativePath}
+                                    onContextMenu={(event) => openSkillMenu(event, project.id, skill)}
                                     onClick={() => {
                                       setConfirmingArchiveThreadId(null)
                                       onRunProjectSkill(project.id, skill.title)
@@ -242,6 +428,7 @@ export function AppShellSidebar({
                               <div
                                 key={thread.id}
                                 className={`app-thread-row${isThreadActive ? ' is-active' : ''}${isPinned ? ' is-pinned' : ''}${isConfirming ? ' is-confirming-archive' : ''}`}
+                                onContextMenu={(event) => openThreadMenu(event, thread)}
                               >
                                 <button
                                   type="button"
@@ -331,6 +518,32 @@ export function AppShellSidebar({
         aria-label={t('sidebar.resizeSidebar')}
         onPointerDown={onSplitterPointerDown}
       />
+      {contextMenu ? (
+        <div
+          ref={menuPanelRef}
+          className="app-sidebar-context-menu"
+          role="menu"
+          aria-label={t('sidebar.contextMenuAria')}
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          {contextMenu.items.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              role="menuitem"
+              disabled={item.disabled}
+              className={`app-sidebar-context-menu__item${item.danger ? ' is-danger' : ''}`}
+              onClick={(event) => {
+                event.stopPropagation()
+                if (item.disabled) return
+                item.onSelect()
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </>
   )
 }

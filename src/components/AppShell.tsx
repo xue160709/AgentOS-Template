@@ -7,6 +7,7 @@ import {
   persistChatWorkspaceState,
 } from '../chat-workspace-persistence'
 import {
+  SIDEBAR_HIDDEN_SKILLS_STORAGE_KEY,
   SIDEBAR_PROJECT_SKILLS_STORAGE_KEY,
   SIDEBAR_WIDTH_STORAGE_KEY,
   SIDEBAR_MAX_RATIO,
@@ -42,6 +43,9 @@ export function AppShell() {
     readStoredBoolean(SIDEBAR_PROJECT_SKILLS_STORAGE_KEY, false),
   )
   const [projectSkillStates, setProjectSkillStates] = useState<Record<string, ProjectSkillListState>>({})
+  const [hiddenSkillPathsByProject, setHiddenSkillPathsByProject] = useState<Record<string, string[]>>(() =>
+    readHiddenSkillPathsMap(),
+  )
 
   const chatRef = useRef<ChatPageHandle>(null)
   const projectSkillStatesRef = useRef(projectSkillStates)
@@ -73,6 +77,29 @@ export function AppShell() {
     () => chatWorkspace?.projects.map((project) => `${project.id}:${project.path}`).join('\n') ?? '',
     [chatWorkspace?.projects],
   )
+
+  const projectIdsKey = useMemo(
+    () => chatWorkspace?.projects.map((project) => project.id).sort().join('\n') ?? '',
+    [chatWorkspace?.projects],
+  )
+
+  useEffect(() => {
+    if (!projectIdsKey) return
+    setHiddenSkillPathsByProject((prev) => {
+      const allowed = new Set(projectIdsKey.split('\n'))
+      let changed = false
+      const next: Record<string, string[]> = {}
+      for (const [projectId, paths] of Object.entries(prev)) {
+        if (!allowed.has(projectId)) {
+          changed = true
+          continue
+        }
+        next[projectId] = paths
+      }
+      if (changed) writeHiddenSkillPathsMap(next)
+      return changed ? next : prev
+    })
+  }, [projectIdsKey])
 
   useEffect(() => {
     let cancelled = false
@@ -425,6 +452,87 @@ export function AppShell() {
     }))
   }, [updateChatWorkspace])
 
+  const toggleProjectPinned = useCallback((projectId: string) => {
+    const now = Date.now()
+    updateChatWorkspace((prev) => ({
+      ...prev,
+      projects: prev.projects.map((project) =>
+        project.id === projectId ? { ...project, pinnedAt: project.pinnedAt ? undefined : now, updatedAt: now } : project,
+      ),
+    }))
+  }, [updateChatWorkspace])
+
+  const removeProject = useCallback(
+    (projectId: string) => {
+      let createdThreadId: string | null = null
+      let didRemove = false
+      updateChatWorkspace((prev) => {
+        if (prev.projects.length <= 1) return prev
+        if (!prev.projects.some((project) => project.id === projectId)) return prev
+
+        didRemove = true
+        const nextProjects = prev.projects.filter((project) => project.id !== projectId)
+        let nextThreads = prev.threads.filter((thread) => thread.projectId !== projectId)
+
+        let activeProjectId = prev.activeProjectId
+        let activeThreadId = prev.activeThreadId
+
+        if (prev.activeProjectId === projectId) {
+          activeProjectId = nextProjects[0]?.id ?? prev.activeProjectId
+          const candidate = latestVisibleThreadForProject(
+            { ...prev, projects: nextProjects, threads: nextThreads, activeProjectId, activeThreadId: '' },
+            activeProjectId,
+          )
+          if (candidate) {
+            activeThreadId = candidate.id
+          } else if (activeProjectId) {
+            const newThreadId = createId('thread')
+            const now = Date.now()
+            createdThreadId = newThreadId
+            activeThreadId = newThreadId
+            nextThreads = [
+              {
+                id: newThreadId,
+                projectId: activeProjectId,
+                title: t('thread.newThreadTitle'),
+                createdAt: now,
+                updatedAt: now,
+                chatState: createEmptyChatState(),
+              },
+              ...nextThreads,
+            ]
+          }
+        }
+
+        return {
+          ...prev,
+          projects: nextProjects,
+          threads: nextThreads,
+          activeProjectId,
+          activeThreadId,
+        }
+      })
+      if (!didRemove) return
+      if (createdThreadId) void window.claudeChat?.newThread(createdThreadId)
+      goHome()
+    },
+    [goHome, t, updateChatWorkspace],
+  )
+
+  const revealProjectInFileManager = useCallback((projectPath: string) => {
+    void window.desktop?.showItemInFolder?.(projectPath)
+  }, [])
+
+  const hideProjectSkill = useCallback((projectId: string, skillPath: string) => {
+    setHiddenSkillPathsByProject((prev) => {
+      const existing = prev[projectId] ?? []
+      if (existing.includes(skillPath)) return prev
+      const next = { ...prev, [projectId]: [...existing, skillPath] }
+      writeHiddenSkillPathsMap(next)
+      return next
+    })
+  }, [])
+
   const handleThreadPromptSubmit = useCallback((threadId: string, prompt: string) => {
     updateChatWorkspace((prev) => ({
       ...prev,
@@ -582,6 +690,7 @@ export function AppShell() {
           activeThreadId={chatWorkspace.activeThreadId}
           showProjectSkills={showProjectSkillsInSidebar}
           projectSkillStates={projectSkillStates}
+          hiddenSkillPathsByProject={hiddenSkillPathsByProject}
           canBack={canBack}
           canForward={canForward}
           onNewThread={() => createThreadInProject()}
@@ -591,6 +700,10 @@ export function AppShell() {
           onRunProjectSkill={runProjectSkill}
           onToggleThreadPinned={toggleThreadPinned}
           onArchiveThread={archiveThread}
+          onToggleProjectPinned={toggleProjectPinned}
+          onRemoveProject={removeProject}
+          onRevealProjectInFileManager={revealProjectInFileManager}
+          onHideProjectSkill={hideProjectSkill}
           onToggleCollapsed={() => setSidebarCollapsed((c) => !c)}
           sidebarRef={appSidebarRef}
           splitterRef={sidebarSplitterRef}
@@ -654,6 +767,32 @@ function readStoredBoolean(key: string, fallback: boolean): boolean {
 function writeStoredBoolean(key: string, value: boolean): void {
   try {
     localStorage.setItem(key, value ? '1' : '0')
+  } catch {
+    /* ignore */
+  }
+}
+
+function readHiddenSkillPathsMap(): Record<string, string[]> {
+  try {
+    const raw = localStorage.getItem(SIDEBAR_HIDDEN_SKILLS_STORAGE_KEY)
+    if (!raw) return {}
+    const parsed: unknown = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') return {}
+    const out: Record<string, string[]> = {}
+    for (const [projectId, paths] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof projectId !== 'string' || !Array.isArray(paths)) continue
+      const list = paths.filter((item): item is string => typeof item === 'string')
+      if (list.length > 0) out[projectId] = list
+    }
+    return out
+  } catch {
+    return {}
+  }
+}
+
+function writeHiddenSkillPathsMap(map: Record<string, string[]>): void {
+  try {
+    localStorage.setItem(SIDEBAR_HIDDEN_SKILLS_STORAGE_KEY, JSON.stringify(map))
   } catch {
     /* ignore */
   }

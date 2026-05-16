@@ -127,6 +127,7 @@ export function normalizeChatWorkspaceState(value: unknown): ChatWorkspaceState 
         path: typeof project.path === 'string' ? project.path : '',
         createdAt: toFiniteNumber(project.createdAt, Date.now()),
         updatedAt: toFiniteNumber(project.updatedAt, Date.now()),
+        pinnedAt: toOptionalFiniteNumber(project.pinnedAt),
       },
     ]
   })

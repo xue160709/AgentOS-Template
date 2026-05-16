@@ -46,6 +46,8 @@ declare global {
       getChatWorkspace?: () => Promise<ChatWorkspaceState | null>
       saveChatWorkspace?: (state: ChatWorkspaceState) => Promise<ChatWorkspaceState>
       quitApp?: () => Promise<void>
+      /** 在系统文件管理器中显示路径（macOS 为访达） */
+      showItemInFolder?: (targetPath: string) => Promise<void>
     }
   }
 }

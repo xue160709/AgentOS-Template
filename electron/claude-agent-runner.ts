@@ -2,12 +2,15 @@ import type { WebContents } from 'electron'
 import { randomUUID } from 'node:crypto'
 import os from 'node:os'
 import path from 'node:path'
-import { query, type Query, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
+import { query, type CanUseTool, type PermissionMode, type PermissionResult, type Query, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import type {
+  ClaudeAskUserQuestion,
   ClaudeAgentResolvedConfig,
   ClaudeChatEvent,
   ClaudeChatSubmitPayload,
   ClaudeChatSubmitResult,
+  ClaudePermissionMode,
+  ClaudePermissionResponsePayload,
 } from '../src/claude-chat-types'
 import { buildRuntimeContext, resolvePromptWithContext } from './agent-context'
 
@@ -23,11 +26,23 @@ type ActiveRequest = {
   cancelled: boolean
   didEmitText: boolean
   didEmitThinking: boolean
+  permissionMode: ClaudePermissionMode
   seenToolUseIds: Set<string>
   streamBlocks: Map<number, StreamBlockState>
 }
 
-const DEFAULT_AGENT_TOOLS = ['Read', 'Glob', 'Grep', 'Skill', 'Agent', 'Task']
+const READ_ONLY_AUTO_ALLOWED_TOOLS = ['Read', 'Glob', 'Grep', 'ListMcpResources', 'ReadMcpResource']
+const DEFAULT_AGENT_TOOLS = { type: 'preset', preset: 'claude_code' } as const
+
+type PendingPermissionRequest = {
+  requestId: string
+  toolUseId: string
+  toolName: string
+  input: Record<string, unknown>
+  abortSignal: AbortSignal
+  abortListener: () => void
+  resolve: (result: PermissionResult) => void
+}
 
 type ThreadRuntimeState = {
   sessionId?: string
@@ -46,6 +61,7 @@ export class ClaudeAgentRunner {
   private activeRequest?: ActiveRequest
   private readonly defaultThreadId = 'default'
   private readonly threadRuntimeStates = new Map<string, ThreadRuntimeState>()
+  private readonly pendingPermissionRequests = new Map<string, PendingPermissionRequest>()
 
   constructor(
     private readonly webContents: WebContents,
@@ -83,6 +99,7 @@ export class ClaudeAgentRunner {
       cancelled: false,
       didEmitText: false,
       didEmitThinking: false,
+      permissionMode: normalizeChatPermissionMode(payload.permissionMode),
       seenToolUseIds: new Set(),
       streamBlocks: new Map(),
     }
@@ -101,6 +118,7 @@ export class ClaudeAgentRunner {
     activeRequest.cancelled = true
     activeRequest.abortController.abort()
     activeRequest.query?.close()
+    this.denyPendingRequests(activeRequest.requestId, 'Request cancelled.')
 
     this.emit({
       type: 'cancelled',
@@ -114,6 +132,39 @@ export class ClaudeAgentRunner {
       await this.cancel()
     }
     this.threadRuntimeStates.delete(normalizedThreadId)
+  }
+
+  async answerPermissionRequest(payload: ClaudePermissionResponsePayload): Promise<void> {
+    const pending = this.pendingPermissionRequests.get(payload.permissionRequestId)
+    if (!pending) return
+
+    if (payload.behavior === 'allow') {
+      this.resolvePendingPermission(payload.permissionRequestId, {
+        behavior: 'allow',
+        updatedInput: payload.updatedInput ?? pending.input,
+        toolUseID: pending.toolUseId,
+      })
+      this.emit({
+        type: 'tool_update',
+        requestId: pending.requestId,
+        toolUseId: pending.toolUseId,
+        detail: pending.toolName === 'AskUserQuestion' ? '已收到用户回答' : '已允许',
+      })
+      return
+    }
+
+    this.resolvePendingPermission(payload.permissionRequestId, {
+      behavior: 'deny',
+      message: payload.message || 'Denied by user.',
+      toolUseID: pending.toolUseId,
+    })
+    this.emit({
+      type: 'tool_done',
+      requestId: pending.requestId,
+      toolUseId: pending.toolUseId,
+      status: 'denied',
+      detail: payload.message || '用户已拒绝',
+    })
   }
 
   private async run(prompt: string, activeRequest: ActiveRequest): Promise<void> {
@@ -147,20 +198,25 @@ export class ClaudeAgentRunner {
         options: {
           abortController: activeRequest.abortController,
           agents: runtimeContext.agents,
-          allowedTools: DEFAULT_AGENT_TOOLS,
+          allowDangerouslySkipPermissions: activeRequest.permissionMode === 'bypassPermissions' ? true : undefined,
+          allowedTools: READ_ONLY_AUTO_ALLOWED_TOOLS,
+          canUseTool: (toolName, input, options) => this.handleCanUseTool(activeRequest, toolName, input, options),
           cwd: activeRequest.cwd,
           env: this.buildSdkEnv(config),
           forwardSubagentText: true,
           includeHookEvents: true,
           includePartialMessages: true,
           model: config.model || undefined,
-          permissionMode: 'dontAsk',
+          permissionMode: toSdkPermissionMode(activeRequest.permissionMode),
           resume: threadState.sessionId,
           settingSources: ['user', 'project', 'local'],
           skills: 'all',
           systemPrompt: runtimeContext.appendSystemPrompt
             ? { type: 'preset', preset: 'claude_code', append: runtimeContext.appendSystemPrompt }
             : undefined,
+          toolConfig: {
+            askUserQuestion: { previewFormat: 'markdown' },
+          },
           tools: DEFAULT_AGENT_TOOLS,
         },
       })
@@ -186,8 +242,100 @@ export class ClaudeAgentRunner {
   }
 
   private finish(activeRequest: ActiveRequest): void {
+    this.denyPendingRequests(activeRequest.requestId, 'Request finished.')
     if (this.activeRequest?.requestId === activeRequest.requestId) {
       this.activeRequest = undefined
+    }
+  }
+
+  private async handleCanUseTool(
+    activeRequest: ActiveRequest,
+    toolName: string,
+    input: Record<string, unknown>,
+    options: Parameters<CanUseTool>[2],
+  ): Promise<PermissionResult> {
+    if (activeRequest.cancelled || options.signal.aborted) {
+      return { behavior: 'deny', message: 'Request cancelled.', toolUseID: options.toolUseID }
+    }
+
+    const permissionRequestId = randomUUID()
+    const toolUseId = options.toolUseID || `permission-${permissionRequestId}`
+    const pendingResult = new Promise<PermissionResult>((resolve) => {
+      const abortListener = () => {
+        this.resolvePendingPermission(permissionRequestId, {
+          behavior: 'deny',
+          message: 'Request cancelled.',
+          toolUseID: toolUseId,
+        })
+      }
+
+      options.signal.addEventListener('abort', abortListener, { once: true })
+      this.pendingPermissionRequests.set(permissionRequestId, {
+        requestId: activeRequest.requestId,
+        toolUseId,
+        toolName,
+        input,
+        abortSignal: options.signal,
+        abortListener,
+        resolve,
+      })
+    })
+
+    if (toolName === 'AskUserQuestion') {
+      const questions = normalizeAskUserQuestions(input)
+      if (questions.length === 0) {
+        this.resolvePendingPermission(permissionRequestId, {
+          behavior: 'allow',
+          updatedInput: input,
+          toolUseID: toolUseId,
+        })
+        return pendingResult
+      }
+
+      this.emit({
+        type: 'ask_user_question',
+        requestId: activeRequest.requestId,
+        permissionRequestId,
+        toolUseId,
+        questions,
+      })
+      this.emitActivity(activeRequest, `ask-user-question-${permissionRequestId}`, '等待用户输入', 'running', `${questions.length} 个问题`)
+      return pendingResult
+    }
+
+    this.emit({
+      type: 'permission_request',
+      requestId: activeRequest.requestId,
+      permissionRequestId,
+      toolUseId,
+      toolName,
+      title: options.title || `${toolName} 需要权限`,
+      displayName: options.displayName || toolName,
+      description: options.description || '',
+      inputPreview: previewValue(input),
+    })
+    this.emitActivity(activeRequest, `permission-request-${permissionRequestId}`, '等待权限确认', 'running', options.displayName || toolName)
+    return pendingResult
+  }
+
+  private resolvePendingPermission(permissionRequestId: string, result: PermissionResult): boolean {
+    const pending = this.pendingPermissionRequests.get(permissionRequestId)
+    if (!pending) return false
+
+    this.pendingPermissionRequests.delete(permissionRequestId)
+    pending.abortSignal.removeEventListener('abort', pending.abortListener)
+    pending.resolve(result)
+    return true
+  }
+
+  private denyPendingRequests(requestId: string, message: string): void {
+    for (const [permissionRequestId, pending] of this.pendingPermissionRequests) {
+      if (pending.requestId !== requestId) continue
+      this.resolvePendingPermission(permissionRequestId, {
+        behavior: 'deny',
+        message,
+        toolUseID: pending.toolUseId,
+      })
     }
   }
 
@@ -1008,6 +1156,47 @@ function previewHash(value: unknown): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
+}
+
+function normalizeChatPermissionMode(value: ClaudePermissionMode | undefined): ClaudePermissionMode {
+  if (value === 'default' || value === 'bypassPermissions') return value
+  return 'auto'
+}
+
+function toSdkPermissionMode(value: ClaudePermissionMode): PermissionMode {
+  return value
+}
+
+function normalizeAskUserQuestions(input: Record<string, unknown>): ClaudeAskUserQuestion[] {
+  const rawQuestions = Array.isArray(input.questions) ? input.questions : []
+  return rawQuestions
+    .map((question): ClaudeAskUserQuestion | undefined => {
+      if (!isRecord(question) || typeof question.question !== 'string') return undefined
+      const options = normalizeAskUserQuestionOptions(question.options)
+      if (options.length < 2) return undefined
+      return {
+        question: question.question,
+        header: typeof question.header === 'string' ? question.header : 'Question',
+        options,
+        multiSelect: question.multiSelect === true,
+      }
+    })
+    .filter((question): question is ClaudeAskUserQuestion => Boolean(question))
+}
+
+function normalizeAskUserQuestionOptions(value: unknown): ClaudeAskUserQuestion['options'] {
+  if (!Array.isArray(value)) return []
+  const options: ClaudeAskUserQuestion['options'] = []
+  for (const option of value) {
+    if (!isRecord(option) || typeof option.label !== 'string') continue
+    const normalized: ClaudeAskUserQuestion['options'][number] = {
+      label: option.label,
+      description: typeof option.description === 'string' ? option.description : '',
+    }
+    if (typeof option.preview === 'string') normalized.preview = option.preview
+    options.push(normalized)
+  }
+  return options
 }
 
 function resolveWorkspaceCwd(requested: string | undefined, fallback: string): string {
