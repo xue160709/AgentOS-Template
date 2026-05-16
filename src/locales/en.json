@@ -70,6 +70,7 @@
     "menuRevealInFinder": "Reveal in Finder",
     "menuRevealInFileManager": "Show in file manager",
     "menuRemoveProject": "Remove project",
+    "runSkillAria": "Run {{title}}",
     "menuRunSkill": "Run",
     "menuHideSkill": "Hide from sidebar",
     "menuPinThread": "Pin thread",
@@ -212,9 +213,6 @@
   "chat": {
     "ariaPage": "Claude Agent chat",
     "emptyHeading": "What should we build?",
-    "skillReadyHeading": "Ready to run this skill",
-    "selectedSkillAria": "Selected skill",
-    "runSkill": "Run",
     "scrollBottomTitle": "Scroll to bottom",
     "scrollBottomAria": "Scroll to bottom",
     "composerPlaceholder": "Describe the next change",

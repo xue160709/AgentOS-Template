@@ -30,7 +30,6 @@ import type {
   ChatState,
   ChatThinkingItem,
   ChatToolItem,
-  SelectedProjectSkill,
   ThreadRunState,
   TranscriptItem,
   WorkspaceProject,
@@ -56,12 +55,10 @@ type ChatPageProps = {
   hidden: boolean
   activeProject: WorkspaceProject
   activeThread: WorkspaceThread | undefined
-  selectedProjectSkill: SelectedProjectSkill | null
   projects: WorkspaceProject[]
   threadRunStates: Record<string, ThreadRunState>
   onStatusChange: (text: string) => void
   onNewThread: (projectId?: string) => string | void
-  onRunProjectSkill: (projectId: string, prompt: string) => void
   onThreadChatStateChange: (threadId: string, update: ChatState | ((prev: ChatState) => ChatState)) => void
   onThreadPromptSubmit: (threadId: string, prompt: string) => void
   onThreadRunStateChange: (threadId: string, state: ThreadRunState | null) => void
@@ -105,12 +102,10 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     hidden,
     activeProject,
     activeThread,
-    selectedProjectSkill,
     projects,
     threadRunStates,
     onStatusChange,
     onNewThread,
-    onRunProjectSkill,
     onThreadChatStateChange,
     onThreadPromptSubmit,
     onThreadRunStateChange,
@@ -1202,11 +1197,6 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     if (!isRunningRef.current) void submitPrompt(inputValue, undefined, pendingAttachments)
   }
 
-  const runSelectedSkill = () => {
-    if (!selectedProjectSkill) return
-    onRunProjectSkill(selectedProjectSkill.projectId, selectedProjectSkill.title)
-  }
-
   return (
     <section
       className={`chat-page${hasMessages ? ' has-messages' : ''}`}
@@ -1223,7 +1213,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
           onScrollToBottom={scrollToBottom}
         />
       ) : (
-        <ProjectHome project={activeProject} selectedSkill={selectedProjectSkill} onRunSelectedSkill={runSelectedSkill} />
+        <ProjectHome project={activeProject} />
       )}
       <Composer
         inputValue={inputValue}

@@ -474,13 +474,10 @@ export function AppShellSidebar({
                                         selectedProjectSkill?.projectId === project.id &&
                                         selectedProjectSkill.path === skill.path
                                       return (
-                                        <button
+                                        <div
                                           key={skill.path}
-                                          type="button"
-                                          className={`app-skill-row${skillActive ? ' is-active' : ''}`}
-                                          title={tipText ? undefined : skill.relativePath}
-                                          aria-current={skillActive ? 'page' : undefined}
-                                          aria-describedby={tipActive ? 'app-sidebar-skill-tip' : undefined}
+                                          className={`app-skill-row-wrap${skillActive ? ' is-active' : ''}`}
+                                          role="presentation"
                                           onPointerEnter={(event) => {
                                             if (!tipText) return
                                             const r = event.currentTarget.getBoundingClientRect()
@@ -494,20 +491,48 @@ export function AppShellSidebar({
                                             setSkillTip((prev) => (prev?.skillPath === skill.path ? null : prev))
                                           }}
                                           onContextMenu={(event) => openSkillMenu(event, project.id, skill)}
-                                          onClick={() => {
-                                            setConfirmingArchiveThreadId(null)
-                                            onSelectProjectSkill(project.id, {
-                                              title: skill.title,
-                                              description: skill.description,
-                                              path: skill.path,
-                                              relativePath: skill.relativePath,
-                                              argumentHint: skill.argumentHint,
-                                            })
-                                          }}
                                         >
-                                          <IconInline name="chip" />
-                                          <span className="app-skill-title">{skill.title}</span>
-                                        </button>
+                                          <button
+                                            type="button"
+                                            className="app-skill-select"
+                                            title={tipText ? undefined : skill.relativePath}
+                                            aria-current={skillActive ? 'page' : undefined}
+                                            aria-describedby={tipActive ? 'app-sidebar-skill-tip' : undefined}
+                                            onClick={() => {
+                                              setConfirmingArchiveThreadId(null)
+                                              onSelectProjectSkill(project.id, {
+                                                title: skill.title,
+                                                description: skill.description,
+                                                path: skill.path,
+                                                relativePath: skill.relativePath,
+                                                argumentHint: skill.argumentHint,
+                                              })
+                                            }}
+                                          >
+                                            <span className="app-skill-icon" aria-hidden="true">
+                                              <IconInline name="chip" />
+                                            </span>
+                                            <span className="app-skill-title">{skill.title}</span>
+                                          </button>
+                                          <div className="app-skill-trailing">
+                                            {skillActive ? (
+                                              <button
+                                                type="button"
+                                                className="app-skill-run"
+                                                title={t('sidebar.menuRunSkill')}
+                                                aria-label={t('sidebar.runSkillAria', { title: skill.title })}
+                                                onClick={(event) => {
+                                                  event.stopPropagation()
+                                                  setSkillTip(null)
+                                                  setConfirmingArchiveThreadId(null)
+                                                  onRunProjectSkill(project.id, skill.title)
+                                                }}
+                                              >
+                                                <span>{t('sidebar.menuRunSkill')}</span>
+                                              </button>
+                                            ) : null}
+                                          </div>
+                                        </div>
                                       )
                                     })
                                   )}

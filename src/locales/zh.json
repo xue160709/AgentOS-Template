@@ -70,6 +70,7 @@
     "menuRevealInFinder": "在访达中显示",
     "menuRevealInFileManager": "在文件管理器中显示",
     "menuRemoveProject": "移除项目",
+    "runSkillAria": "执行 {{title}}",
     "menuRunSkill": "执行",
     "menuHideSkill": "不再显示",
     "menuPinThread": "置顶对话",
@@ -212,9 +213,6 @@
   "chat": {
     "ariaPage": "Claude Agent 聊天",
     "emptyHeading": "我们该构建什么？",
-    "skillReadyHeading": "准备执行这个 Skill",
-    "selectedSkillAria": "已选择的 Skill",
-    "runSkill": "执行",
     "scrollBottomTitle": "滚动到底部",
     "scrollBottomAria": "滚动到底部",
     "composerPlaceholder": "要求后续变更",

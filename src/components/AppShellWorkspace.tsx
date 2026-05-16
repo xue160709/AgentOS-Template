@@ -4,7 +4,6 @@ import { useI18n } from '../i18n/i18n'
 import type {
   AppViewId,
   ChatState,
-  SelectedProjectSkill,
   SettingsCategoryId,
   ThreadRunState,
   WorkspaceProject,
@@ -22,13 +21,11 @@ type AppShellWorkspaceProps = {
   settingsCategory: SettingsCategoryId
   activeProject: WorkspaceProject
   activeThread: WorkspaceThread | undefined
-  selectedProjectSkill: SelectedProjectSkill | null
   projects: WorkspaceProject[]
   threadRunStates: Record<string, ThreadRunState>
   chatRef: RefObject<ChatPageHandle | null>
   onStatusChange: (text: string) => void
   onNewThread: (projectId?: string) => string | void
-  onRunProjectSkill: (projectId: string, prompt: string) => void
   onThreadChatStateChange: (threadId: string, update: ChatState | ((prev: ChatState) => ChatState)) => void
   onThreadPromptSubmit: (threadId: string, prompt: string) => void
   onThreadRunStateChange: (threadId: string, state: ThreadRunState | null) => void
@@ -43,13 +40,11 @@ export function AppShellWorkspace({
   settingsCategory,
   activeProject,
   activeThread,
-  selectedProjectSkill,
   projects,
   threadRunStates,
   chatRef,
   onStatusChange,
   onNewThread,
-  onRunProjectSkill,
   onThreadChatStateChange,
   onThreadPromptSubmit,
   onThreadRunStateChange,
@@ -101,12 +96,10 @@ export function AppShellWorkspace({
             hidden={activeViewId !== 'home'}
             activeProject={activeProject}
             activeThread={activeThread}
-            selectedProjectSkill={selectedProjectSkill}
             projects={projects}
             threadRunStates={threadRunStates}
             onStatusChange={onStatusChange}
             onNewThread={onNewThread}
-            onRunProjectSkill={onRunProjectSkill}
             onThreadChatStateChange={onThreadChatStateChange}
             onThreadPromptSubmit={onThreadPromptSubmit}
             onThreadRunStateChange={onThreadRunStateChange}

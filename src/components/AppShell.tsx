@@ -602,21 +602,9 @@ export function AppShell() {
     )
   }, [])
 
-  const selectProjectSkill = useCallback(
-    (projectId: string, skill: Omit<SelectedProjectSkill, 'projectId'>) => {
-      setSelectedProjectSkill({ ...skill, projectId })
-      updateChatWorkspace((prev) => {
-        if (!prev.projects.some((project) => project.id === projectId)) return prev
-        return {
-          ...prev,
-          activeProjectId: projectId,
-          activeThreadId: '',
-        }
-      })
-      goHome()
-    },
-    [goHome, updateChatWorkspace],
-  )
+  const selectProjectSkill = useCallback((projectId: string, skill: Omit<SelectedProjectSkill, 'projectId'>) => {
+    setSelectedProjectSkill({ ...skill, projectId })
+  }, [])
 
   const handleThreadPromptSubmit = useCallback((threadId: string, prompt: string) => {
     setSelectedProjectSkill(null)
@@ -806,13 +794,11 @@ export function AppShell() {
           settingsCategory={settingsCategory}
           activeProject={activeProject}
           activeThread={activeThread}
-          selectedProjectSkill={selectedProjectSkill}
           projects={chatWorkspace.projects}
           threadRunStates={threadRunStates}
           chatRef={chatRef}
           onStatusChange={setHeaderStatus}
           onNewThread={createThreadInProject}
-          onRunProjectSkill={runProjectSkill}
           onThreadChatStateChange={updateThreadChatState}
           onThreadPromptSubmit={handleThreadPromptSubmit}
           onThreadRunStateChange={updateThreadRunState}
