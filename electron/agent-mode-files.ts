@@ -5,14 +5,22 @@ import type {
   AgentModeFileChange,
   AgentModeFilesResult,
   AgentModeFileStatus,
+  AgentModeProjectSettings,
   AgentModeStatusResult,
 } from '../src/desktop-types'
+import type { AgentModeSettingsStore } from './agent-mode-settings-store'
 
-const REQUIRED_CONTEXT_FILES = ['SOUL.md', 'IDENTITY.md', 'USER.md', 'MEMORY.md'] as const
+const REQUIRED_CONTEXT_FILES = ['SOUL.md', 'MEMORY.md'] as const
+const INSTRUCTION_FILE = 'AGENT.md'
 const AGENT_MODE_MARKER_START = '<!-- AgentOS Agent Mode: start -->'
 const AGENT_MODE_MARKER_END = '<!-- AgentOS Agent Mode: end -->'
+const TODO_MODE_MARKER_START = '<!-- AgentOS TODO Mode: start -->'
+const TODO_MODE_MARKER_END = '<!-- AgentOS TODO Mode: end -->'
 
-export async function getAgentModeStatus(rootPath: string): Promise<AgentModeStatusResult> {
+export async function getAgentModeStatus(
+  rootPath: string,
+  settingsStore: AgentModeSettingsStore,
+): Promise<AgentModeStatusResult> {
   const root = resolveWorkspacePath(rootPath)
   try {
     const stat = await fs.stat(root)
@@ -20,7 +28,8 @@ export async function getAgentModeStatus(rootPath: string): Promise<AgentModeSta
       return { ok: false, rootPath: root, message: '当前项目路径不是文件夹' }
     }
 
-    const instructionFile = await resolveInstructionFile(root)
+    const settings = await settingsStore.resolve(root)
+    const instructionFile = INSTRUCTION_FILE
     const missingFiles: string[] = []
     if (!(await exists(path.join(root, instructionFile)))) missingFiles.push(instructionFile)
     for (const fileName of REQUIRED_CONTEXT_FILES) {
@@ -31,7 +40,8 @@ export async function getAgentModeStatus(rootPath: string): Promise<AgentModeSta
     return {
       ok: true,
       rootPath: root,
-      enabled: missingFiles.length === 0,
+      enabled: settings.enabled,
+      todoEnabled: settings.todoEnabled,
       instructionFile,
       missingFiles,
     }
@@ -44,7 +54,10 @@ export async function getAgentModeStatus(rootPath: string): Promise<AgentModeSta
   }
 }
 
-export async function ensureAgentModeFiles(rootPath: string): Promise<AgentModeFilesResult> {
+export async function ensureAgentModeFiles(
+  rootPath: string,
+  settingsStore: AgentModeSettingsStore,
+): Promise<AgentModeFilesResult> {
   const root = resolveWorkspacePath(rootPath)
   try {
     const stat = await fs.stat(root)
@@ -53,7 +66,8 @@ export async function ensureAgentModeFiles(rootPath: string): Promise<AgentModeF
     }
 
     const files: AgentModeFileChange[] = []
-    const instructionFile = await resolveInstructionFile(root)
+    const settings = await settingsStore.resolve(root)
+    const instructionFile = INSTRUCTION_FILE
     const instructionPath = path.join(root, instructionFile)
     const instructionStatus = await ensureInstructionFile(instructionPath, instructionFile)
     files.push(fileChange(root, instructionPath, instructionStatus))
@@ -69,13 +83,15 @@ export async function ensureAgentModeFiles(rootPath: string): Promise<AgentModeF
 
     const todayPath = path.join(memoryDirectory, `${formatLocalDate(new Date())}.md`)
     files.push(fileChange(root, todayPath, await writeFileIfMissing(todayPath, dailyMemoryTemplate())))
+    if (settings.todoEnabled) await ensureTodoMode(root)
+    await settingsStore.saveState(root, { enabled: true })
 
     return {
       ok: true,
       rootPath: root,
       instructionFile,
       files,
-      message: 'Agent 模式已开启，身份和记忆文件已准备好。',
+      message: 'Agent 模式已开启，身份设置和记忆文件已准备好。',
     }
   } catch (error) {
     return {
@@ -86,10 +102,25 @@ export async function ensureAgentModeFiles(rootPath: string): Promise<AgentModeF
   }
 }
 
-async function resolveInstructionFile(root: string): Promise<string> {
-  if (await exists(path.join(root, 'AGENTS.md'))) return 'AGENTS.md'
-  if (await exists(path.join(root, 'AGENT.md'))) return 'AGENT.md'
-  return 'AGENTS.md'
+export async function setAgentModeState(
+  rootPath: string,
+  partial: Partial<Pick<AgentModeProjectSettings, 'enabled' | 'todoEnabled'>>,
+  settingsStore: AgentModeSettingsStore,
+): Promise<AgentModeStatusResult> {
+  const root = resolveWorkspacePath(rootPath)
+  if (partial.enabled === true) {
+    const result = await ensureAgentModeFiles(root, settingsStore)
+    if (!result.ok) return { ok: false, rootPath: root, message: result.message }
+  }
+
+  if (partial.todoEnabled === true) {
+    await ensureTodoMode(root)
+  } else if (partial.todoEnabled === false) {
+    await disableTodoMode(root)
+  }
+
+  await settingsStore.saveState(root, partial)
+  return getAgentModeStatus(root, settingsStore)
 }
 
 async function ensureInstructionFile(filePath: string, fileName: string): Promise<AgentModeFileStatus> {
@@ -121,6 +152,49 @@ async function ensureDirectory(directoryPath: string): Promise<AgentModeFileStat
   return 'created'
 }
 
+async function ensureTodoMode(root: string): Promise<void> {
+  const instructionPath = path.join(root, INSTRUCTION_FILE)
+  await ensureInstructionFile(instructionPath, INSTRUCTION_FILE)
+  await ensureTodoInstruction(instructionPath)
+  await writeFileIfMissing(path.join(root, 'TODO.md'), todoTemplate())
+}
+
+async function disableTodoMode(root: string): Promise<void> {
+  await removeMarkedSection(path.join(root, INSTRUCTION_FILE), TODO_MODE_MARKER_START, TODO_MODE_MARKER_END)
+  try {
+    await fs.unlink(path.join(root, 'TODO.md'))
+  } catch (error) {
+    if (isNodeError(error) && error.code === 'ENOENT') return
+    throw error
+  }
+}
+
+async function ensureTodoInstruction(filePath: string): Promise<AgentModeFileStatus> {
+  const content = await fs.readFile(filePath, 'utf8')
+  if (content.includes(TODO_MODE_MARKER_START)) return 'exists'
+  const next = `${content.trimEnd()}\n\n${todoModeInstructionSection()}\n`
+  await fs.writeFile(filePath, next, 'utf8')
+  return 'updated'
+}
+
+async function removeMarkedSection(filePath: string, startMarker: string, endMarker: string): Promise<void> {
+  if (!(await exists(filePath))) return
+  const content = await fs.readFile(filePath, 'utf8')
+  const next = stripMarkedSection(content, startMarker, endMarker)
+  if (next !== content) await fs.writeFile(filePath, next, 'utf8')
+}
+
+function stripMarkedSection(content: string, startMarker: string, endMarker: string): string {
+  const start = content.indexOf(startMarker)
+  if (start < 0) return content
+  const end = content.indexOf(endMarker, start)
+  if (end < 0) return content
+  const afterEnd = end + endMarker.length
+  const before = content.slice(0, start).trimEnd()
+  const after = content.slice(afterEnd).replace(/^\s*\n/, '').trimStart()
+  return [before, after].filter(Boolean).join('\n\n') + (before || after ? '\n' : '')
+}
+
 function defaultAgentsTemplate(fileName: string): string {
   return `# ${fileName} - AgentOS Workspace
 
@@ -136,8 +210,9 @@ function agentModeInstructionSection(): string {
 
 ### Session Startup
 
-- Read \`SOUL.md\`, \`IDENTITY.md\`, \`USER.md\`, and \`MEMORY.md\` before responding.
+- Read \`SOUL.md\` and \`MEMORY.md\` before responding.
 - Read today and yesterday in \`memory/\` when those daily notes exist.
+- Treat USER and IDENTITY as injected settings from the host system prompt, not project files.
 - Treat these files as persistent context. Explicit user instructions for the current turn still take priority.
 
 ### Memory Discipline
@@ -151,8 +226,8 @@ function agentModeInstructionSection(): string {
 ### Identity Stack
 
 - \`SOUL.md\` defines internal values, tone, and boundaries.
-- \`IDENTITY.md\` defines public name and presentation.
-- \`USER.md\` stores user context and preferences.
+- USER settings store stable human context and preferences.
+- IDENTITY settings define public name and presentation.
 - \`MEMORY.md\` stores curated long-term memory.
 
 ### Safety
@@ -163,10 +238,18 @@ function agentModeInstructionSection(): string {
 ${AGENT_MODE_MARKER_END}`
 }
 
+function todoModeInstructionSection(): string {
+  return `${TODO_MODE_MARKER_START}
+## AgentOS TODO Mode
+
+- Read \`TODO.md\` before starting implementation work.
+- Treat \`TODO.md\` as the active task plan and source of truth for execution order.
+- When completing work, update the relevant checkbox or note the blocker in \`TODO.md\`.
+${TODO_MODE_MARKER_END}`
+}
+
 function contextFileTemplate(fileName: (typeof REQUIRED_CONTEXT_FILES)[number]): string {
   if (fileName === 'SOUL.md') return soulTemplate()
-  if (fileName === 'IDENTITY.md') return identityTemplate()
-  if (fileName === 'USER.md') return userTemplate()
   return memoryTemplate()
 }
 
@@ -195,36 +278,6 @@ Concise when the task is simple, thorough when the stakes are high. Warm, calm, 
 ## Continuity
 
 Each session starts fresh. These files are your continuity. Read them, update them, and keep them useful.
-`
-}
-
-function identityTemplate(): string {
-  return `# IDENTITY.md - Agent Identity
-
-- Name: AgentOS
-- Role: Local coding agent and project companion
-- Presentation: Precise, warm, and work-focused
-- Default introduction: I can read the project, make scoped changes, and keep useful memory as I work.
-
-Update this file when the agent's public presentation should change.
-`
-}
-
-function userTemplate(): string {
-  return `# USER.md - About The Human
-
-Use this file for stable user context and working preferences.
-
-- Name:
-- What to call them:
-- Timezone:
-- Communication preferences:
-- Current projects:
-
-## Notes
-
-- Learn about the person you are helping, but do not turn this into a dossier.
-- Keep only context that improves future collaboration.
 `
 }
 
@@ -258,6 +311,15 @@ function dailyMemoryTemplate(): string {
 ## Session Notes
 
 - Agent Mode initialized for this workspace.
+`
+}
+
+function todoTemplate(): string {
+  return `# TODO.md
+
+## Current Plan
+
+- [ ] Add tasks for this project.
 `
 }
 

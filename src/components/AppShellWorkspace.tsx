@@ -110,6 +110,7 @@ export function AppShellWorkspace({
           <SettingsPage
             hidden={activeViewId !== 'settings'}
             settingsCategory={settingsCategory}
+            activeProject={activeProject}
             showProjectSkillsInSidebar={showProjectSkillsInSidebar}
             onShowProjectSkillsInSidebarChange={onShowProjectSkillsInSidebarChange}
           />

@@ -5,6 +5,7 @@
     "viewSettings": "Settings",
     "workspaceSettingsModels": "Settings · Models",
     "workspaceSettingsGeneral": "Settings · General",
+    "workspaceSettingsAgentMode": "Settings · Agent Mode",
     "headerDefault": "Claude Agent",
     "headerProcessingThread": "Current conversation is busy",
     "projectSkillUnavailable": "This environment cannot read project skills",
@@ -21,7 +22,8 @@
   },
   "settingsCategory": {
     "models": "Models",
-    "general": "General"
+    "general": "General",
+    "agentMode": "Agent Mode"
   },
   "sidebar": {
     "windowNav": "Window navigation",
@@ -82,11 +84,16 @@
     "toggleFilePanel": "Toggle file tree panel",
     "agentModeTitle": "Agent Mode",
     "agentModeToggle": "Enable Agent Mode",
-    "agentModeToggleDesc": "Create and inject AGENTS/MEMORY/SOUL/USER/IDENTITY context.",
+    "agentModeToggleDesc": "Prepare AGENT/SOUL/MEMORY and inject USER/IDENTITY from settings.",
+    "todoModeToggle": "Enable TODO Mode",
+    "todoModeToggleDesc": "Tell AGENT.md to read TODO.md and use it as the execution plan.",
     "agentModeReady": "Agent Mode is enabled for this project.",
-    "agentModeNeedsSetup": "Turn this on to prepare OpenClaw-style identity and memory files.",
+    "agentModeDisabled": "Agent Mode is off. Existing files are preserved.",
+    "agentModeNeedsSetup": "Turn this on to prepare OpenClaw-style memory files.",
     "agentModeUnavailable": "Agent Mode setup is unavailable in this environment.",
     "agentModeEnabling": "Preparing Agent Mode files...",
+    "agentModeDisabling": "Turning off Agent Mode...",
+    "todoModeUpdating": "Updating TODO Mode...",
     "agentModeFailed": "Failed to enable Agent Mode",
     "agentModeFileStatus": {
       "created": "Created",
@@ -221,6 +228,28 @@
       "envImagesOff": "ENV image input: off",
       "envMappingDefault": "ENV model mapping: default",
       "envMappingValue": "ENV model mapping: {{value}}"
+    },
+    "agentMode": {
+      "pageTitle": "Agent Mode",
+      "pageLede": "Configure USER and IDENTITY injected into the system prompt for “{{name}}”.",
+      "contextHeading": "Identity and User Context",
+      "contextCaption": "These values are injected into the system prompt when Agent Mode is enabled. On first load, existing USER.md and IDENTITY.md files are used as defaults.",
+      "userLabel": "USER",
+      "userHint": "Stable human context, preferences, and collaboration style.",
+      "userPlaceholder": "Add user preferences, preferred name, stable context...",
+      "identityLabel": "IDENTITY",
+      "identityHint": "The agent's public identity, presentation, and default introduction.",
+      "identityPlaceholder": "Add agent name, role, voice, presentation style...",
+      "actionsHint": "Confirm writes to local persisted settings. Cancel restores the last saved content.",
+      "actionsAria": "Save or cancel Agent Mode settings",
+      "confirm": "Confirm",
+      "cancel": "Cancel",
+      "bridgeUnavailable": "Agent Mode settings unavailable",
+      "loading": "Loading...",
+      "loaded": "Loaded",
+      "saving": "Saving...",
+      "saved": "Saved",
+      "reverted": "Restored last saved content"
     }
   },
   "chat": {

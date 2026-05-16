@@ -5,6 +5,7 @@
     "viewSettings": "设置",
     "workspaceSettingsModels": "设置 · 模型",
     "workspaceSettingsGeneral": "设置 · 常规",
+    "workspaceSettingsAgentMode": "设置 · Agent模式",
     "headerDefault": "Claude Agent",
     "headerProcessingThread": "当前对话处理中",
     "projectSkillUnavailable": "当前运行环境无法读取项目 skills",
@@ -21,7 +22,8 @@
   },
   "settingsCategory": {
     "models": "模型",
-    "general": "常规"
+    "general": "常规",
+    "agentMode": "Agent模式"
   },
   "sidebar": {
     "windowNav": "窗口导航",
@@ -82,11 +84,16 @@
     "toggleFilePanel": "切换文件树面板",
     "agentModeTitle": "Agent 模式",
     "agentModeToggle": "开启 Agent 模式",
-    "agentModeToggleDesc": "创建并注入 AGENTS/MEMORY/SOUL/USER/IDENTITY 上下文。",
+    "agentModeToggleDesc": "准备 AGENT/SOUL/MEMORY，并注入设置里的 USER/IDENTITY。",
+    "todoModeToggle": "开启 TODO 模式",
+    "todoModeToggleDesc": "让 AGENT.md 读取 TODO.md，并把 TODO.md 作为执行计划。",
     "agentModeReady": "当前项目已启用 Agent 模式。",
-    "agentModeNeedsSetup": "开启后会在当前项目准备 OpenClaw 风格的身份和记忆文件。",
+    "agentModeDisabled": "Agent 模式已关闭，已保留现有文件。",
+    "agentModeNeedsSetup": "开启后会在当前项目准备 OpenClaw 风格的记忆文件。",
     "agentModeUnavailable": "当前运行环境不支持 Agent 模式初始化。",
     "agentModeEnabling": "正在准备 Agent 模式文件...",
+    "agentModeDisabling": "正在关闭 Agent 模式...",
+    "todoModeUpdating": "正在更新 TODO 模式...",
     "agentModeFailed": "开启 Agent 模式失败",
     "agentModeFileStatus": {
       "created": "已创建",
@@ -221,6 +228,28 @@
       "envImagesOff": "ENV 图片输入: 已关闭",
       "envMappingDefault": "ENV 模型映射: 默认",
       "envMappingValue": "ENV 模型映射: {{value}}"
+    },
+    "agentMode": {
+      "pageTitle": "Agent模式",
+      "pageLede": "为当前项目「{{name}}」配置注入到 system prompt 的 USER 与 IDENTITY。",
+      "contextHeading": "身份与用户上下文",
+      "contextCaption": "这些内容会随 Agent 模式注入 system prompt；首次打开时会优先读取当前项目已有的 USER.md 与 IDENTITY.md。",
+      "userLabel": "USER",
+      "userHint": "稳定的用户背景、偏好和协作方式。",
+      "userPlaceholder": "填写用户偏好、称呼、长期上下文...",
+      "identityLabel": "IDENTITY",
+      "identityHint": "Agent 的公开身份、表达方式和默认介绍。",
+      "identityPlaceholder": "填写 Agent 名称、角色、表达风格...",
+      "actionsHint": "确认后写入本机持久化设置；取消会恢复到上次保存的内容。",
+      "actionsAria": "保存或取消 Agent 模式设置",
+      "confirm": "确认",
+      "cancel": "取消",
+      "bridgeUnavailable": "Agent 模式设置不可用",
+      "loading": "读取中",
+      "loaded": "已读取",
+      "saving": "保存中",
+      "saved": "已保存",
+      "reverted": "已恢复到上次保存内容"
     }
   },
   "chat": {

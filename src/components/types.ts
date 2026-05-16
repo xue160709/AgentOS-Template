@@ -3,7 +3,7 @@ import type { AgentContextSlashItem, ClaudeChatAttachmentKind } from '../claude-
 export type AppViewId = 'home' | 'docs' | 'settings'
 
 /** Settings 侧栏 `#settings/<id>`，与 Codex 分组导航对齐 */
-export type SettingsCategoryId = 'general' | 'skills'
+export type SettingsCategoryId = 'general' | 'skills' | 'agent'
 
 export type MessageStatus = 'done' | 'streaming' | 'error' | 'cancelled'
 export type ToolStatus = 'running' | 'done' | 'error' | 'denied'

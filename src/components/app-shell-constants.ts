@@ -18,6 +18,7 @@ export const SETTINGS_SIDEBAR_NAV: {
 }[] = [
   { id: 'general', labelKey: 'settingsCategory.models', icon: 'settings' },
   { id: 'skills', labelKey: 'settingsCategory.general', icon: 'chip' },
+  { id: 'agent', labelKey: 'settingsCategory.agentMode', icon: 'agent' },
 ]
 
 /** i18n keys for workspace title when not on settings */
@@ -27,7 +28,9 @@ export const VIEW_HEADING_KEYS: Record<Exclude<AppViewId, 'settings'>, string> =
 }
 
 export function settingsWorkspaceTitleKey(category: SettingsCategoryId): string {
-  return category === 'skills' ? 'shell.workspaceSettingsGeneral' : 'shell.workspaceSettingsModels'
+  if (category === 'skills') return 'shell.workspaceSettingsGeneral'
+  if (category === 'agent') return 'shell.workspaceSettingsAgentMode'
+  return 'shell.workspaceSettingsModels'
 }
 
 export const NAV_LABEL_KEYS: Record<'home' | 'docs', string> = {
@@ -52,5 +55,6 @@ export function settingsCategoryFromLocation(): SettingsCategoryId {
   if (parts[0] !== 'settings') return DEFAULT_SETTINGS_CATEGORY
   const sub = parts[1]
   if (sub === 'skills') return 'skills'
+  if (sub === 'agent') return 'agent'
   return DEFAULT_SETTINGS_CATEGORY
 }

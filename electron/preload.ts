@@ -39,6 +39,15 @@ contextBridge.exposeInMainWorld('desktop', {
   ensureAgentModeFiles(rootPath: string) {
     return ipcRenderer.invoke('desktop:ensure-agent-mode-files', rootPath)
   },
+  setAgentModeState(rootPath: string, partial: unknown) {
+    return ipcRenderer.invoke('desktop:set-agent-mode-state', rootPath, partial)
+  },
+  getAgentModeSettings(rootPath: string) {
+    return ipcRenderer.invoke('desktop:get-agent-mode-settings', rootPath)
+  },
+  saveAgentModeSettings(rootPath: string, payload: unknown) {
+    return ipcRenderer.invoke('desktop:save-agent-mode-settings', rootPath, payload)
+  },
   getChatWorkspace() {
     return ipcRenderer.invoke('chat-workspace:get')
   },

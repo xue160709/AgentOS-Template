@@ -15,13 +15,33 @@ export type AgentModeFileChange = {
   status: AgentModeFileStatus
 }
 
+export type AgentModeProjectSettings = {
+  enabled: boolean
+  todoEnabled: boolean
+  user: string
+  identity: string
+}
+
 export type AgentModeStatusResult =
   | {
       ok: true
       rootPath: string
       enabled: boolean
+      todoEnabled: boolean
       instructionFile: string
       missingFiles: string[]
+    }
+  | {
+      ok: false
+      rootPath: string
+      message: string
+    }
+
+export type AgentModeSettingsResult =
+  | {
+      ok: true
+      rootPath: string
+      settings: AgentModeProjectSettings
     }
   | {
       ok: false

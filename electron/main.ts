@@ -5,8 +5,9 @@ import os from 'node:os'
 import path from 'node:path'
 import zh from '../src/locales/zh.json'
 import en from '../src/locales/en.json'
-import type { DesktopPreferences } from '../src/desktop-types'
-import { ensureAgentModeFiles, getAgentModeStatus } from './agent-mode-files'
+import type { AgentModeProjectSettings, DesktopPreferences } from '../src/desktop-types'
+import { ensureAgentModeFiles, getAgentModeStatus, setAgentModeState } from './agent-mode-files'
+import { AgentModeSettingsStore } from './agent-mode-settings-store'
 import { discoverAgentContext, searchProjectFiles } from './agent-context'
 import { ClaudeAgentRunner } from './claude-agent-runner'
 import { ClaudeAgentSettingsStore } from './claude-agent-settings'
@@ -56,6 +57,7 @@ let isQuitting = false
 let currentTrayLocale: TrayLocale = 'zh'
 let claudeAgentRunner: ClaudeAgentRunner | null = null
 let claudeAgentSettingsStore: ClaudeAgentSettingsStore | null = null
+let agentModeSettingsStore: AgentModeSettingsStore | null = null
 let chatWorkspaceStore: ChatWorkspaceStore | null = null
 let desktopPreferencesStore: DesktopPreferencesStore | null = null
 
@@ -134,7 +136,12 @@ function createWindow() {
       : {}),
   })
 
-  claudeAgentRunner = new ClaudeAgentRunner(win.webContents, process.env.APP_ROOT, () => getClaudeAgentSettingsStore().resolve())
+  claudeAgentRunner = new ClaudeAgentRunner(
+    win.webContents,
+    process.env.APP_ROOT,
+    () => getClaudeAgentSettingsStore().resolve(),
+    (rootPath) => getAgentModeSettingsStore().resolve(rootPath),
+  )
 
   win.on('close', (event) => {
     if (isQuitting) return
@@ -179,6 +186,13 @@ function getClaudeAgentSettingsStore() {
     throw new Error('Claude Agent settings store is not ready.')
   }
   return claudeAgentSettingsStore
+}
+
+function getAgentModeSettingsStore() {
+  if (!agentModeSettingsStore) {
+    throw new Error('Agent Mode settings store is not ready.')
+  }
+  return agentModeSettingsStore
 }
 
 function getChatWorkspaceStore() {
@@ -330,6 +344,7 @@ if (gotSingleInstanceLock) {
     const userDataPath = app.getPath('userData')
     desktopPreferencesStore = new DesktopPreferencesStore(userDataPath)
     claudeAgentSettingsStore = new ClaudeAgentSettingsStore(userDataPath)
+    agentModeSettingsStore = new AgentModeSettingsStore(userDataPath)
     chatWorkspaceStore = new ChatWorkspaceStore(userDataPath)
     applyLoginItemSettingsFromPrefs(getDesktopPreferencesStore().read())
     ipcMain.handle('desktop-preferences:get', () => {
@@ -416,10 +431,19 @@ if (gotSingleInstanceLock) {
       return discoverAgentContext(rootPath)
     })
     ipcMain.handle('desktop:get-agent-mode-status', (_event, rootPath: string) => {
-      return getAgentModeStatus(rootPath)
+      return getAgentModeStatus(rootPath, getAgentModeSettingsStore())
     })
     ipcMain.handle('desktop:ensure-agent-mode-files', (_event, rootPath: string) => {
-      return ensureAgentModeFiles(rootPath)
+      return ensureAgentModeFiles(rootPath, getAgentModeSettingsStore())
+    })
+    ipcMain.handle('desktop:set-agent-mode-state', (_event, rootPath: string, partial: Partial<AgentModeProjectSettings>) => {
+      return setAgentModeState(rootPath, partial, getAgentModeSettingsStore())
+    })
+    ipcMain.handle('desktop:get-agent-mode-settings', (_event, rootPath: string) => {
+      return getAgentModeSettingsStore().getResult(rootPath)
+    })
+    ipcMain.handle('desktop:save-agent-mode-settings', (_event, rootPath: string, payload: { user: string; identity: string }) => {
+      return getAgentModeSettingsStore().saveText(rootPath, payload)
     })
     ipcMain.handle('desktop:quit', () => {
       app.quit()

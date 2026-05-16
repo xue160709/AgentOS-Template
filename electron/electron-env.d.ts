@@ -8,6 +8,8 @@ import type {
 } from '../src/claude-chat-types'
 import type {
   AgentModeFilesResult,
+  AgentModeProjectSettings,
+  AgentModeSettingsResult,
   AgentModeStatusResult,
   DesktopPreferences,
   TrayMenuAction,
@@ -53,6 +55,15 @@ declare global {
       listAgentContext?: (rootPath: string) => Promise<AgentContextResult>
       getAgentModeStatus?: (rootPath: string) => Promise<AgentModeStatusResult>
       ensureAgentModeFiles?: (rootPath: string) => Promise<AgentModeFilesResult>
+      setAgentModeState?: (
+        rootPath: string,
+        partial: Partial<Pick<AgentModeProjectSettings, 'enabled' | 'todoEnabled'>>,
+      ) => Promise<AgentModeStatusResult>
+      getAgentModeSettings?: (rootPath: string) => Promise<AgentModeSettingsResult>
+      saveAgentModeSettings?: (
+        rootPath: string,
+        payload: Pick<AgentModeProjectSettings, 'user' | 'identity'>,
+      ) => Promise<AgentModeSettingsResult>
       getChatWorkspace?: () => Promise<ChatWorkspaceState | null>
       saveChatWorkspace?: (state: ChatWorkspaceState) => Promise<ChatWorkspaceState>
       quitApp?: () => Promise<void>

@@ -12,6 +12,7 @@ export function AgentModeMenu({ project }: AgentModeMenuProps) {
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [enabled, setEnabled] = useState(false)
+  const [todoEnabled, setTodoEnabled] = useState(false)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [lastResult, setLastResult] = useState<AgentModeFilesResult | null>(null)
@@ -20,10 +21,12 @@ export function AgentModeMenu({ project }: AgentModeMenuProps) {
   const applyStatus = useCallback((status: AgentModeStatusResult) => {
     if (!status.ok) {
       setEnabled(false)
+      setTodoEnabled(false)
       setMessage(status.message)
       return
     }
     setEnabled(status.enabled)
+    setTodoEnabled(status.todoEnabled)
     setMessage(status.enabled ? t('workspace.agentModeReady') : t('workspace.agentModeNeedsSetup'))
   }, [t])
 
@@ -33,6 +36,7 @@ export function AgentModeMenu({ project }: AgentModeMenuProps) {
     const getAgentModeStatus = window.desktop?.getAgentModeStatus
     if (!getAgentModeStatus) {
       setEnabled(false)
+      setTodoEnabled(false)
       setMessage(t('workspace.agentModeUnavailable'))
       return
     }
@@ -41,6 +45,7 @@ export function AgentModeMenu({ project }: AgentModeMenuProps) {
       .then(applyStatus)
       .catch(() => {
         setEnabled(false)
+        setTodoEnabled(false)
         setMessage(t('workspace.agentModeUnavailable'))
       })
   }, [applyStatus, project.path, t])
@@ -77,8 +82,34 @@ export function AgentModeMenu({ project }: AgentModeMenuProps) {
       setLastResult(result)
       setEnabled(result.ok)
       setMessage(result.message)
+      if (result.ok) {
+        void window.desktop?.getAgentModeStatus?.(project.path).then(applyStatus).catch(() => undefined)
+      }
     } catch (error) {
       setEnabled(false)
+      setMessage(error instanceof Error ? error.message : t('workspace.agentModeFailed'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const updateAgentModeState = async (partial: { enabled?: boolean; todoEnabled?: boolean }) => {
+    const setAgentModeState = window.desktop?.setAgentModeState
+    if (!setAgentModeState) {
+      setMessage(t('workspace.agentModeUnavailable'))
+      return
+    }
+
+    setLoading(true)
+    setLastResult(null)
+    setMessage(partial.todoEnabled === undefined ? t('workspace.agentModeDisabling') : t('workspace.todoModeUpdating'))
+    try {
+      const result = await setAgentModeState(project.path, partial)
+      applyStatus(result)
+      if (result.ok && partial.enabled === false) {
+        setMessage(t('workspace.agentModeDisabled'))
+      }
+    } catch (error) {
       setMessage(error instanceof Error ? error.message : t('workspace.agentModeFailed'))
     } finally {
       setLoading(false)
@@ -96,7 +127,7 @@ export function AgentModeMenu({ project }: AgentModeMenuProps) {
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
-        <IconInline name="chip" />
+        <IconInline name="agent" />
       </button>
       {open ? (
         <div className="agent-mode-popover" role="dialog" aria-label={t('workspace.agentModeTitle')}>
@@ -114,9 +145,10 @@ export function AgentModeMenu({ project }: AgentModeMenuProps) {
                 className="settings-switch-input"
                 type="checkbox"
                 checked={enabled}
-                disabled={enabled || loading}
+                disabled={loading}
                 onChange={(event) => {
                   if (event.target.checked) void enableAgentMode()
+                  else void updateAgentModeState({ enabled: false })
                 }}
               />
               <span className="settings-switch-track" aria-hidden="true">
@@ -124,6 +156,28 @@ export function AgentModeMenu({ project }: AgentModeMenuProps) {
               </span>
             </span>
           </label>
+          {enabled ? (
+            <label className="agent-mode-switch">
+              <span className="agent-mode-switch__copy">
+                <span>{t('workspace.todoModeToggle')}</span>
+                <span>{t('workspace.todoModeToggleDesc')}</span>
+              </span>
+              <span className="settings-switch-control">
+                <input
+                  className="settings-switch-input"
+                  type="checkbox"
+                  checked={todoEnabled}
+                  disabled={loading}
+                  onChange={(event) => {
+                    void updateAgentModeState({ todoEnabled: event.target.checked })
+                  }}
+                />
+                <span className="settings-switch-track" aria-hidden="true">
+                  <span className="settings-switch-thumb" />
+                </span>
+              </span>
+            </label>
+          ) : null}
           <div className="agent-mode-popover__status" role="status" aria-live="polite">
             {message || t('workspace.agentModeNeedsSetup')}
           </div>

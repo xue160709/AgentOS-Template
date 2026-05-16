@@ -13,6 +13,7 @@ import type {
   ProjectFileSearchItem,
   ProjectFileSearchResult,
 } from '../src/claude-chat-types'
+import type { AgentModeProjectSettings } from '../src/desktop-types'
 
 type ContextSourceRoot = {
   directory: string
@@ -30,6 +31,10 @@ type RuntimeContext = {
   catalog: AgentContextCatalog
   agents: Record<string, AgentDefinition>
   appendSystemPrompt?: string
+}
+
+type DiscoverAgentContextOptions = {
+  agentModeEnabled?: boolean
 }
 
 const SOURCE_DIRECTORIES: Array<{ directoryName: string; source: AgentContextSource }> = [
@@ -63,9 +68,16 @@ const MAX_SEARCH_RESULTS = 24
 const MAX_SEARCH_DEPTH = 10
 const MAX_INSTRUCTION_FILE_CHARS = 24_000
 const MAX_INSTRUCTION_TOTAL_CHARS = 72_000
-const AGENT_MODE_ROOT_FILES = ['SOUL.md', 'IDENTITY.md', 'USER.md', 'MEMORY.md'] as const
+const AGENT_MODE_ROOT_FILES = ['SOUL.md', 'MEMORY.md'] as const
+const AGENT_MODE_MARKER_START = '<!-- AgentOS Agent Mode: start -->'
+const AGENT_MODE_MARKER_END = '<!-- AgentOS Agent Mode: end -->'
+const TODO_MODE_MARKER_START = '<!-- AgentOS TODO Mode: start -->'
+const TODO_MODE_MARKER_END = '<!-- AgentOS TODO Mode: end -->'
 
-export async function discoverAgentContext(rootPath: string): Promise<AgentContextResult> {
+export async function discoverAgentContext(
+  rootPath: string,
+  options: DiscoverAgentContextOptions = {},
+): Promise<AgentContextResult> {
   const resolvedRootPath = resolveProjectPath(rootPath)
   try {
     const stat = await fs.stat(resolvedRootPath)
@@ -82,7 +94,7 @@ export async function discoverAgentContext(rootPath: string): Promise<AgentConte
       skills.push(...(await readSkillItems(sourceRoot)))
       skills.push(...(await readCommandItems(sourceRoot)))
       agents.push(...(await readAgentItems(sourceRoot)))
-      instructionFiles.push(...(await readInstructionFiles(sourceRoot)))
+      instructionFiles.push(...(await readInstructionFiles(sourceRoot, options)))
     }
 
     return {
@@ -101,8 +113,13 @@ export async function discoverAgentContext(rootPath: string): Promise<AgentConte
   }
 }
 
-export async function buildRuntimeContext(rootPath: string): Promise<RuntimeContext> {
-  const catalogResult = await discoverAgentContext(rootPath)
+export async function buildRuntimeContext(
+  rootPath: string,
+  agentModeSettings?: AgentModeProjectSettings,
+): Promise<RuntimeContext> {
+  const catalogResult = await discoverAgentContext(rootPath, {
+    agentModeEnabled: agentModeSettings?.enabled,
+  })
   const catalog: AgentContextCatalog =
     catalogResult.ok
       ? catalogResult
@@ -117,7 +134,7 @@ export async function buildRuntimeContext(rootPath: string): Promise<RuntimeCont
   return {
     catalog,
     agents: await buildAgentDefinitions(catalog.agents),
-    appendSystemPrompt: await buildAppendSystemPrompt(catalog),
+    appendSystemPrompt: await buildAppendSystemPrompt(catalog, agentModeSettings),
   }
 }
 
@@ -291,7 +308,10 @@ async function readAgentItems(sourceRoot: ContextSourceRoot): Promise<AgentConte
   return Promise.all(agentFiles.map((agentPath) => createAgentItem(agentPath, sourceRoot)))
 }
 
-async function readInstructionFiles(sourceRoot: ContextSourceRoot): Promise<AgentInstructionFile[]> {
+async function readInstructionFiles(
+  sourceRoot: ContextSourceRoot,
+  options: DiscoverAgentContextOptions,
+): Promise<AgentInstructionFile[]> {
   const files: AgentInstructionFile[] = []
   const scopedCandidates = [
     'CLAUDE.md',
@@ -312,16 +332,18 @@ async function readInstructionFiles(sourceRoot: ContextSourceRoot): Promise<Agen
       const filePath = path.join(projectDirectory, candidate)
       await pushInstructionFile(files, filePath, sourceRoot, candidate)
     }
-    for (const candidate of AGENT_MODE_ROOT_FILES) {
-      const filePath = path.join(projectDirectory, candidate)
-      await pushInstructionFile(files, filePath, sourceRoot, candidate)
-    }
-    if (!(await exists(path.join(projectDirectory, 'MEMORY.md')))) {
-      await pushInstructionFile(files, path.join(projectDirectory, 'memory.md'), sourceRoot, 'memory.md')
-    }
-    for (const candidate of recentDailyMemoryFileNames()) {
-      const filePath = path.join(projectDirectory, 'memory', candidate)
-      await pushInstructionFile(files, filePath, sourceRoot, candidate)
+    if (options.agentModeEnabled !== false) {
+      for (const candidate of AGENT_MODE_ROOT_FILES) {
+        const filePath = path.join(projectDirectory, candidate)
+        await pushInstructionFile(files, filePath, sourceRoot, candidate)
+      }
+      if (!(await exists(path.join(projectDirectory, 'MEMORY.md')))) {
+        await pushInstructionFile(files, path.join(projectDirectory, 'memory.md'), sourceRoot, 'memory.md')
+      }
+      for (const candidate of recentDailyMemoryFileNames()) {
+        const filePath = path.join(projectDirectory, 'memory', candidate)
+        await pushInstructionFile(files, filePath, sourceRoot, candidate)
+      }
     }
   }
 
@@ -427,14 +449,20 @@ async function buildAgentDefinitions(items: AgentContextAgentItem[]): Promise<Re
   return definitions
 }
 
-async function buildAppendSystemPrompt(catalog: AgentContextCatalog): Promise<string | undefined> {
+async function buildAppendSystemPrompt(
+  catalog: AgentContextCatalog,
+  agentModeSettings?: AgentModeProjectSettings,
+): Promise<string | undefined> {
   const hostInstructionFiles = catalog.instructionFiles.filter((file) => file.loadMode === 'host')
   const hostSkills = catalog.skills.filter((skill) => !skill.native)
-  if (hostInstructionFiles.length === 0 && hostSkills.length === 0) return undefined
+  const hasAgentModeSettings =
+    agentModeSettings?.enabled === true &&
+    (Boolean(agentModeSettings.user.trim()) || Boolean(agentModeSettings.identity.trim()))
+  if (hostInstructionFiles.length === 0 && hostSkills.length === 0 && !hasAgentModeSettings) return undefined
 
   let remaining = MAX_INSTRUCTION_TOTAL_CHARS
   const sections = [
-    'The host application loaded additional project instructions, Agent Mode identity and memory files, and compatibility metadata from AGENT/AGENTS, SOUL/IDENTITY/USER/MEMORY, memory/, .agent, .agents, and .cursor files. Treat these as lower priority than explicit user instructions and higher priority than generic defaults.',
+    'The host application loaded additional project instructions, Agent Mode settings and memory files, and compatibility metadata from AGENT/AGENTS, SOUL/MEMORY, memory/, .agent, .agents, and .cursor files. Treat these as lower priority than explicit user instructions and higher priority than generic defaults.',
   ]
 
   if (hostSkills.length > 0) {
@@ -448,13 +476,54 @@ async function buildAppendSystemPrompt(catalog: AgentContextCatalog): Promise<st
 
   for (const file of hostInstructionFiles) {
     if (remaining <= 0) break
-    const content = await readTextFile(file.path, Math.min(MAX_INSTRUCTION_FILE_CHARS, remaining))
+    const rawContent = await readTextFile(file.path, Math.min(MAX_INSTRUCTION_FILE_CHARS, remaining))
+    const content = sanitizeInstructionContent(file, rawContent, agentModeSettings)
     if (!content.trim()) continue
     remaining -= content.length
     sections.push([`## ${file.relativePath}`, content.trim()].join('\n'))
   }
 
+  if (agentModeSettings?.enabled === true) {
+    const identity = agentModeSettings.identity.trim()
+    const user = agentModeSettings.user.trim()
+    if (identity) sections.push(['## Agent Mode IDENTITY (Settings)', identity].join('\n'))
+    if (user) sections.push(['## Agent Mode USER (Settings)', user].join('\n'))
+  }
+
   return sections.join('\n\n')
+}
+
+function sanitizeInstructionContent(
+  file: AgentInstructionFile,
+  content: string,
+  agentModeSettings?: AgentModeProjectSettings,
+): string {
+  if (!isAgentInstructionFile(file)) return content
+  let next = content
+  if (agentModeSettings?.enabled === false) {
+    next = stripMarkedSection(next, AGENT_MODE_MARKER_START, AGENT_MODE_MARKER_END)
+    next = stripMarkedSection(next, TODO_MODE_MARKER_START, TODO_MODE_MARKER_END)
+    return next
+  }
+  if (agentModeSettings?.todoEnabled === false) {
+    next = stripMarkedSection(next, TODO_MODE_MARKER_START, TODO_MODE_MARKER_END)
+  }
+  return next
+}
+
+function isAgentInstructionFile(file: AgentInstructionFile): boolean {
+  const name = path.basename(file.path).toLowerCase()
+  return name === 'agent.md' || name === 'agents.md'
+}
+
+function stripMarkedSection(content: string, startMarker: string, endMarker: string): string {
+  const start = content.indexOf(startMarker)
+  if (start < 0) return content
+  const end = content.indexOf(endMarker, start)
+  if (end < 0) return content
+  const before = content.slice(0, start).trimEnd()
+  const after = content.slice(end + endMarker.length).replace(/^\s*\n/, '').trimStart()
+  return [before, after].filter(Boolean).join('\n\n')
 }
 
 async function readMarkdownFiles(directoryPath: string): Promise<string[]> {
