@@ -14,6 +14,8 @@ import { DesktopPreferencesStore } from './desktop-preferences-store'
 import { loadMainProcessEnv } from './env-loader'
 import type {
   ActiveChatPickPayload,
+  ClaudeChatAttachment,
+  ClaudeChatAttachmentPickerResult,
   ClaudeAgentSettings,
   ClaudeChatSubmitPayload,
   ClaudePermissionResponsePayload,
@@ -63,6 +65,17 @@ app.setName(APP_NAME)
 const FILE_TREE_MAX_DEPTH = 8
 const FILE_TREE_MAX_ENTRIES = 1200
 const FILE_TREE_MAX_CHILDREN_PER_DIRECTORY = 200
+const CHAT_ATTACHMENT_MAX_FILES = 8
+const CHAT_TEXT_ATTACHMENT_MAX_BYTES = 512 * 1024
+const CHAT_IMAGE_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024
+const CHAT_TEXT_EXTENSIONS = new Set(['.md', '.markdown', '.txt'])
+const CHAT_IMAGE_MEDIA_TYPES = new Map<string, 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'>([
+  ['.gif', 'image/gif'],
+  ['.jpeg', 'image/jpeg'],
+  ['.jpg', 'image/jpeg'],
+  ['.png', 'image/png'],
+  ['.webp', 'image/webp'],
+])
 const FILE_TREE_IGNORED_DIRECTORIES = new Set([
   '.git',
   '.next',
@@ -358,6 +371,28 @@ if (gotSingleInstanceLock) {
       if (result.canceled || result.filePaths.length === 0) return null
       return result.filePaths[0] ?? null
     })
+    ipcMain.handle('desktop:pick-chat-attachments', async (_event, rawOptions: unknown) => {
+      const parent = BrowserWindow.getFocusedWindow() ?? win
+      if (!parent) {
+        return { ok: false, message: '当前窗口不可用' } satisfies ClaudeChatAttachmentPickerResult
+      }
+      const allowImages = isRecord(rawOptions) ? rawOptions.allowImages === true : false
+      const extensions = allowImages ? ['md', 'markdown', 'txt', 'png', 'jpg', 'jpeg', 'gif', 'webp'] : ['md', 'markdown', 'txt']
+      const result = await dialog.showOpenDialog(parent, {
+        properties: ['openFile', 'multiSelections'],
+        title: allowImages ? '添加 Markdown、文本或图片' : '添加 Markdown 或文本',
+        filters: [
+          {
+            name: allowImages ? 'Markdown, Text, Images' : 'Markdown, Text',
+            extensions,
+          },
+        ],
+      })
+      if (result.canceled || result.filePaths.length === 0) {
+        return { ok: true, attachments: [], skipped: [] } satisfies ClaudeChatAttachmentPickerResult
+      }
+      return readChatAttachments(result.filePaths, allowImages)
+    })
     ipcMain.handle('desktop:list-project-files', (_event, rootPath: string) => {
       return readProjectFileTree(rootPath)
     })
@@ -380,6 +415,114 @@ if (gotSingleInstanceLock) {
   })
 } else {
   app.quit()
+}
+
+async function readChatAttachments(filePaths: string[], allowImages: boolean): Promise<ClaudeChatAttachmentPickerResult> {
+  const attachments: ClaudeChatAttachment[] = []
+  const skipped: Array<{ name: string; path: string; reason: string }> = []
+  const selected = filePaths.slice(0, CHAT_ATTACHMENT_MAX_FILES)
+
+  if (filePaths.length > CHAT_ATTACHMENT_MAX_FILES) {
+    for (const filePath of filePaths.slice(CHAT_ATTACHMENT_MAX_FILES)) {
+      skipped.push({
+        name: path.basename(filePath),
+        path: filePath,
+        reason: `一次最多添加 ${CHAT_ATTACHMENT_MAX_FILES} 个文件`,
+      })
+    }
+  }
+
+  for (const filePath of selected) {
+    const resolvedPath = path.resolve(filePath)
+    const name = path.basename(resolvedPath)
+    const extension = path.extname(name).toLowerCase()
+    const imageMimeType = CHAT_IMAGE_MEDIA_TYPES.get(extension)
+    const isTextAttachment = CHAT_TEXT_EXTENSIONS.has(extension)
+
+    if (!isTextAttachment && !imageMimeType) {
+      skipped.push({ name, path: resolvedPath, reason: '仅支持 MD、TXT、PNG、JPG、GIF、WEBP' })
+      continue
+    }
+
+    if (imageMimeType && !allowImages) {
+      skipped.push({ name, path: resolvedPath, reason: '当前模型未开启图片输入' })
+      continue
+    }
+
+    try {
+      const stat = await fs.stat(resolvedPath)
+      if (!stat.isFile()) {
+        skipped.push({ name, path: resolvedPath, reason: '只能添加文件' })
+        continue
+      }
+
+      if (isTextAttachment) {
+        if (stat.size > CHAT_TEXT_ATTACHMENT_MAX_BYTES) {
+          skipped.push({ name, path: resolvedPath, reason: '文本文件超过 512KB' })
+          continue
+        }
+        const text = await fs.readFile(resolvedPath, 'utf8')
+        attachments.push({
+          id: createAttachmentId(attachments.length),
+          kind: 'text',
+          name,
+          path: resolvedPath,
+          mimeType: extension === '.md' || extension === '.markdown' ? 'text/markdown' : 'text/plain',
+          size: stat.size,
+          text,
+          preview: firstPreviewLine(text),
+        })
+        continue
+      }
+
+      if (imageMimeType) {
+        if (stat.size > CHAT_IMAGE_ATTACHMENT_MAX_BYTES) {
+          skipped.push({ name, path: resolvedPath, reason: '图片超过 10MB' })
+          continue
+        }
+        const data = await fs.readFile(resolvedPath)
+        const base64 = data.toString('base64')
+        const image = nativeImage.createFromBuffer(data)
+        const imageSize = image.isEmpty() ? undefined : image.getSize()
+        const dimensions =
+          imageSize && imageSize.width > 0 && imageSize.height > 0 ? `${imageSize.width} x ${imageSize.height}` : ''
+        attachments.push({
+          id: createAttachmentId(attachments.length),
+          kind: 'image',
+          name,
+          path: resolvedPath,
+          mimeType: imageMimeType,
+          size: stat.size,
+          base64,
+          dataUrl: `data:${imageMimeType};base64,${base64}`,
+          preview: dimensions,
+        })
+      }
+    } catch (error) {
+      skipped.push({
+        name,
+        path: resolvedPath,
+        reason: error instanceof Error ? error.message : '读取失败',
+      })
+    }
+  }
+
+  return { ok: true, attachments, skipped }
+}
+
+function createAttachmentId(index: number): string {
+  return `attachment-${Date.now()}-${index}`
+}
+
+function firstPreviewLine(value: string): string {
+  const normalized = value.replace(/\r\n/g, '\n').trim()
+  const firstLine = normalized.split('\n').find((line) => line.trim())?.trim() ?? ''
+  if (!firstLine) return ''
+  return firstLine.length > 160 ? `${firstLine.slice(0, 157)}...` : firstLine
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
 }
 
 async function readProjectFileTree(rootPath: string): Promise<FileTreeResult> {

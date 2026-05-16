@@ -1,10 +1,47 @@
 export type ClaudeChatSubmitPayload = {
   text: string
+  attachments?: ClaudeChatAttachment[]
   threadId?: string
   /** 工作区项目文件夹绝对路径；未传时回退到应用根目录 */
   cwd?: string
   permissionMode?: ClaudePermissionMode
 }
+
+export type ClaudeChatAttachmentKind = 'text' | 'image'
+
+export type ClaudeChatAttachment = {
+  id: string
+  kind: ClaudeChatAttachmentKind
+  name: string
+  path: string
+  mimeType: string
+  size: number
+  /** 文本附件正文，仅发送给主进程 / Agent，不建议长期持久化 */
+  text?: string
+  /** 图片 base64，仅发送给主进程 / Agent，不建议长期持久化 */
+  base64?: string
+  /** UI 展示用短预览 */
+  preview?: string
+  /** UI 缩略图预览 */
+  dataUrl?: string
+}
+
+export type ClaudeChatAttachmentSkipped = {
+  name: string
+  path: string
+  reason: string
+}
+
+export type ClaudeChatAttachmentPickerResult =
+  | {
+      ok: true
+      attachments: ClaudeChatAttachment[]
+      skipped: ClaudeChatAttachmentSkipped[]
+    }
+  | {
+      ok: false
+      message: string
+    }
 
 export type ClaudePermissionMode = 'plan' | 'auto' | 'default' | 'bypassPermissions'
 
@@ -119,9 +156,13 @@ export type ClaudeAgentModelProvider = {
   authToken: string
   baseUrl: string
   model: string
+  modelSupportsImages: boolean
   defaultHaikuModel: string
+  defaultHaikuSupportsImages: boolean
   defaultOpusModel: string
+  defaultOpusSupportsImages: boolean
   defaultSonnetModel: string
+  defaultSonnetSupportsImages: boolean
 }
 
 export type ClaudeAgentSettings = {
@@ -143,6 +184,7 @@ export type ClaudeAgentEnvSnapshot = {
   hasAuthToken: boolean
   baseUrl: string
   model: string
+  supportsImages: boolean
   defaultHaikuModel: string
   defaultOpusModel: string
   defaultSonnetModel: string
@@ -159,6 +201,7 @@ export type ClaudeAgentResolvedConfig = {
   authToken: string
   baseUrl: string
   model: string
+  supportsImages: boolean
   defaultHaikuModel: string
   defaultOpusModel: string
   defaultSonnetModel: string

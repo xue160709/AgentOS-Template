@@ -21,6 +21,9 @@ contextBridge.exposeInMainWorld('desktop', {
   pickProjectDirectory() {
     return ipcRenderer.invoke('desktop:pick-project-directory') as Promise<string | null>
   },
+  pickChatAttachments(options?: { allowImages?: boolean }) {
+    return ipcRenderer.invoke('desktop:pick-chat-attachments', options)
+  },
   listProjectFiles(rootPath: string) {
     return ipcRenderer.invoke('desktop:list-project-files', rootPath)
   },

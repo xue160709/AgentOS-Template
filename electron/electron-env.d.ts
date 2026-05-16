@@ -3,6 +3,7 @@
 import type { ClaudeChatAPI } from '../src/claude-chat-types'
 import type {
   AgentContextResult,
+  ClaudeChatAttachmentPickerResult,
   ProjectFileSearchResult,
 } from '../src/claude-chat-types'
 import type { DesktopPreferences, TrayMenuAction } from '../src/desktop-types'
@@ -41,6 +42,7 @@ declare global {
         macVibrancy: boolean
       }
       pickProjectDirectory?: () => Promise<string | null>
+      pickChatAttachments?: (options?: { allowImages?: boolean }) => Promise<ClaudeChatAttachmentPickerResult>
       listProjectFiles?: (rootPath: string) => Promise<FileTreeResult>
       searchProjectFiles?: (rootPath: string, query: string) => Promise<ProjectFileSearchResult>
       listAgentContext?: (rootPath: string) => Promise<AgentContextResult>

@@ -18,6 +18,7 @@ export class ClaudeAgentSettingsStore {
 
   constructor(userDataPath: string) {
     this.settingsFilePath = path.join(userDataPath, SETTINGS_FILE_NAME)
+    console.info('[ClaudeAgentSettingsStore] using settings file', this.settingsFilePath)
   }
 
   getSnapshot(): ClaudeAgentSettingsSnapshot {
@@ -42,6 +43,7 @@ export class ClaudeAgentSettingsStore {
     const normalized = normalizeSettings(settings)
     mkdirSync(path.dirname(this.settingsFilePath), { recursive: true })
     writeFileSync(this.settingsFilePath, `${JSON.stringify(normalized, null, 2)}\n`, 'utf8')
+    console.info('[ClaudeAgentSettingsStore] saved settings', summarizeSettingsForLog(normalized))
     return this.getSnapshot()
   }
 
@@ -67,16 +69,19 @@ export class ClaudeAgentSettingsStore {
     const env = this.getEnvSnapshot()
 
     if (settings.configSource === 'env') {
-      return {
+      const resolved = {
         configSource: 'env',
         apiKey: readEnv('ANTHROPIC_API_KEY'),
         authToken: readEnv('ANTHROPIC_AUTH_TOKEN'),
         baseUrl: env.baseUrl,
         model: env.model,
+        supportsImages: env.supportsImages,
         defaultHaikuModel: env.defaultHaikuModel,
         defaultOpusModel: env.defaultOpusModel,
         defaultSonnetModel: env.defaultSonnetModel,
       }
+      console.info('[ClaudeAgentSettingsStore] resolved env config', summarizeResolvedConfigForLog(resolved))
+      return resolved
     }
 
     const provider = selectActiveProvider(settings)
@@ -89,16 +94,38 @@ export class ClaudeAgentSettingsStore {
       overlay && provider && providerAcceptsModel(provider, overlay) ? overlay : ''
     const resolvedModel = effectiveOverlay || primaryModel || env.model
 
-    return {
+    const resolved = {
       configSource: 'settings',
       apiKey: providerApiKey || envApiKey,
       authToken: providerApiKey || envApiKey ? '' : readEnv('ANTHROPIC_AUTH_TOKEN'),
       baseUrl: provider?.baseUrl || env.baseUrl,
       model: resolvedModel,
+      supportsImages: provider
+        ? providerSupportsImagesForModel(provider, resolvedModel, env.supportsImages)
+        : env.supportsImages,
       defaultHaikuModel: provider?.defaultHaikuModel || env.defaultHaikuModel,
       defaultOpusModel: provider?.defaultOpusModel || env.defaultOpusModel,
       defaultSonnetModel: provider?.defaultSonnetModel || env.defaultSonnetModel,
     }
+    console.info('[ClaudeAgentSettingsStore] resolved settings config', {
+      settingsFilePath: this.settingsFilePath,
+      activeProviderId: settings.activeProviderId,
+      activeProviderName: provider?.name || '',
+      activeAnthropicModel: settings.activeAnthropicModel,
+      providerModels: {
+        model: provider?.model || '',
+        haiku: provider?.defaultHaikuModel || '',
+        sonnet: provider?.defaultSonnetModel || '',
+        opus: provider?.defaultOpusModel || '',
+      },
+      resolved: summarizeResolvedConfigForLog(resolved),
+      envFallbacks: {
+        hasEnvApiKey: Boolean(envApiKey),
+        envBaseUrl: env.baseUrl,
+        envModel: env.model,
+      },
+    })
+    return resolved
   }
 
   private getEnvSnapshot(): ClaudeAgentEnvSnapshot {
@@ -107,6 +134,7 @@ export class ClaudeAgentSettingsStore {
       hasAuthToken: Boolean(readEnv('ANTHROPIC_AUTH_TOKEN')),
       baseUrl: readEnv('ANTHROPIC_BASE_URL'),
       model: readEnv('ANTHROPIC_MODEL') || readEnv('CLAUDE_MODEL'),
+      supportsImages: readEnvBoolean('ANTHROPIC_SUPPORTS_IMAGES', true),
       defaultHaikuModel: readEnv('ANTHROPIC_DEFAULT_HAIKU_MODEL'),
       defaultOpusModel: readEnv('ANTHROPIC_DEFAULT_OPUS_MODEL'),
       defaultSonnetModel: readEnv('ANTHROPIC_DEFAULT_SONNET_MODEL'),
@@ -149,6 +177,7 @@ function normalizeProviders(raw: Record<string, unknown>): ClaudeAgentModelProvi
 function normalizeProvider(raw: unknown, fallbackId: string): ClaudeAgentModelProvider | undefined {
   if (!isRecord(raw)) return undefined
 
+  const legacySupportsImages = normalizeBoolean(raw.supportsImages, false)
   const apiKey =
     normalizeString(raw.apiKey) ||
     normalizeString(raw.ANTHROPIC_API_KEY) ||
@@ -162,11 +191,15 @@ function normalizeProvider(raw: unknown, fallbackId: string): ClaudeAgentModelPr
     authToken: '',
     baseUrl: normalizeString(raw.baseUrl) || normalizeString(raw.ANTHROPIC_BASE_URL),
     model: normalizeString(raw.model) || normalizeString(raw.ANTHROPIC_MODEL),
+    modelSupportsImages: normalizeBoolean(raw.modelSupportsImages, legacySupportsImages),
     defaultHaikuModel:
       normalizeString(raw.defaultHaikuModel) || normalizeString(raw.ANTHROPIC_DEFAULT_HAIKU_MODEL),
+    defaultHaikuSupportsImages: normalizeBoolean(raw.defaultHaikuSupportsImages, legacySupportsImages),
     defaultOpusModel: normalizeString(raw.defaultOpusModel) || normalizeString(raw.ANTHROPIC_DEFAULT_OPUS_MODEL),
+    defaultOpusSupportsImages: normalizeBoolean(raw.defaultOpusSupportsImages, legacySupportsImages),
     defaultSonnetModel:
       normalizeString(raw.defaultSonnetModel) || normalizeString(raw.ANTHROPIC_DEFAULT_SONNET_MODEL),
+    defaultSonnetSupportsImages: normalizeBoolean(raw.defaultSonnetSupportsImages, legacySupportsImages),
   }
 }
 
@@ -219,9 +252,13 @@ function createDefaultProvider(): ClaudeAgentModelProvider {
     authToken: '',
     baseUrl: '',
     model: '',
+    modelSupportsImages: false,
     defaultHaikuModel: '',
+    defaultHaikuSupportsImages: false,
     defaultOpusModel: '',
+    defaultOpusSupportsImages: false,
     defaultSonnetModel: '',
+    defaultSonnetSupportsImages: false,
   }
 }
 
@@ -235,6 +272,75 @@ function normalizeString(value: unknown): string {
 
 function readEnv(name: string): string {
   return process.env[name]?.trim() ?? ''
+}
+
+function readEnvBoolean(name: string, fallback: boolean): boolean {
+  const raw = readEnv(name).toLowerCase()
+  if (!raw) return fallback
+  if (raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on') return true
+  if (raw === '0' || raw === 'false' || raw === 'no' || raw === 'off') return false
+  return fallback
+}
+
+function summarizeSettingsForLog(settings: ClaudeAgentSettings): Record<string, unknown> {
+  const activeProvider = selectActiveProvider(settings)
+  return {
+    configSource: settings.configSource,
+    activeProviderId: settings.activeProviderId,
+    activeProviderName: activeProvider?.name || '',
+    activeAnthropicModel: settings.activeAnthropicModel,
+    providerCount: settings.providers.length,
+    providers: settings.providers.map((provider) => ({
+      id: provider.id,
+      name: provider.name,
+      hasApiKey: Boolean(provider.apiKey),
+      apiKey: redactSecret(provider.apiKey),
+      baseUrl: provider.baseUrl,
+      model: provider.model,
+      defaultHaikuModel: provider.defaultHaikuModel,
+      defaultSonnetModel: provider.defaultSonnetModel,
+      defaultOpusModel: provider.defaultOpusModel,
+      imageSupport: {
+        model: provider.modelSupportsImages,
+        haiku: provider.defaultHaikuSupportsImages,
+        sonnet: provider.defaultSonnetSupportsImages,
+        opus: provider.defaultOpusSupportsImages,
+      },
+    })),
+  }
+}
+
+function summarizeResolvedConfigForLog(config: ClaudeAgentResolvedConfig): Record<string, unknown> {
+  return {
+    configSource: config.configSource,
+    hasApiKey: Boolean(config.apiKey),
+    apiKey: redactSecret(config.apiKey),
+    hasAuthToken: Boolean(config.authToken),
+    authToken: redactSecret(config.authToken),
+    baseUrl: config.baseUrl,
+    model: config.model,
+    supportsImages: config.supportsImages,
+    defaultHaikuModel: config.defaultHaikuModel,
+    defaultSonnetModel: config.defaultSonnetModel,
+    defaultOpusModel: config.defaultOpusModel,
+  }
+}
+
+function redactSecret(value: string): string {
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+  if (trimmed.length <= 8) return `***(${trimmed.length})`
+  return `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}(${trimmed.length})`
+}
+
+function normalizeBoolean(value: unknown, fallback: boolean): boolean {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    if (normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on') return true
+    if (normalized === '0' || normalized === 'false' || normalized === 'no' || normalized === 'off') return false
+  }
+  return fallback
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -251,4 +357,21 @@ function providerAcceptsModel(provider: ClaudeAgentModelProvider, modelId: strin
     normalizeString(provider.defaultOpusModel),
   ].filter(Boolean)
   return candidates.includes(m)
+}
+
+function providerSupportsImagesForModel(
+  provider: ClaudeAgentModelProvider,
+  modelId: string,
+  fallback: boolean,
+): boolean {
+  const m = normalizeString(modelId)
+  if (!m) return fallback
+  const matches = [
+    { model: provider.model, supportsImages: provider.modelSupportsImages },
+    { model: provider.defaultHaikuModel, supportsImages: provider.defaultHaikuSupportsImages },
+    { model: provider.defaultSonnetModel, supportsImages: provider.defaultSonnetSupportsImages },
+    { model: provider.defaultOpusModel, supportsImages: provider.defaultOpusSupportsImages },
+  ].filter((row) => normalizeString(row.model) === m)
+  if (!matches.length) return fallback
+  return matches.some((row) => row.supportsImages)
 }

@@ -29,6 +29,10 @@ export const Icons = {
     '<svg class="icon-xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linejoin="round" d="M7 3.75h7l4 4v10.5A1.75 1.75 0 0116.25 20h-8.5A1.75 1.75 0 016 18.25V5.5c0-.966.784-1.75 1.75-1.75z"/><path stroke-linecap="round" stroke-linejoin="round" d="M14 4v4h4M4 7.5v11.25A3.25 3.25 0 007.25 22h7.25"/></svg>',
   file:
     '<svg class="icon-xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linejoin="round" d="M7 3.75h7l4 4v10.5A1.75 1.75 0 0116.25 20h-8.5A1.75 1.75 0 016 18.25V5.5c0-.966.784-1.75 1.75-1.75z"/><path stroke-linecap="round" stroke-linejoin="round" d="M14 4v4h4"/></svg>',
+  image:
+    '<svg class="icon-xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><circle cx="9" cy="10" r="1.5"/><path stroke-linecap="round" stroke-linejoin="round" d="M7 17l4.25-4.25a1.5 1.5 0 012.12 0L18 17"/></svg>',
+  paperclip:
+    '<svg class="icon-xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M20 11.5l-8.25 8.25a5 5 0 01-7.07-7.07l9-9a3.25 3.25 0 114.6 4.6l-9.1 9.1a1.5 1.5 0 01-2.12-2.12L15.5 6.8"/></svg>',
   x:
     '<svg class="icon-xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>',
   pin:

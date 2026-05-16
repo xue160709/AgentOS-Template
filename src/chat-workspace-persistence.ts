@@ -1,4 +1,5 @@
 import type { ChatState, ChatWorkspaceState, WorkspaceProject, WorkspaceThread } from './components/types'
+import type { ChatMessageAttachment } from './components/types'
 
 export const CHAT_WORKSPACE_STORAGE_KEY = 'CodeX-UI-Template-chat-workspace-v1'
 const LEGACY_CHAT_STATE_STORAGE_KEY = 'CodeX-UI-Template-chat-state-v1'
@@ -84,13 +85,6 @@ export function createDefaultChatWorkspaceState(): ChatWorkspaceState {
         createdAt: now - 1000 * 60 * 60,
         updatedAt: now,
       },
-      {
-        id: 'project-design-system',
-        name: 'Design System',
-        path: '~/Projects/design-system',
-        createdAt: now - 1000 * 60 * 45,
-        updatedAt: now - 1000 * 60 * 15,
-      },
     ],
     threads: [
       {
@@ -100,14 +94,6 @@ export function createDefaultChatWorkspaceState(): ChatWorkspaceState {
         createdAt: now,
         updatedAt: now,
         chatState: legacyChatState,
-      },
-      {
-        id: 'thread-sidebar-plan',
-        projectId: 'project-design-system',
-        title: '侧边栏交互梳理',
-        createdAt: now - 1000 * 60 * 35,
-        updatedAt: now - 1000 * 60 * 35,
-        chatState: createEmptyChatState(),
       },
     ],
   }
@@ -219,6 +205,7 @@ function normalizeTranscriptItem(value: unknown): ChatState['items'] {
           value.status === 'streaming' || value.status === 'error' || value.status === 'cancelled'
             ? value.status
             : 'done',
+        attachments: normalizeMessageAttachments(value.attachments),
       },
     ]
   }
@@ -268,6 +255,28 @@ function normalizeTranscriptItem(value: unknown): ChatState['items'] {
   }
 
   return []
+}
+
+function normalizeMessageAttachments(value: unknown): ChatMessageAttachment[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const attachments = value
+    .map((item): ChatMessageAttachment | undefined => {
+      if (!isRecord(item) || typeof item.id !== 'string' || typeof item.name !== 'string') return undefined
+      const kind = item.kind === 'image' || item.kind === 'text' ? item.kind : undefined
+      if (!kind) return undefined
+      return {
+        id: item.id,
+        kind,
+        name: item.name,
+        path: typeof item.path === 'string' ? item.path : '',
+        mimeType: typeof item.mimeType === 'string' ? item.mimeType : '',
+        size: toFiniteNumber(item.size, 0),
+        preview: typeof item.preview === 'string' ? item.preview : undefined,
+        dataUrl: typeof item.dataUrl === 'string' ? item.dataUrl : undefined,
+      }
+    })
+    .filter((item): item is ChatMessageAttachment => Boolean(item))
+  return attachments.length ? attachments : undefined
 }
 
 function toFiniteNumber(value: unknown, fallback: number): number {

@@ -2,10 +2,19 @@ import type { WebContents } from 'electron'
 import { randomUUID } from 'node:crypto'
 import os from 'node:os'
 import path from 'node:path'
-import { query, type CanUseTool, type PermissionMode, type PermissionResult, type Query, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
+import {
+  query,
+  type CanUseTool,
+  type PermissionMode,
+  type PermissionResult,
+  type Query,
+  type SDKMessage,
+  type SDKUserMessage,
+} from '@anthropic-ai/claude-agent-sdk'
 import type {
   ClaudeAskUserQuestion,
   ClaudeAgentResolvedConfig,
+  ClaudeChatAttachment,
   ClaudeChatEvent,
   ClaudeChatSubmitPayload,
   ClaudeChatSubmitResult,
@@ -33,6 +42,10 @@ type ActiveRequest = {
 
 const READ_ONLY_AUTO_ALLOWED_TOOLS = ['Read', 'Glob', 'Grep', 'ListMcpResources', 'ReadMcpResource']
 const DEFAULT_AGENT_TOOLS = { type: 'preset', preset: 'claude_code' } as const
+const SUPPORTED_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp'])
+
+type SupportedImageMimeType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
+type SDKUserMessageContent = Exclude<SDKUserMessage['message']['content'], string>
 
 type PendingPermissionRequest = {
   requestId: string
@@ -71,10 +84,11 @@ export class ClaudeAgentRunner {
 
   submit(payload: ClaudeChatSubmitPayload): ClaudeChatSubmitResult {
     const text = payload.text.trim()
+    const attachments = normalizeSubmitAttachments(payload.attachments)
     const requestId = randomUUID()
     const threadId = this.normalizeThreadId(payload.threadId)
 
-    if (!text) {
+    if (!text && attachments.length === 0) {
       this.emit({
         type: 'error',
         requestId,
@@ -105,7 +119,7 @@ export class ClaudeAgentRunner {
     }
 
     this.activeRequest = activeRequest
-    void this.run(text, activeRequest)
+    void this.run(text, attachments, activeRequest)
 
     return { requestId }
   }
@@ -167,7 +181,7 @@ export class ClaudeAgentRunner {
     })
   }
 
-  private async run(prompt: string, activeRequest: ActiveRequest): Promise<void> {
+  private async run(prompt: string, attachments: ClaudeChatAttachment[], activeRequest: ActiveRequest): Promise<void> {
     const config = this.resolveConfig()
     const threadState = this.getThreadRuntimeState(activeRequest.threadId)
     const nextConfigSignature = getConfigSignature(config)
@@ -190,11 +204,48 @@ export class ClaudeAgentRunner {
       return
     }
 
+    const imageAttachmentCount = attachments.filter((attachment) => attachment.kind === 'image').length
+    if (imageAttachmentCount > 0 && !config.supportsImages) {
+      this.emit({
+        type: 'error',
+        requestId: activeRequest.requestId,
+        code: 'image_input_disabled',
+        message: '当前模型未开启图片输入。请在设置 · 模型中为该模型打开图片开关。',
+      })
+      this.finish(activeRequest)
+      return
+    }
+
     try {
       const runtimeContext = await buildRuntimeContext(activeRequest.cwd)
       const resolvedPrompt = await resolvePromptWithContext(prompt, runtimeContext.catalog)
+      const promptInput = buildSdkPromptInput(resolvedPrompt, attachments)
+      const sdkEnv = this.buildSdkEnv(config)
+      if (attachments.length > 0) {
+        this.emitActivity(
+          activeRequest,
+          'user-attachments',
+          '已添加附件',
+          'done',
+          joinDetails([
+            `${attachments.length} 个文件`,
+            imageAttachmentCount ? `${imageAttachmentCount} 张图片` : '',
+          ]),
+          attachments.map((attachment) => `${attachment.kind}: ${attachment.name}`).join('\n'),
+        )
+      }
+      console.info('[ClaudeAgentRunner] starting SDK query', {
+        requestId: activeRequest.requestId,
+        threadId: activeRequest.threadId,
+        cwd: activeRequest.cwd,
+        permissionMode: activeRequest.permissionMode,
+        attachmentCount: attachments.length,
+        imageAttachmentCount,
+        config: summarizeConfigForLog(config),
+        sdkEnv: summarizeSdkEnvForLog(sdkEnv),
+      })
       const response = query({
-        prompt: resolvedPrompt,
+        prompt: promptInput,
         options: {
           abortController: activeRequest.abortController,
           agents: runtimeContext.agents,
@@ -202,14 +253,20 @@ export class ClaudeAgentRunner {
           allowedTools: READ_ONLY_AUTO_ALLOWED_TOOLS,
           canUseTool: (toolName, input, options) => this.handleCanUseTool(activeRequest, toolName, input, options),
           cwd: activeRequest.cwd,
-          env: this.buildSdkEnv(config),
+          env: sdkEnv,
           forwardSubagentText: true,
           includeHookEvents: true,
           includePartialMessages: true,
-          model: config.model || undefined,
+          // Third-party Anthropic-compatible endpoints such as SiliconFlow expect
+          // custom models through ANTHROPIC_MODEL. Passing options.model makes
+          // Claude Code treat the value as its own model flag and can trigger
+          // false "model does not exist" errors.
           permissionMode: toSdkPermissionMode(activeRequest.permissionMode),
           resume: threadState.sessionId,
-          settingSources: ['user', 'project', 'local'],
+          // Keep this app's provider settings authoritative. Claude Code user or
+          // project settings may contain another model (for example glm-5.1) and
+          // otherwise override the model shown in this UI.
+          settingSources: [],
           skills: 'all',
           systemPrompt: runtimeContext.appendSystemPrompt
             ? { type: 'preset', preset: 'claude_code', append: runtimeContext.appendSystemPrompt }
@@ -229,6 +286,11 @@ export class ClaudeAgentRunner {
       }
     } catch (error) {
       if (!activeRequest.cancelled) {
+        console.error('[ClaudeAgentRunner] SDK query failed', {
+          requestId: activeRequest.requestId,
+          config: summarizeConfigForLog(config),
+          error: summarizeErrorForLog(error),
+        })
         this.emit({
           type: 'error',
           requestId: activeRequest.requestId,
@@ -869,10 +931,173 @@ function getConfigSignature(config: ClaudeAgentResolvedConfig): string {
     config.authToken,
     config.baseUrl,
     config.model,
+    config.supportsImages,
     config.defaultHaikuModel,
     config.defaultOpusModel,
     config.defaultSonnetModel,
   ])
+}
+
+function summarizeConfigForLog(config: ClaudeAgentResolvedConfig): Record<string, unknown> {
+  return {
+    configSource: config.configSource,
+    hasApiKey: Boolean(config.apiKey),
+    apiKey: redactSecret(config.apiKey),
+    hasAuthToken: Boolean(config.authToken),
+    authToken: redactSecret(config.authToken),
+    baseUrl: config.baseUrl,
+    model: config.model,
+    supportsImages: config.supportsImages,
+    defaultHaikuModel: config.defaultHaikuModel,
+    defaultSonnetModel: config.defaultSonnetModel,
+    defaultOpusModel: config.defaultOpusModel,
+  }
+}
+
+function summarizeSdkEnvForLog(env: Record<string, string | undefined>): Record<string, unknown> {
+  return {
+    ANTHROPIC_BASE_URL: env.ANTHROPIC_BASE_URL,
+    ANTHROPIC_MODEL: env.ANTHROPIC_MODEL,
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: env.ANTHROPIC_DEFAULT_HAIKU_MODEL,
+    ANTHROPIC_DEFAULT_SONNET_MODEL: env.ANTHROPIC_DEFAULT_SONNET_MODEL,
+    ANTHROPIC_DEFAULT_OPUS_MODEL: env.ANTHROPIC_DEFAULT_OPUS_MODEL,
+    hasAnthropicApiKey: Boolean(env.ANTHROPIC_API_KEY),
+    ANTHROPIC_API_KEY: redactSecret(env.ANTHROPIC_API_KEY ?? ''),
+    hasAnthropicAuthToken: Boolean(env.ANTHROPIC_AUTH_TOKEN),
+    ANTHROPIC_AUTH_TOKEN: redactSecret(env.ANTHROPIC_AUTH_TOKEN ?? ''),
+  }
+}
+
+function summarizeErrorForLog(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) {
+    const maybeCause = (error as Error & { cause?: unknown }).cause
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      cause: maybeCause instanceof Error ? { name: maybeCause.name, message: maybeCause.message } : maybeCause,
+    }
+  }
+  return { value: String(error) }
+}
+
+function redactSecret(value: string): string {
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+  if (trimmed.length <= 8) return `***(${trimmed.length})`
+  return `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}(${trimmed.length})`
+}
+
+function normalizeSubmitAttachments(value: unknown): ClaudeChatAttachment[] {
+  if (!Array.isArray(value)) return []
+  const attachments: ClaudeChatAttachment[] = []
+  for (const item of value) {
+    if (!isRecord(item) || typeof item.id !== 'string' || typeof item.name !== 'string') continue
+    const base = {
+      id: item.id,
+      name: item.name,
+      path: typeof item.path === 'string' ? item.path : '',
+      mimeType: typeof item.mimeType === 'string' ? item.mimeType : '',
+      size: typeof item.size === 'number' && Number.isFinite(item.size) ? item.size : 0,
+      preview: typeof item.preview === 'string' ? item.preview : undefined,
+      dataUrl: typeof item.dataUrl === 'string' ? item.dataUrl : undefined,
+    }
+
+    if (item.kind === 'text' && typeof item.text === 'string') {
+      attachments.push({
+        ...base,
+        kind: 'text',
+        text: item.text,
+      })
+      continue
+    }
+
+    if (
+      item.kind === 'image' &&
+      typeof item.base64 === 'string' &&
+      SUPPORTED_IMAGE_MIME_TYPES.has(base.mimeType)
+    ) {
+      attachments.push({
+        ...base,
+        kind: 'image',
+        mimeType: base.mimeType as SupportedImageMimeType,
+        base64: item.base64,
+      })
+    }
+  }
+  return attachments
+}
+
+function buildSdkPromptInput(prompt: string, attachments: ClaudeChatAttachment[]): string | AsyncIterable<SDKUserMessage> {
+  if (attachments.length === 0) return prompt
+  const content = buildSdkUserContent(prompt, attachments)
+  return singleUserMessage(content)
+}
+
+function buildSdkUserContent(prompt: string, attachments: ClaudeChatAttachment[]): SDKUserMessageContent {
+  const content: SDKUserMessageContent = []
+  const trimmedPrompt = prompt.trim()
+  if (trimmedPrompt) {
+    content.push({ type: 'text', text: trimmedPrompt })
+  }
+
+  for (const attachment of attachments) {
+    if (attachment.kind === 'text' && attachment.text != null) {
+      content.push({
+        type: 'text',
+        text: formatTextAttachmentForPrompt(attachment),
+      })
+      continue
+    }
+
+    if (attachment.kind === 'image' && attachment.base64 && isSupportedImageMimeType(attachment.mimeType)) {
+      content.push({
+        type: 'text',
+        text: `Attached image: ${attachment.name}${attachment.path ? `\nPath: ${attachment.path}` : ''}`,
+      })
+      content.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: attachment.mimeType,
+          data: attachment.base64,
+        },
+      })
+    }
+  }
+
+  if (content.length === 0) {
+    content.push({ type: 'text', text: '请阅读这些附件。' })
+  }
+  return content
+}
+
+async function* singleUserMessage(content: SDKUserMessageContent): AsyncGenerator<SDKUserMessage> {
+  yield {
+    type: 'user',
+    message: {
+      role: 'user',
+      content,
+    },
+    parent_tool_use_id: null,
+  }
+}
+
+function formatTextAttachmentForPrompt(attachment: ClaudeChatAttachment): string {
+  const header = [
+    'Attached text file:',
+    `Name: ${attachment.name}`,
+    attachment.path ? `Path: ${attachment.path}` : '',
+    attachment.mimeType ? `MIME: ${attachment.mimeType}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n')
+
+  return `${header}\n\n${attachment.text ?? ''}`
+}
+
+function isSupportedImageMimeType(value: string): value is SupportedImageMimeType {
+  return SUPPORTED_IMAGE_MIME_TYPES.has(value)
 }
 
 function extractTextFromContent(content: unknown): string {

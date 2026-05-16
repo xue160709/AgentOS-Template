@@ -1,4 +1,4 @@
-import type { AgentContextSlashItem } from '../claude-chat-types'
+import type { AgentContextSlashItem, ClaudeChatAttachmentKind } from '../claude-chat-types'
 
 export type AppViewId = 'home' | 'docs' | 'settings'
 
@@ -16,6 +16,18 @@ export type ChatMessageItem = {
   role: 'user' | 'assistant'
   content: string
   status: MessageStatus
+  attachments?: ChatMessageAttachment[]
+}
+
+export type ChatMessageAttachment = {
+  id: string
+  kind: ClaudeChatAttachmentKind
+  name: string
+  path: string
+  mimeType: string
+  size: number
+  preview?: string
+  dataUrl?: string
 }
 
 export type ChatToolItem = {

@@ -19,6 +19,7 @@ import type {
   AgentContextSlashItem,
   AgentContextSource,
   ClaudeAskUserQuestion,
+  ClaudeChatAttachment,
   ClaudeAgentModelProvider,
   ClaudeAgentSettings,
   ClaudeAgentSettingsSnapshot,
@@ -31,6 +32,7 @@ import { useI18n } from '../i18n/i18n'
 import type {
   ActivityStatus,
   ChatActivityItem,
+  ChatMessageAttachment,
   ChatMessageItem,
   ChatState,
   ChatThinkingItem,
@@ -48,6 +50,7 @@ marked.setOptions({
 
 const SETTINGS_CHANGED_EVENT = 'claude-agent-settings:changed'
 const MAX_COMPOSER_SUGGESTIONS = 64
+const MAX_COMPOSER_ATTACHMENTS = 8
 
 export type ChatPageHandle = {
   startNewThread: () => Promise<void>
@@ -78,6 +81,7 @@ type ChatModelMenuRow = {
   providerId: string
   anthropicModelId: string
   useOverlayPick: boolean
+  supportsImages: boolean
   headline: string
   metaLine: string
 }
@@ -387,6 +391,63 @@ function AskUserQuestionBlock({
   )
 }
 
+function ComposerAttachmentPreview({
+  attachment,
+  onRemove,
+}: {
+  attachment: ClaudeChatAttachment
+  onRemove: () => void
+}) {
+  const { t } = useI18n()
+  const label = attachment.kind === 'image' ? t('chat.attachmentImage') : t('chat.attachmentText')
+
+  return (
+    <div className={`composer-attachment composer-attachment--${attachment.kind}`}>
+      <AttachmentThumb attachment={attachment} />
+      <span className="composer-attachment__copy">
+        <span>{attachment.name}</span>
+        <span>{[label, attachment.preview || formatBytes(attachment.size)].filter(Boolean).join(' · ')}</span>
+      </span>
+      <button
+        type="button"
+        className="composer-attachment__remove"
+        title={t('chat.removeAttachment')}
+        aria-label={t('chat.removeAttachment')}
+        onClick={onRemove}
+      >
+        <IconInline name="x" />
+      </button>
+    </div>
+  )
+}
+
+function ChatAttachmentList({ attachments }: { attachments: ChatMessageAttachment[] }) {
+  return (
+    <div className="chat-message-attachments">
+      {attachments.map((attachment) => (
+        <div key={attachment.id} className={`chat-message-attachment chat-message-attachment--${attachment.kind}`}>
+          <AttachmentThumb attachment={attachment} />
+          <span className="chat-message-attachment__copy">
+            <span>{attachment.name}</span>
+            <span>{attachment.preview || formatBytes(attachment.size)}</span>
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function AttachmentThumb({ attachment }: { attachment: ClaudeChatAttachment | ChatMessageAttachment }) {
+  if (attachment.kind === 'image' && attachment.dataUrl) {
+    return <img className="attachment-thumb attachment-thumb--image" src={attachment.dataUrl} alt="" />
+  }
+  return (
+    <span className={`attachment-thumb attachment-thumb--${attachment.kind}`} aria-hidden="true">
+      <IconInline name={attachment.kind === 'image' ? 'image' : 'file'} />
+    </span>
+  )
+}
+
 function ChatMessage({ item }: { item: ChatMessageItem }) {
   const bodyHtml = useMemo(() => {
     if (item.role === 'assistant') {
@@ -398,13 +459,15 @@ function ChatMessage({ item }: { item: ChatMessageItem }) {
   if (item.role === 'assistant' && !item.content.trim() && item.status === 'streaming') return null
 
   const suffix = item.role === 'assistant' && item.status === 'streaming' ? '<span class="typing-dot"></span>' : ''
+  const hasBody = item.content.trim().length > 0 || item.role === 'assistant'
+  const attachments = item.attachments ?? []
 
   return (
     <article className={`chat-message chat-message--${item.role} chat-message--${item.status}`}>
-      <div
-        className="chat-message__bubble markdown-body"
-        dangerouslySetInnerHTML={{ __html: bodyHtml + suffix }}
-      />
+      <div className="chat-message__bubble markdown-body">
+        {attachments.length > 0 ? <ChatAttachmentList attachments={attachments} /> : null}
+        {hasBody ? <div dangerouslySetInnerHTML={{ __html: bodyHtml + suffix }} /> : null}
+      </div>
     </article>
   )
 }
@@ -528,6 +591,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   const [projectPickerOpen, setProjectPickerOpen] = useState(false)
   const [modelMenuRows, setModelMenuRows] = useState<ChatModelMenuRow[]>([])
   const [modelMenuSelectionKey, setModelMenuSelectionKey] = useState('')
+  const [activeModelSupportsImages, setActiveModelSupportsImages] = useState(false)
+  const [pendingAttachments, setPendingAttachments] = useState<ClaudeChatAttachment[]>([])
   const [agentContext, setAgentContext] = useState<AgentContextCatalog | null>(null)
   const [agentContextLoading, setAgentContextLoading] = useState(false)
   const [permissionMode, setPermissionMode] = useState<ClaudePermissionMode>(() => readStoredPermissionMode())
@@ -648,6 +713,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
 
       const model = resolvedChatDisplayModel(settings, t)
       setGlobalDisplayModel(model)
+      setActiveModelSupportsImages(resolvedChatSupportsImages(snapshot))
 
       if (!isRunningRef.current) {
         onStatusChange(compactModelName(model, t))
@@ -663,6 +729,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     setShowScrollButton(false)
     setModelPickerOpen(false)
     setProjectPickerOpen(false)
+    setPendingAttachments([])
 
     window.claudeChat?.getSettings().then(applyGlobalModelFromSettings).catch(() => {
       /* Browser preview can run without the Electron bridge. */
@@ -1339,9 +1406,17 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     }
   }, [handleClaudeEvent])
 
-  const submitPrompt = async (rawText: string, target?: SubmitPromptTarget) => {
+  const submitPrompt = async (
+    rawText: string,
+    target?: SubmitPromptTarget,
+    attachmentsForSubmit: ClaudeChatAttachment[] = [],
+  ) => {
     const text = rawText.trim()
-    if (!text || isRunningRef.current) return
+    if ((!text && attachmentsForSubmit.length === 0) || isRunningRef.current) return
+    if (attachmentsForSubmit.some((attachment) => attachment.kind === 'image') && !activeModelSupportsImages) {
+      onStatusChange(t('chat.imageInputDisabledStatus'))
+      return
+    }
     const submittingThreadId = target?.threadId ?? activeThreadIdRef.current
     const projectForSubmit =
       target?.project ?? projects.find((project) => project.id === activeThread.projectId) ?? activeProject
@@ -1352,6 +1427,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       role: 'user',
       content: text,
       status: 'done',
+      attachments: attachmentsForSubmit.map(toChatMessageAttachment),
     }
 
     scrollIntentRef.current = 'force-bottom'
@@ -1361,6 +1437,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       items: [...prev.items, userMessage],
     }))
     setInputValue('')
+    if (!target?.threadId) setPendingAttachments([])
     setIsRunning(true)
     isRunningRef.current = true
     activeAssistantMessageIdRef.current = undefined
@@ -1391,6 +1468,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     try {
       const { requestId } = await window.claudeChat.submit({
         text,
+        attachments: attachmentsForSubmit,
         threadId: submittingThreadId,
         cwd: projectForSubmit.path,
         permissionMode,
@@ -1474,6 +1552,40 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     })
   }
 
+  const addComposerAttachments = async () => {
+    const pickChatAttachments = window.desktop?.pickChatAttachments
+    if (!pickChatAttachments || isRunningRef.current) {
+      if (!pickChatAttachments) onStatusChange(t('chat.attachmentPickerUnavailable'))
+      return
+    }
+
+    const result = await pickChatAttachments({ allowImages: activeModelSupportsImages })
+    if (!result.ok) {
+      onStatusChange(result.message)
+      return
+    }
+
+    if (result.attachments.length > 0) {
+      setPendingAttachments((current) => {
+        const byPath = new Map(current.map((attachment) => [attachment.path, attachment]))
+        for (const attachment of result.attachments) {
+          if (byPath.size >= MAX_COMPOSER_ATTACHMENTS && !byPath.has(attachment.path)) break
+          byPath.set(attachment.path, attachment)
+        }
+        return [...byPath.values()].slice(0, MAX_COMPOSER_ATTACHMENTS)
+      })
+    }
+
+    if (result.skipped.length > 0) {
+      const first = result.skipped[0]
+      onStatusChange(t('chat.attachmentSkipped', { name: first.name, reason: first.reason }))
+    }
+  }
+
+  const removeComposerAttachment = (attachmentId: string) => {
+    setPendingAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId))
+  }
+
   const syncComposerSelection = useCallback(() => {
     const input = chatInputRef.current
     if (!input) return
@@ -1503,7 +1615,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   const handleFormSubmit = (event: FormEvent) => {
     event.preventDefault()
     if (isRunningRef.current) return
-    void submitPrompt(inputValue)
+    void submitPrompt(inputValue, undefined, pendingAttachments)
   }
 
   const handleSendClick = (event: React.MouseEvent) => {
@@ -1538,10 +1650,13 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
 
     if (event.key !== 'Enter' || event.shiftKey || isComposingText) return
     event.preventDefault()
-    if (!isRunningRef.current) void submitPrompt(inputValue)
+    if (!isRunningRef.current) void submitPrompt(inputValue, undefined, pendingAttachments)
   }
 
   const hasSendText = inputValue.trim().length > 0
+  const hasComposerAttachments = pendingAttachments.length > 0
+  const hasUnsupportedImageAttachment =
+    !activeModelSupportsImages && pendingAttachments.some((attachment) => attachment.kind === 'image')
 
   return (
     <section
@@ -1580,6 +1695,17 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       </button>
       <div className="chat-composer-wrap no-drag">
         <form className="chat-composer" id="chat-form" onSubmit={handleFormSubmit}>
+          {pendingAttachments.length > 0 ? (
+            <div className="composer-attachments" aria-label={t('chat.attachmentsAria')}>
+              {pendingAttachments.map((attachment) => (
+                <ComposerAttachmentPreview
+                  key={attachment.id}
+                  attachment={attachment}
+                  onRemove={() => removeComposerAttachment(attachment.id)}
+                />
+              ))}
+            </div>
+          ) : null}
           <textarea
             ref={chatInputRef}
             className="chat-input"
@@ -1640,6 +1766,16 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
             : null}
           <div className="composer-footer">
             <div className="composer-actions">
+              <button
+                type="button"
+                className="composer-icon-button"
+                title={activeModelSupportsImages ? t('chat.addAttachmentTitle') : t('chat.addTextAttachmentTitle')}
+                aria-label={activeModelSupportsImages ? t('chat.addAttachmentAria') : t('chat.addTextAttachmentAria')}
+                disabled={isRunning}
+                onClick={() => void addComposerAttachments()}
+              >
+                <IconInline name="paperclip" />
+              </button>
               <div className="composer-mode-picker" ref={permissionModePickerRef}>
                 <button
                   ref={permissionModePopoverAnchorRef}
@@ -1747,7 +1883,18 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
                               title={row.metaLine || undefined}
                               onClick={() => void pickChatMenuRow(row)}
                             >
-                              <span className="composer-model-option__label">{row.headline}</span>
+                              <span className="composer-model-option__label">
+                                <span>{row.headline}</span>
+                                {row.supportsImages ? (
+                                  <span
+                                    className="composer-model-option__capability"
+                                    title={t('chat.modelSupportsImages')}
+                                    aria-label={t('chat.modelSupportsImages')}
+                                  >
+                                    <IconInline name="image" />
+                                  </span>
+                                ) : null}
+                              </span>
                               <span className="composer-model-option__meta">{row.metaLine}</span>
                             </button>
                           )
@@ -1766,9 +1913,9 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
                 type="submit"
                 className="composer-send-button"
                 id="btn-send"
-                title={isRunning ? t('chat.stop') : t('chat.send')}
+                title={isRunning ? t('chat.stop') : hasUnsupportedImageAttachment ? t('chat.imageInputDisabledTitle') : t('chat.send')}
                 aria-label={isRunning ? t('chat.stop') : t('chat.send')}
-                disabled={!isRunning && !hasSendText}
+                disabled={!isRunning && ((!hasSendText && !hasComposerAttachments) || hasUnsupportedImageAttachment)}
                 onClick={handleSendClick}
               >
                 <IconInline name={isRunning ? 'stop' : 'send'} />
@@ -1994,6 +2141,26 @@ function formatFileMention(relativePath: string): string {
   return `@"${relativePath.replace(/"/g, '\\"')}"`
 }
 
+function toChatMessageAttachment(attachment: ClaudeChatAttachment): ChatMessageAttachment {
+  return {
+    id: attachment.id,
+    kind: attachment.kind,
+    name: attachment.name,
+    path: attachment.path,
+    mimeType: attachment.mimeType,
+    size: attachment.size,
+    preview: attachment.preview,
+    dataUrl: attachment.dataUrl,
+  }
+}
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return ''
+  if (bytes < 1024) return `${Math.round(bytes)} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)} MB`
+}
+
 function formatContextScope(scope: 'user' | 'project', t: (path: string, vars?: Record<string, string | number>) => string): string {
   return scope === 'user' ? t('chat.scopeUser') : t('chat.scopeProject')
 }
@@ -2081,6 +2248,18 @@ function resolvedChatDisplayModel(
   return provider.model.trim() || provider.name.trim() || t('chat.modelFallback')
 }
 
+function resolvedChatSupportsImages(snapshot: ClaudeAgentSettingsSnapshot): boolean {
+  const settings = snapshot.settings
+  if (settings.configSource === 'env') return snapshot.env.supportsImages
+  const provider =
+    settings.providers.find((item) => item.id === settings.activeProviderId) ?? settings.providers[0]
+  if (!provider) return false
+  const overlay = settings.activeAnthropicModel?.trim() ?? ''
+  const primary = provider.model.trim()
+  const model = overlay && providerAcceptsAnthropicId(provider, overlay) ? overlay : primary || snapshot.env.model
+  return providerSupportsImagesForModel(provider, model, snapshot.env.supportsImages)
+}
+
 function pickerSelectionKeyFromSettings(
   settings: ClaudeAgentSettings,
   t: (path: string, vars?: Record<string, string | number>) => string,
@@ -2102,7 +2281,7 @@ function buildChatModelMenuRows(
     const seen = new Set<string>()
     const base = providerMenuSubtitle(p)
 
-    const add = (raw: string, slotLabel: string, useOverlayPick: boolean) => {
+    const add = (raw: string, slotLabel: string, useOverlayPick: boolean, supportsImages: boolean) => {
       const mid = raw.trim()
       if (!mid || seen.has(mid)) return
       seen.add(mid)
@@ -2111,18 +2290,36 @@ function buildChatModelMenuRows(
         providerId: p.id,
         anthropicModelId: mid,
         useOverlayPick,
+        supportsImages,
         headline: compactModelName(mid, t),
         metaLine: [base || null, slotLabel].filter(Boolean).join(' · '),
       })
     }
 
-    add(p.model, slots.primary, false)
-    add(p.defaultHaikuModel, slots.haiku, true)
-    add(p.defaultSonnetModel, slots.sonnet, true)
-    add(p.defaultOpusModel, slots.opus, true)
+    add(p.model, slots.primary, false, providerSupportsImagesForModel(p, p.model, false))
+    add(p.defaultHaikuModel, slots.haiku, true, providerSupportsImagesForModel(p, p.defaultHaikuModel, false))
+    add(p.defaultSonnetModel, slots.sonnet, true, providerSupportsImagesForModel(p, p.defaultSonnetModel, false))
+    add(p.defaultOpusModel, slots.opus, true, providerSupportsImagesForModel(p, p.defaultOpusModel, false))
   }
 
   return rows
+}
+
+function providerSupportsImagesForModel(
+  provider: ClaudeAgentModelProvider,
+  modelId: string,
+  fallback: boolean,
+): boolean {
+  const m = modelId.trim()
+  if (!m) return fallback
+  const matches = [
+    { model: provider.model, supportsImages: provider.modelSupportsImages },
+    { model: provider.defaultHaikuModel, supportsImages: provider.defaultHaikuSupportsImages },
+    { model: provider.defaultSonnetModel, supportsImages: provider.defaultSonnetSupportsImages },
+    { model: provider.defaultOpusModel, supportsImages: provider.defaultOpusSupportsImages },
+  ].filter((row) => row.model.trim() === m)
+  if (!matches.length) return fallback
+  return matches.some((row) => row.supportsImages)
 }
 
 function providerMenuSubtitle(entry: ClaudeAgentModelProvider): string {
