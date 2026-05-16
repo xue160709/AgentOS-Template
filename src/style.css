@@ -2249,19 +2249,25 @@ button.app-file-tree-row {
 
 .chat-project-home {
   width: min(880px, 100%);
-  margin: 0 auto calc(var(--spacing) * 4);
+  margin: 0 auto calc(var(--spacing) * 3);
   text-align: center;
 }
 
+.chat-project-home__below-composer {
+  width: min(920px, calc(100% - var(--spacing) * 10));
+  margin: calc(var(--spacing) * 2.5) auto 0;
+  text-align: left;
+}
+
 .chat-project-home__eyebrow {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   max-width: min(420px, 100%);
   gap: calc(var(--spacing) * 1.5);
-  margin-bottom: calc(var(--spacing) * 2.5);
   color: var(--color-token-text-tertiary);
   font-size: var(--text-sm);
   line-height: 18px;
+  margin-left: 18px;
 }
 
 .chat-project-home__eyebrow > span:last-child {

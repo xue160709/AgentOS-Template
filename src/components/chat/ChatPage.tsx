@@ -39,7 +39,7 @@ import { AgentInputPromptModal, type PendingUserInputPrompt, type UserInputDecis
 import { ChatConversation } from './ChatConversation'
 import { Composer } from './Composer'
 import type { BuiltInSlashCommand, ChatModelMenuRow, ComposerSuggestion, ComposerTrigger, PermissionModeRow } from './local-types'
-import { ProjectHome } from './ProjectHome'
+import { ProjectHome, ProjectHomeEyebrow } from './ProjectHome'
 
 const SETTINGS_CHANGED_EVENT = 'claude-agent-settings:changed'
 const MAX_COMPOSER_SUGGESTIONS = 64
@@ -1213,7 +1213,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
           onScrollToBottom={scrollToBottom}
         />
       ) : (
-        <ProjectHome project={activeProject} />
+        <ProjectHome />
       )}
       <Composer
         inputValue={inputValue}
@@ -1263,6 +1263,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
         onInsertComposerSuggestion={insertComposerSuggestion}
         onPickChatMenuRow={(row) => void pickChatMenuRow(row)}
       />
+      {!hasMessages ? <ProjectHomeEyebrow project={activeProject} /> : null}
       {activeUserInputPrompt
         ? createPortal(
             <AgentInputPromptModal prompt={activeUserInputPrompt} onResolve={(decision) => void resolveActiveUserInputPrompt(decision)} />,
