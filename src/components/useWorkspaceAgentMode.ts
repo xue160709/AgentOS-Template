@@ -1,8 +1,14 @@
+/**
+ * 针对单个项目同步 Agent Mode 状态（IPC + 本地文案）。
+ * Hook syncing Agent Mode flags for one workspace project via desktop IPC.
+ */
+
 import { useCallback, useEffect, useState } from 'react'
 import { useI18n } from '../i18n/i18n'
 import type { AgentModeStatusResult } from '../desktop-types'
 import type { WorkspaceProject } from './types'
 
+/** 读取/切换 Agent Mode，暴露加载态与提示语 / Fetch toggles, loaders, and status copy */
 export function useWorkspaceAgentMode(project: WorkspaceProject) {
   const { t, locale } = useI18n()
   const [enabled, setEnabled] = useState(false)
@@ -104,4 +110,5 @@ export function useWorkspaceAgentMode(project: WorkspaceProject) {
   }
 }
 
+/** Hook 返回值类型别名 / Alias for hook consumer props */
 export type WorkspaceAgentModeState = ReturnType<typeof useWorkspaceAgentMode>

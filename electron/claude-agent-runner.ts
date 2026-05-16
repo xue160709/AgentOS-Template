@@ -30,6 +30,12 @@ import { ClaudeChatEventCoalescer } from './claude-agent-runner/event-coalescer'
 import { buildSdkPromptInput, normalizeSubmitAttachments, resolveWorkspaceCwd } from './claude-agent-runner/input'
 import { ClaudeSdkMessageRouter } from './claude-agent-runner/sdk-message-router'
 
+/**
+ * 主进程内封装 Claude Agent SDK `query`：会话恢复、权限闸门与事件转发。
+ * Main-process facade for Claude Agent SDK `query`: resume, permission gating, and IPC streaming.
+ */
+
+/** 渲染进程订阅聊天事件的 IPC 信道 / IPC channel for streamed chat events to renderer */
 export const CLAUDE_CHAT_EVENT_CHANNEL = 'claude-chat:event'
 
 type ActiveRequest = {
@@ -72,6 +78,7 @@ type StreamBlockState = {
   inputJson: string
 }
 
+/** 驱动单次或并行 Claude Agent 请求并同步到 WebContents / Runs Claude Agent turns and mirrors state to WebContents */
 export class ClaudeAgentRunner {
   private readonly activeRequests = new Map<string, ActiveRequest>()
   private readonly activeRequestIdsByThread = new Map<string, string>()
@@ -95,6 +102,9 @@ export class ClaudeAgentRunner {
     )
   }
 
+  // --- Public API / 对外 API ---
+
+  /** 排队新的用户轮次并在后台启动 SDK / Enqueue a user turn and start SDK query asynchronously */
   submit(payload: ClaudeChatSubmitPayload): ClaudeChatSubmitResult {
     const text = payload.text.trim()
     const attachments = normalizeSubmitAttachments(payload.attachments)
@@ -144,6 +154,7 @@ export class ClaudeAgentRunner {
     return { requestId }
   }
 
+  /** 取消单个请求或全部进行中的请求 / Cancel one request id or every active request */
   async cancel(requestId?: string): Promise<void> {
     if (requestId) {
       const activeRequest = this.activeRequests.get(requestId)
@@ -170,6 +181,7 @@ export class ClaudeAgentRunner {
     })
   }
 
+  /** 重置线程会话状态（新对话）/ Reset persisted session state for a thread */
   async newThread(threadId?: string): Promise<void> {
     const normalizedThreadId = this.normalizeThreadId(threadId)
     if (!threadId) {
@@ -181,6 +193,7 @@ export class ClaudeAgentRunner {
     this.threadRuntimeStates.delete(normalizedThreadId)
   }
 
+  /** 响应 UI 对权限或 AskUserQuestion 的决定 / Apply renderer decision for tool permission prompts */
   async answerPermissionRequest(payload: ClaudePermissionResponsePayload): Promise<void> {
     const pending = this.pendingPermissionRequests.get(payload.permissionRequestId)
     if (!pending) return
@@ -213,6 +226,8 @@ export class ClaudeAgentRunner {
       detail: payload.message || '用户已拒绝',
     })
   }
+
+  // --- SDK query lifecycle / SDK 查询生命周期 ---
 
   private async run(prompt: string, attachments: ClaudeChatAttachment[], activeRequest: ActiveRequest): Promise<void> {
     const config = this.resolveConfig()
@@ -349,6 +364,8 @@ export class ClaudeAgentRunner {
     }
   }
 
+  // --- Tool permission gating / 工具权限闸门 ---
+
   private async handleCanUseTool(
     activeRequest: ActiveRequest,
     toolName: string,
@@ -459,6 +476,8 @@ export class ClaudeAgentRunner {
     })
   }
 
+  // --- IPC emission / IPC 发送 ---
+
   private emit(event: ClaudeChatEvent): void {
     if (this.webContents.isDestroyed()) return
     const threadId = event.threadId ?? this.activeRequests.get(event.requestId)?.threadId
@@ -484,6 +503,8 @@ export class ClaudeAgentRunner {
   }
 
 }
+
+// --- Module helpers / 模块内工具 ---
 
 function joinDetails(parts: Array<string | undefined | null | false>): string | undefined {
   const text = parts.filter((part): part is string => typeof part === 'string' && part.trim().length > 0).join(' · ')

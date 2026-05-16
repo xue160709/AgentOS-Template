@@ -1,3 +1,8 @@
+/**
+ * Claude Agent 多提供商模型配置 UI。
+ * Multi-provider Claude Agent credentials UI backed by `claudeChat.getSettings`.
+ */
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   ClaudeAgentConfigSource,
@@ -9,6 +14,8 @@ import { IconInline } from '../../icon-inline'
 import { getInitialLocale, translate, useI18n } from '../../i18n/i18n'
 
 const SETTINGS_CHANGED_EVENT = 'claude-agent-settings:changed'
+
+// --- Snapshot helpers / 快照辅助 ---
 
 function cloneSettingsSnapshot(snapshot: ClaudeAgentSettingsSnapshot): ClaudeAgentSettingsSnapshot {
   return JSON.parse(JSON.stringify(snapshot)) as ClaudeAgentSettingsSnapshot
@@ -30,11 +37,14 @@ function isSettingsDirty(
 
 type EditableProviderField = Exclude<keyof ClaudeAgentModelProvider, 'id'>
 
+// --- Settings page / 模型设置页面 ---
+
+/** `#settings/general` Claude Agent UI / Claude credentials UI route */
 export function ClaudeAgentSettingsPage() {
   const { t } = useI18n()
   const [configSource, setConfigSource] = useState<ClaudeAgentConfigSource>('settings')
   const [providers, setProviders] = useState<ClaudeAgentModelProvider[]>(() => [createModelProvider()])
-  /** 展开的手风琴面板；与聊天使用的条目无关 */
+  /** 手风琴展开 id（编辑 UX）；非聊天激活条目 / Accordion UX id not tied to chat-active provider */
   const [expandedProviderId, setExpandedProviderId] = useState('')
   /** 持久化字段：与聊天输入框模型菜单一致，保存设置时不得被「编辑中」条目覆盖 */
   const [chatActiveProviderId, setChatActiveProviderId] = useState('')

@@ -7,21 +7,33 @@ import type {
   WorkspaceThread,
 } from './components/types'
 
+/**
+ * 聊天工作区 localStorage + Electron 双写与迁移归一化逻辑。
+ * Dual-write chat workspace state (localStorage + Electron) with normalization helpers.
+ */
+
+// --- Factories & selectors / 默认值与查询 ---
+
+/** localStorage 主键（桌面端另有 JSON 文件）/ Primary storage key; Electron mirrors JSON file */
 export const CHAT_WORKSPACE_STORAGE_KEY = 'CodeX-UI-Template-chat-workspace-v1'
 const LEGACY_CHAT_STATE_STORAGE_KEY = 'CodeX-UI-Template-chat-state-v1'
 
+/** 新建空 ChatState / Fresh chat transcript shell */
 export function createEmptyChatState(): ChatState {
   return { model: 'Claude Agent', items: [] }
 }
 
+/** 生成带前缀的稳定随机 id / Stable-ish random id with prefix */
 export function createId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
 
+/** 新建侧栏偏好默认值 / Default sidebar prefs */
 export function createDefaultSidebarPrefs(): WorkspaceSidebarPrefs {
   return { collapsed: false, collapsedProjectIds: [] }
 }
 
+/** 某项目下最新未归档线程 / Latest non-archived thread for project */
 export function latestVisibleThreadForProject(
   state: ChatWorkspaceState,
   projectId: string,
@@ -31,6 +43,9 @@ export function latestVisibleThreadForProject(
     .sort((a, b) => b.updatedAt - a.updatedAt)[0]
 }
 
+// --- Persistence IO / 持久化读写 ---
+
+/** 合并 Electron 与本地缓存加载工作区 / Load workspace preferring Electron then local fallback */
 export async function loadChatWorkspaceState(): Promise<ChatWorkspaceState> {
   const fromLocal = loadChatWorkspaceFromLocalStorage()
 
@@ -52,6 +67,7 @@ export async function loadChatWorkspaceState(): Promise<ChatWorkspaceState> {
   return fromLocal ?? createDefaultChatWorkspaceState()
 }
 
+/** 写入 localStorage 并尽力同步主进程 / Persist locally and best-effort mirror to main */
 export async function persistChatWorkspaceState(state: ChatWorkspaceState): Promise<void> {
   try {
     localStorage.setItem(CHAT_WORKSPACE_STORAGE_KEY, JSON.stringify(state))
@@ -79,6 +95,7 @@ function loadChatWorkspaceFromLocalStorage(): ChatWorkspaceState | null {
   return null
 }
 
+/** 首次启动默认项目与欢迎线程 / Seed workspace for first launch */
 export function createDefaultChatWorkspaceState(): ChatWorkspaceState {
   const now = Date.now()
   const activeProjectId = 'project-codex-ui-template'
@@ -131,6 +148,9 @@ function normalizeSidebarPrefs(value: unknown, projectIds: Set<string>): Workspa
   return { collapsed, collapsedProjectIds }
 }
 
+// --- Normalization / 状态规范化 ---
+
+/** 将未知 JSON 负载清洗为 ChatWorkspaceState / Coerce arbitrary JSON into workspace state */
 export function normalizeChatWorkspaceState(value: unknown): ChatWorkspaceState {
   if (!isRecord(value) || !Array.isArray(value.projects) || !Array.isArray(value.threads)) {
     return createDefaultChatWorkspaceState()
@@ -284,6 +304,8 @@ function normalizeTranscriptItem(value: unknown): ChatState['items'] {
 
   return []
 }
+
+// --- Module helpers / 模块内工具 ---
 
 function normalizeMessageAttachments(value: unknown): ChatMessageAttachment[] | undefined {
   if (!Array.isArray(value)) return undefined

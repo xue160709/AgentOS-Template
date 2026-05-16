@@ -1,3 +1,8 @@
+/**
+ * 将 Claude Agent SDK 消息路由为 `ClaudeChatEvent` 流。
+ * Map Claude Agent SDK messages into renderer-facing `ClaudeChatEvent`s.
+ */
+
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { ClaudeChatEvent } from '../../src/claude-chat-types'
 
@@ -25,6 +30,7 @@ type ActiveRequest = {
   streamBlocks: Map<number, StreamBlockState>
 }
 
+/** SDK → UI 事件适配层 / Adapter translating SDK stream into UI events */
 export class ClaudeSdkMessageRouter {
   constructor(
     private readonly emit: (event: ClaudeChatEvent) => void,

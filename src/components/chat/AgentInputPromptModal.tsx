@@ -1,12 +1,19 @@
+/**
+ * Agent AskUserQuestion 与权限弹窗覆层。
+ * Modal/backdrop stack for AskUserQuestion prompts and tool permission flows.
+ */
+
 import { useEffect, useState } from 'react'
 import type { ClaudeAskUserQuestion, ClaudeChatEvent } from '../../claude-chat-types'
 import { useI18n } from '../../i18n/i18n'
 import { renderMarkdown } from './markdown'
 
+/** 排队中的用户问答或权限提示载荷 / Pending user prompt payloads streamed from main */
 export type PendingUserInputPrompt =
   | Extract<ClaudeChatEvent, { type: 'ask_user_question' }>
   | Extract<ClaudeChatEvent, { type: 'permission_request' }>
 
+/** 用户对 Agent 提问模态的决定 / User modal resolution payload */
 export type UserInputDecision =
   | {
       behavior: 'allow'
@@ -17,6 +24,7 @@ export type UserInputDecision =
       message?: string
     }
 
+/** Agent 权限或问卷对话框主体 / Modal shell rendering markdown-backed prompts */
 export function AgentInputPromptModal({
   prompt,
   onResolve,

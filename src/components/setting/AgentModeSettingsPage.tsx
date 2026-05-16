@@ -1,3 +1,8 @@
+/**
+ * Agent Mode 项目设置：USER/IDENTITY 与脚手架保存。
+ * Agent Mode project panel editing USER/IDENTITY blobs via desktop IPC.
+ */
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { IconInline } from '../../icon-inline'
 import { useI18n } from '../../i18n/i18n'
@@ -8,6 +13,7 @@ type AgentModeSettingsPageProps = {
   project: WorkspaceProject
 }
 
+/** `#settings/agent` 视图 / Agent Mode settings route */
 export function AgentModeSettingsPage({ project }: AgentModeSettingsPageProps) {
   const { t } = useI18n()
   const [user, setUser] = useState('')

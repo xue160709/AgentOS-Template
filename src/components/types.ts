@@ -1,16 +1,32 @@
+/**
+ * 应用壳与聊天工作区的 UI 侧类型（线程、侧栏、文件树等）。
+ * UI-side types for app shell and chat workspace (threads, sidebar, file tree).
+ */
+
 import type { AgentContextSlashItem, ClaudeChatAttachmentKind } from '../claude-chat-types'
 
+/** 顶部主导航视图 / Primary shell view id */
 export type AppViewId = 'home' | 'docs' | 'settings'
 
-/** Settings 侧栏 `#settings/<id>`，与 Codex 分组导航对齐 */
+/** 设置页侧栏路由 `#settings/<id>` / Settings sidebar route fragment `#settings/<id>` */
 export type SettingsCategoryId = 'general' | 'skills' | 'agent'
 
+/** 消息气泡渲染状态 / Chat bubble render status */
 export type MessageStatus = 'done' | 'streaming' | 'error' | 'cancelled'
+
+/** 工具调用卡片状态 / Tool call row status */
 export type ToolStatus = 'running' | 'done' | 'error' | 'denied'
+
+/** 思考链折叠块状态 / Thinking block status */
 export type ThinkingStatus = 'running' | 'done'
+
+/** Agent 活动条状态 / Agent activity chip status */
 export type ActivityStatus = 'running' | 'done' | 'error' | 'info'
+
+/** 会话内 Agent 运行状态 / In-thread agent run status */
 export type ThreadRunStatus = 'running' | 'waiting'
 
+/** 会话中的一条用户或助手消息 / Transcript user or assistant message */
 export type ChatMessageItem = {
   type: 'message'
   id: string
@@ -20,6 +36,7 @@ export type ChatMessageItem = {
   attachments?: ChatMessageAttachment[]
 }
 
+/** 会话消息携带的附件快照 / Attachment snapshot embedded in a transcript message */
 export type ChatMessageAttachment = {
   id: string
   kind: ClaudeChatAttachmentKind
@@ -31,6 +48,7 @@ export type ChatMessageAttachment = {
   dataUrl?: string
 }
 
+/** 工具调用条目 / Tool invocation transcript row */
 export type ChatToolItem = {
   type: 'tool'
   id: string
@@ -41,6 +59,7 @@ export type ChatToolItem = {
   detail?: string
 }
 
+/** 思考过程条目 / Thinking transcript row */
 export type ChatThinkingItem = {
   type: 'thinking'
   id: string
@@ -50,6 +69,7 @@ export type ChatThinkingItem = {
   status: ThinkingStatus
 }
 
+/** Agent 活动条目 / Agent activity transcript row */
 export type ChatActivityItem = {
   type: 'activity'
   id: string
@@ -59,8 +79,10 @@ export type ChatActivityItem = {
   preview?: string
 }
 
+/** 对话时间轴联合类型 / Union of rows shown in the transcript timeline */
 export type TranscriptItem = ChatMessageItem | ChatToolItem | ChatThinkingItem | ChatActivityItem
 
+/** 单线程内的聊天 UI 状态快照 / Per-thread chat UI state snapshot */
 export type ChatState = {
   sessionId?: string
   model: string
@@ -68,42 +90,46 @@ export type ChatState = {
   items: TranscriptItem[]
 }
 
+/** 工作区中的项目卡片 / Workspace project card metadata */
 export type WorkspaceProject = {
   id: string
   name: string
   path: string
   createdAt: number
   updatedAt: number
-  /** 项目置顶排序：越大越靠前（持久化在工作区数据中） */
+  /** 置顶权重：越大越靠前（持久化）/ Pin rank: larger sorts higher (persisted) */
   pinnedAt?: number
 }
 
-/** 侧栏布局与折叠偏好（与 {@link WorkspaceProject.pinnedAt} / {@link WorkspaceThread.pinnedAt} 置顶数据同属工作区持久化） */
+/** 侧栏折叠偏好（与置顶同属工作区持久化）/ Sidebar collapse prefs co-persisted with pins */
 export type WorkspaceSidebarPrefs = {
-  /** 整条侧栏是否收起 */
+  /** 整条侧栏是否收起 / Whether entire sidebar rail is collapsed */
   collapsed: boolean
-  /** 侧栏内收起对话列表的项目 id */
+  /** 在侧栏内折叠对话列表的项目 id / Project ids whose thread lists are collapsed */
   collapsedProjectIds: string[]
 }
 
+/** 工作区对话线程 / Workspace chat thread */
 export type WorkspaceThread = {
   id: string
   projectId: string
   title: string
   createdAt: number
   updatedAt: number
-  /** 对话置顶排序：越大越靠前（持久化在工作区数据中） */
+  /** 置顶权重：越大越靠前（持久化）/ Pin rank: larger sorts higher (persisted) */
   pinnedAt?: number
   archivedAt?: number
   chatState: ChatState
 }
 
+/** 追踪单次 Agent 请求的运行状态 / Tracks one in-flight agent request */
 export type ThreadRunState = {
   requestId: string
   status: ThreadRunStatus
   updatedAt: number
 }
 
+/** 文件树节点（递归）/ Recursive file tree node */
 export type FileTreeNode = {
   name: string
   path: string
@@ -112,6 +138,7 @@ export type FileTreeNode = {
   children?: FileTreeNode[]
 }
 
+/** 读取项目文件树的结果 / Result of loading a project file tree */
 export type FileTreeResult =
   | {
       ok: true
@@ -126,6 +153,7 @@ export type FileTreeResult =
       message: string
     }
 
+/** 完整聊天工作区状态（活动项目/线程与列表）/ Full chat workspace snapshot */
 export type ChatWorkspaceState = {
   activeProjectId: string
   activeThreadId: string
@@ -134,6 +162,7 @@ export type ChatWorkspaceState = {
   sidebarPrefs: WorkspaceSidebarPrefs
 }
 
+/** 某项目的技能列表加载状态 / Loaded slash skills for one project */
 export type ProjectSkillListState = {
   path: string
   loading: boolean
@@ -142,6 +171,7 @@ export type ProjectSkillListState = {
   message?: string
 }
 
+/** 侧栏中选中的技能条目 / Skill entry selected in sidebar */
 export type SelectedProjectSkill = Pick<
   AgentContextSlashItem,
   'title' | 'description' | 'path' | 'relativePath' | 'argumentHint'

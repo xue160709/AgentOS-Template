@@ -1,3 +1,8 @@
+/**
+ * Agent Mode 双开关 UI（嵌入式或弹出层变体）。
+ * Agent Mode toggle cluster for embedded toolbar vs popover layouts.
+ */
+
 import { useI18n } from '../i18n/i18n'
 
 type AgentModeControlsProps = {
@@ -9,6 +14,7 @@ type AgentModeControlsProps = {
   onTodoSwitchChange: (checked: boolean) => void
 }
 
+/** Agent/TODO 开关控件 / Dual switches for Agent Mode + TODO scaffold */
 export function AgentModeControls({
   variant,
   enabled,

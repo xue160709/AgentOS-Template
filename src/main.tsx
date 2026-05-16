@@ -1,3 +1,8 @@
+/**
+ * React 渲染入口：挂载 AppShell、启用窗口安全区监听。
+ * React bootstrap: mount AppShell and subscribe to window safe-area updates.
+ */
+
 import './style.css'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'

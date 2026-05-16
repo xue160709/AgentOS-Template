@@ -1,3 +1,8 @@
+/**
+ * Agent Mode 脚手架：检测缺失文件、生成 AGENT.md 与上下文模板。
+ * Agent Mode scaffolding: detect gaps, generate AGENT.md and supporting templates.
+ */
+
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -19,6 +24,7 @@ const AGENT_MODE_MARKER_END = '<!-- AgentOS Agent Mode: end -->'
 const TODO_MODE_MARKER_START = '<!-- AgentOS TODO Mode: start -->'
 const TODO_MODE_MARKER_END = '<!-- AgentOS TODO Mode: end -->'
 
+/** 扫描 Agent Mode 所需文件是否齐全 / Report Agent Mode readiness for a workspace root */
 export async function getAgentModeStatus(
   rootPath: string,
   settingsStore: AgentModeSettingsStore,
@@ -58,6 +64,7 @@ export async function getAgentModeStatus(
   }
 }
 
+/** 写入或修补 Agent Mode 模板文件 / Ensure Agent Mode template files exist */
 export async function ensureAgentModeFiles(
   rootPath: string,
   settingsStore: AgentModeSettingsStore,
@@ -108,6 +115,7 @@ export async function ensureAgentModeFiles(
   }
 }
 
+/** 切换 Agent/TODO 开关并在启用时补齐文件 / Toggle Agent Mode flags and scaffold when enabling */
 export async function setAgentModeState(
   rootPath: string,
   partial: Partial<Pick<AgentModeProjectSettings, 'enabled' | 'todoEnabled'>>,

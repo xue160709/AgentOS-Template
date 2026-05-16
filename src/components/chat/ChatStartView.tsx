@@ -1,3 +1,8 @@
+/**
+ * 空状态起始卡片网格（快捷提示插入 Composer）。
+ * Empty-state starter grid feeding canned prompts into the composer.
+ */
+
 import type { ReactNode } from 'react'
 import { IconInline } from '../../icon-inline'
 import { useI18n } from '../../i18n/i18n'
@@ -41,6 +46,7 @@ const START_CARDS: StartCard[] = [
   },
 ]
 
+/** 项目主页空状态 / Project home empty rail */
 export function ChatStartView({ project, composer, onUseSuggestion }: ChatStartViewProps) {
   const { t } = useI18n()
 

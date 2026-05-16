@@ -1,3 +1,8 @@
+/**
+ * 设置路由分发器：模型 / 技能 / Agent Mode 子页。
+ * Router component switching settings categories (models, skills, agent mode).
+ */
+
 import { AgentModeSettingsPage } from './AgentModeSettingsPage'
 import { ClaudeAgentSettingsPage } from './ClaudeAgentSettingsPage'
 import { ProjectSkillsSettingsPage } from './ProjectSkillsSettingsPage'
@@ -11,6 +16,7 @@ type SettingsPageProps = {
   onShowProjectSkillsInSidebarChange: (enabled: boolean) => void
 }
 
+/** `#settings/<category>` 容器 / Host for hash-routed settings sections */
 export function SettingsPage({
   hidden,
   settingsCategory,

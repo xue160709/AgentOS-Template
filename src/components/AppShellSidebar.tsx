@@ -1,3 +1,8 @@
+/**
+ * 左侧会话列表、项目切换与设置导航。
+ * Conversation rail listing threads/projects plus settings navigation chrome.
+ */
+
 import {
   useEffect,
   useLayoutEffect,
@@ -69,6 +74,7 @@ type AppShellSidebarProps = {
   onSplitterPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void
 }
 
+/** 可拖拽分割的可折叠侧栏 / Resizable collapsible sidebar with splitter affordance */
 export function AppShellSidebar({
   activeViewId,
   settingsCategory,
@@ -709,6 +715,8 @@ export function AppShellSidebar({
     </>
   )
 }
+
+// --- Module helpers / 模块内工具 ---
 
 function formatThreadTime(timestamp: number, locale: AppLocale, t: (path: string, vars?: Record<string, string | number>) => string): string {
   const diff = Date.now() - timestamp

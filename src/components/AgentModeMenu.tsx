@@ -1,3 +1,8 @@
+/**
+ * Agent Mode 弹出菜单：侧栏联动与嵌入式控件挂载点。
+ * Popover + toolbar wiring for Agent Mode state and side panel tab focus.
+ */
+
 import { useEffect, useRef, useState } from 'react'
 import { IconInline } from '../icon-inline'
 import { useI18n } from '../i18n/i18n'
@@ -13,6 +18,7 @@ type AgentModeMenuProps = {
   onAgentEnabledFromPopover: () => void
 }
 
+/** 工具栏 Agent chip：打开 Agent/TODO 面板或弹出设置 / Toolbar Agent chip opening panel or popover */
 export function AgentModeMenu({
   agent,
   sidePanelOpen,

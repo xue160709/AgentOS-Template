@@ -1,3 +1,8 @@
+/**
+ * 对话输入框壳：附件、模型与权限弹出层（portal）。
+ * Composer chrome managing textarea attachments plus portal pickers.
+ */
+
 import { createPortal } from 'react-dom'
 import type {
   Dispatch,
@@ -69,6 +74,7 @@ type ComposerProps = {
   onPickChatMenuRow: (row: ChatModelMenuRow) => void
 }
 
+/** 主composer表单容器 / Primary composer form rendering portals */
 export function Composer({
   inputValue,
   isRunning,

@@ -1,3 +1,8 @@
+/**
+ * 预加载脚本：`contextBridge` 暴露 `desktop`、`ipcRenderer`、`claudeChat`。
+ * Preload bridge exposing `desktop`, `ipcRenderer`, and `claudeChat` to the renderer.
+ */
+
 import { ipcRenderer, contextBridge, type IpcRendererEvent } from 'electron'
 import type { DesktopPreferences, TrayMenuAction } from '../src/desktop-types'
 import type {
@@ -12,7 +17,8 @@ import type {
 const CLAUDE_CHAT_EVENT_CHANNEL = 'claude-chat:event'
 const TRAY_MENU_ACTION_CHANNEL = 'desktop:tray-action'
 
-// --------- Expose some API to the Renderer process ---------
+// --- Desktop bridge / 桌面通用 API ---
+
 contextBridge.exposeInMainWorld('desktop', {
   platform: process.platform,
   windowEffects: {
@@ -79,6 +85,8 @@ contextBridge.exposeInMainWorld('desktop', {
   },
 })
 
+// --- Raw ipcRenderer passthrough / 原始 ipc 封装 ---
+
 contextBridge.exposeInMainWorld('ipcRenderer', {
   on(...args: Parameters<typeof ipcRenderer.on>) {
     const [channel, listener] = args
@@ -100,6 +108,8 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   // You can expose other APTs you need here.
   // ...
 })
+
+// --- Claude chat IPC / Claude 聊天 IPC ---
 
 contextBridge.exposeInMainWorld('claudeChat', {
   submit(payload: ClaudeChatSubmitPayload) {

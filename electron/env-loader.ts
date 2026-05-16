@@ -1,8 +1,14 @@
+/**
+ * 主进程启动时从 `.env` 合并环境变量（尊重已有进程环境）。
+ * Merge `.env` files into `process.env` on startup without overriding existing keys.
+ */
+
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 
 const ENV_FILES = ['.env', '.env.local']
 
+/** 读取并注入 `.env` / `.env.local` / Load optional env files under app root */
 export function loadMainProcessEnv(appRoot: string): void {
   const loadedKeys = new Set<string>()
 

@@ -1,3 +1,8 @@
+/**
+ * Claude Agent 凭据与模型映射的持久化及解析（userData JSON）。
+ * Persist and resolve Claude Agent credentials/model maps from userData JSON.
+ */
+
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import type {
@@ -13,6 +18,7 @@ import type {
 const SETTINGS_FILE_NAME = 'claude-agent-settings.json'
 const DEFAULT_PROVIDER_ID = 'default-provider'
 
+/** `claude-agent-settings.json` 读写与 env/settings 融合解析 / Settings store merging env vs UI sources */
 export class ClaudeAgentSettingsStore {
   private readonly settingsFilePath: string
 
@@ -47,7 +53,7 @@ export class ClaudeAgentSettingsStore {
     return this.getSnapshot()
   }
 
-  /** 仅切换聊天当前条目与可选的具体模型 ID（由聊天输入框下拉调用）。 */
+  /** 仅切换当前提供商与可选模型 ID（聊天下拉）/ Switch active provider and optional concrete model id from chat picker */
   setActiveChatPick(payload: ActiveChatPickPayload): ClaudeAgentSettingsSnapshot {
     const settings = this.read()
     const id = normalizeString(payload.providerId)

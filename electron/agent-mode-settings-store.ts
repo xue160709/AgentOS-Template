@@ -1,3 +1,8 @@
+/**
+ * Agent Mode 项目设置持久化（开关与 USER/IDENTITY 回退读取）。
+ * Persist Agent Mode per-project toggles with USER/IDENTITY.md fallbacks.
+ */
+
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import fs from 'node:fs/promises'
 import os from 'node:os'
@@ -17,6 +22,7 @@ type AgentModeSettingsFile = {
 
 const SETTINGS_FILE_NAME = 'agent-mode-settings.json'
 
+/** userData 中的 Agent Mode 设置仓库 / Agent Mode settings store in userData */
 export class AgentModeSettingsStore {
   private readonly filePath: string
 

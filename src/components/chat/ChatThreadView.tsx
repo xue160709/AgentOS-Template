@@ -1,3 +1,8 @@
+/**
+ * 活跃会话视图：滚动区域 + Transcript + 底部 Composer 槽。
+ * Active conversation layout wiring transcript viewport and composer slot.
+ */
+
 import type { ReactNode, RefObject } from 'react'
 import { IconInline } from '../../icon-inline'
 import { useI18n } from '../../i18n/i18n'
@@ -12,6 +17,7 @@ type ChatThreadViewProps = {
   onScrollToBottom: (behavior: ScrollBehavior) => void
 }
 
+/** Thread timeline chrome wrapping scroll hints / Timeline chrome around transcript scroll controls */
 export function ChatThreadView({
   items,
   composer,

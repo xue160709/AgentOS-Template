@@ -1,3 +1,8 @@
+/**
+ * 将渲染进程提交的附件规范化为 SDK 用户消息。
+ * Normalize renderer attachments into SDK user prompt payloads.
+ */
+
 import os from 'node:os'
 import path from 'node:path'
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
@@ -9,6 +14,7 @@ const SUPPORTED_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/gi
 type SupportedImageMimeType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
 type SDKUserMessageContent = Exclude<SDKUserMessage['message']['content'], string>
 
+/** 过滤并规范化 IPC 传来的附件数组 / Sanitize attachment array from IPC */
 export function normalizeSubmitAttachments(value: unknown): ClaudeChatAttachment[] {
   if (!Array.isArray(value)) return []
   const attachments: ClaudeChatAttachment[] = []
@@ -49,6 +55,7 @@ export function normalizeSubmitAttachments(value: unknown): ClaudeChatAttachment
   return attachments
 }
 
+/** 文本或多模态附件转成 SDK prompt（字符串或异步迭代）/ Build SDK prompt string or async user message stream */
 export function buildSdkPromptInput(prompt: string, attachments: ClaudeChatAttachment[]): string | AsyncIterable<SDKUserMessage> {
   if (attachments.length === 0) return prompt
   const content = buildSdkUserContent(prompt, attachments)
@@ -121,6 +128,7 @@ function isSupportedImageMimeType(value: string): value is SupportedImageMimeTyp
   return SUPPORTED_IMAGE_MIME_TYPES.has(value)
 }
 
+/** 解析工作目录：`~` 展开并回落默认路径 / Resolve cwd with `~` expansion and fallback */
 export function resolveWorkspaceCwd(requested: string | undefined, fallback: string): string {
   const raw = requested?.trim() || fallback.trim()
   if (!raw) return path.resolve(fallback)

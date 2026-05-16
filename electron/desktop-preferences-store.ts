@@ -1,3 +1,8 @@
+/**
+ * 桌面偏好 JSON 持久化（托盘、登录启动项、语言）。
+ * Persist desktop preferences JSON (tray, login item, locale).
+ */
+
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import type { DesktopPreferences } from '../src/desktop-types'
@@ -21,6 +26,7 @@ function normalizePrefs(raw: unknown): DesktopPreferences {
   }
 }
 
+/** userData 内的桌面偏好读写器 / Reader/writer for desktop preferences in userData */
 export class DesktopPreferencesStore {
   private readonly filePath: string
 

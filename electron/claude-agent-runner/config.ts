@@ -1,5 +1,11 @@
+/**
+ * Claude Agent SDK 环境变量拼装与日志脱敏工具。
+ * Build SDK env vars from resolved config and redact secrets for logs.
+ */
+
 import type { ClaudeAgentResolvedConfig } from '../../src/claude-chat-types'
 
+/** 生成用于失效会话的配置指纹 / Fingerprint config for session invalidation */
 export function getConfigSignature(config: ClaudeAgentResolvedConfig): string {
   return JSON.stringify([
     config.configSource,
@@ -14,6 +20,7 @@ export function getConfigSignature(config: ClaudeAgentResolvedConfig): string {
   ])
 }
 
+/** 合并进程环境与 Anthropic 相关变量供子进程使用 / Merge process.env with Anthropic vars for child SDK */
 export function buildSdkEnv(config: ClaudeAgentResolvedConfig): Record<string, string | undefined> {
   const env: Record<string, string | undefined> = {
     ...process.env,
@@ -36,6 +43,7 @@ export function buildSdkEnv(config: ClaudeAgentResolvedConfig): Record<string, s
   return env
 }
 
+/** 结构化输出解析后的配置（脱敏）/ Structured resolved config for logging */
 export function summarizeConfigForLog(config: ClaudeAgentResolvedConfig): Record<string, unknown> {
   return {
     configSource: config.configSource,
@@ -52,6 +60,7 @@ export function summarizeConfigForLog(config: ClaudeAgentResolvedConfig): Record
   }
 }
 
+/** SDK 子进程环境快照（脱敏）/ Redacted snapshot of env passed to SDK */
 export function summarizeSdkEnvForLog(env: Record<string, string | undefined>): Record<string, unknown> {
   return {
     ANTHROPIC_BASE_URL: env.ANTHROPIC_BASE_URL,
@@ -66,6 +75,7 @@ export function summarizeSdkEnvForLog(env: Record<string, string | undefined>): 
   }
 }
 
+/** 任意异常的可日志化结构 / Serialize unknown errors for logs */
 export function summarizeErrorForLog(error: unknown): Record<string, unknown> {
   if (error instanceof Error) {
     const maybeCause = (error as Error & { cause?: unknown }).cause

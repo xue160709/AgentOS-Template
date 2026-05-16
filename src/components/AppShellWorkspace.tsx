@@ -1,3 +1,8 @@
+/**
+ * 中央工作区：聊天页、文档、设置与侧栏抽屉协同。
+ * Center pane coordinating Chat/Docs/Settings routes plus auxiliary drawers.
+ */
+
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { IconInline } from '../icon-inline'
 import { useI18n } from '../i18n/i18n'
@@ -43,6 +48,7 @@ type AppShellWorkspaceProps = {
   onShowProjectSkillsInSidebarChange: (enabled: boolean) => void
 }
 
+/** Shell 主体渲染路由器 / Shell workspace router mounting routed surfaces */
 export function AppShellWorkspace({
   workspaceTitle,
   headerStatus: _headerStatus,

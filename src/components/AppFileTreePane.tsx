@@ -1,18 +1,25 @@
+/**
+ * 项目文件树侧栏（Electron `listProjectFiles`）。
+ * Collapsible project tree backed by desktop file listing IPC.
+ */
+
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { IconInline } from '../icon-inline'
 import { useI18n } from '../i18n/i18n'
 import type { FileTreeNode, FileTreeResult, WorkspaceProject } from './types'
 
+/** `AppFileTreePane` 暴露的命令式接口 / Imperative API for parent drawers */
 export type AppFileTreePaneHandle = {
   refresh: () => void
 }
 
 type AppFileTreePaneProps = {
   project: WorkspaceProject
-  /** 侧栏打开且当前为「目录」标签时为 true；隐藏时保留列表与展开状态 */
+  /** 侧栏可见性：隐藏时保留展开状态 / Visibility toggle keeps expansion memory */
   isVisible: boolean
 }
 
+/** `forwardRef` 文件树面板，暴露 `refresh()` / File tree pane exposing imperative refresh */
 export const AppFileTreePane = forwardRef<AppFileTreePaneHandle, AppFileTreePaneProps>(function AppFileTreePane(
   { project, isVisible },
   ref,

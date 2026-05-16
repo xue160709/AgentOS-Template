@@ -1,3 +1,8 @@
+/**
+ * 内联 SVG 字符串目录（配合 `icon-inline.tsx` 安全渲染）。
+ * Inline SVG snippets keyed by semantic icon names for trusted HTML injection.
+ */
+
 export const Icons = {
   sidebar:
     '<svg class="icon-xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h10M4 18h16"/></svg>',
@@ -59,4 +64,5 @@ export const Icons = {
     '<svg class="icon-xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" d="M5 7h14M10 11v6M14 11v6"/><path stroke-linejoin="round" d="M9 7l1-2h4l1 2M7 7l1 13h8l1-13"/></svg>',
 } as const
 
+/** Icons 对象的联合键 / Keys available on Icons map */
 export type IconName = keyof typeof Icons

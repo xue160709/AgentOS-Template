@@ -1,3 +1,8 @@
+/**
+ * 聊天工作区快照磁盘读写（项目、线程、侧栏偏好）。
+ * Persist chat workspace snapshot (projects, threads, sidebar prefs) to disk.
+ */
+
 import { existsSync, readFileSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -6,6 +11,7 @@ import type { ChatWorkspaceState } from '../src/components/types'
 
 const WORKSPACE_FILE_NAME = 'chat-workspace.json'
 
+/** `chat-workspace.json` 读写封装 / Thin wrapper around `chat-workspace.json` IO */
 export class ChatWorkspaceStore {
   private readonly filePath: string
 

@@ -1,3 +1,8 @@
+/**
+ * 扫描 `.claude`/`.agent`/`.cursor` 等目录，组装技能、子 Agent 与指令上下文。
+ * Discover slash skills, sub-agents, and instruction files under conventional folders.
+ */
+
 import type { AgentDefinition } from '@anthropic-ai/claude-agent-sdk'
 import fs from 'node:fs/promises'
 import os from 'node:os'
@@ -75,6 +80,9 @@ const AGENT_MODE_MARKER_END = '<!-- AgentOS Agent Mode: end -->'
 const TODO_MODE_MARKER_START = '<!-- AgentOS TODO Mode: start -->'
 const TODO_MODE_MARKER_END = '<!-- AgentOS TODO Mode: end -->'
 
+// --- Discovery & catalog / 扫描与目录 ---
+
+/** 列出项目内可用的 Agent 上下文目录快照 / Build AgentContext catalog for a project root */
 export async function discoverAgentContext(
   rootPath: string,
   options: DiscoverAgentContextOptions = {},
@@ -114,6 +122,9 @@ export async function discoverAgentContext(
   }
 }
 
+// --- Runtime assembly / 运行时拼装 ---
+
+/** 将目录扫描结果转成 SDK 可用的 definitions 与追加 system prompt / Turn catalog into SDK defs + optional system append */
 export async function buildRuntimeContext(
   rootPath: string,
   agentModeSettings?: AgentModeProjectSettings,
@@ -140,6 +151,7 @@ export async function buildRuntimeContext(
   }
 }
 
+/** 展开斜杠调用为内联指令块（若命中技能）/ Expand `/command` invocations using skill markdown when matched */
 export async function resolvePromptWithContext(prompt: string, catalog: AgentContextCatalog): Promise<string> {
   const invocation = parseSlashInvocation(prompt)
   if (!invocation) return prompt
@@ -167,6 +179,9 @@ export async function resolvePromptWithContext(prompt: string, catalog: AgentCon
   ].join('\n')
 }
 
+// --- File search / 项目文件搜索 ---
+
+/** 在项目树内按前缀模糊查找路径（受限深度与条目数）/ Fuzzy path search with caps on depth and visited entries */
 export async function searchProjectFiles(rootPath: string, query: string): Promise<ProjectFileSearchResult> {
   const resolvedRootPath = resolveProjectPath(rootPath)
   try {

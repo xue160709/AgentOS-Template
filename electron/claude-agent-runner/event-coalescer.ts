@@ -1,3 +1,8 @@
+/**
+ * 合并短时间窗口内的流式 delta，降低 IPC 频率。
+ * Coalesce high-frequency stream deltas before forwarding over IPC.
+ */
+
 import type { ClaudeChatEvent } from '../../src/claude-chat-types'
 
 const STREAM_COALESCE_MS = 50
@@ -12,6 +17,7 @@ type PendingEvent = {
   timer: ReturnType<typeof setTimeout>
 }
 
+/** 缓冲 assistant/thinking/tool_update 片段的发射器 / Buffers coalescable chat events */
 export class ClaudeChatEventCoalescer {
   private readonly pendingEvents = new Map<string, PendingEvent>()
 

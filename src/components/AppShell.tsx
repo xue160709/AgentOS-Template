@@ -1,3 +1,8 @@
+/**
+ * 应用壳：工作区持久化、侧栏尺寸、聊天路由与设置哈希同步。
+ * Root shell owning workspace persistence, sidebar sizing, chat routing, and hash-synced settings.
+ */
+
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import {
   createEmptyChatState,
@@ -34,7 +39,10 @@ import { type ChatPageHandle } from './chat/ChatPage'
 
 const CHAT_WORKSPACE_SAVE_DEBOUNCE_MS = 750
 
+/** 组合侧栏 + 工作区 + 聊天页顶栏 / Composes sidebar rail, workspace chrome, and chat surfaces */
 export function AppShell() {
+  // --- Shell state / 壳层状态 ---
+
   const { t, locale } = useI18n()
   const [activeViewId, setActiveViewId] = useState<AppViewId>(() => viewFromLocation())
   const [settingsCategory, setSettingsCategory] = useState<SettingsCategoryId>(() => settingsCategoryFromLocation())

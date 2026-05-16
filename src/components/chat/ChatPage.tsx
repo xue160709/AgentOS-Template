@@ -1,3 +1,8 @@
+/**
+ * 对话页：Composer、模型/权限选择、Agent 事件流与线程状态同步。
+ * Chat surface coordinating composer, model/permission pickers, Agent IPC stream, and per-thread state.
+ */
+
 import {
   forwardRef,
   useCallback,
@@ -45,6 +50,8 @@ const SETTINGS_CHANGED_EVENT = 'claude-agent-settings:changed'
 const MAX_COMPOSER_SUGGESTIONS = 64
 const MAX_COMPOSER_ATTACHMENTS = 8
 
+// --- Imperative handle / 命令式句柄 ---
+
 export type ChatPageHandle = {
   startNewThread: () => Promise<void>
   focusComposer: () => void
@@ -55,7 +62,7 @@ type ChatPageProps = {
   hidden: boolean
   activeProject: WorkspaceProject
   activeThread: WorkspaceThread | undefined
-  /** 用于按 threadId 读取持久化的 sessionId（应用重启后恢复 Agent SDK 会话） */
+  /** 按 threadId 查找持久化 sessionId（重启后恢复 SDK）/ Threads list for resolving persisted session ids */
   threads: WorkspaceThread[]
   projects: WorkspaceProject[]
   threadRunStates: Record<string, ThreadRunState>
@@ -66,11 +73,14 @@ type ChatPageProps = {
   onThreadRunStateChange: (threadId: string, state: ThreadRunState | null) => void
 }
 
+// --- Internal helpers / 模块内辅助 ---
+
 type SubmitPromptTarget = {
   threadId?: string
   project?: WorkspaceProject
 }
 
+/** 内置 slash 命令清单 / Built-in slash commands backed by i18n strings */
 function getBuiltInSlashCommands(t: (path: string, vars?: Record<string, string | number>) => string): BuiltInSlashCommand[] {
   return [
     {
@@ -99,6 +109,7 @@ function getBuiltInSlashCommands(t: (path: string, vars?: Record<string, string 
 
 const PERMISSION_MODE_STORAGE_KEY = 'codex-ui-template:claude-permission-mode'
 
+/** 主聊天路由组件（forwardRef 暴露托盘动作）/ Primary chat route exposing imperative methods */
 export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatPage(
   {
     hidden,
@@ -115,6 +126,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   },
   ref,
 ) {
+  // --- Local state & refs / 组件状态与引用 ---
+
   const { t } = useI18n()
   const chatItems = activeThread?.chatState.items ?? []
   const activeRunState = activeThread ? threadRunStates[activeThread.id] : undefined
@@ -135,7 +148,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   const [dismissedAutocompleteKey, setDismissedAutocompleteKey] = useState('')
   const [fileMentionResults, setFileMentionResults] = useState<ProjectFileSearchItem[]>([])
   const [composerSuggestionIndex, setComposerSuggestionIndex] = useState(0)
-  /** 与 Electron claude-agent-settings 对齐，composer 仅展示此项 */
+  /** 与 Electron Claude 设置对齐；Composer 展示此标签 / Mirrors Electron agent settings label shown in composer */
   const [globalDisplayModel, setGlobalDisplayModel] = useState('Claude Agent')
 
   const scrollRegionRef = useRef<HTMLDivElement>(null)
@@ -153,7 +166,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   const requestAssistantMessageIdsRef = useRef(new Map<string, string>())
   const finishedRequestIdsRef = useRef(new Set<string>())
 
-  /** fixed 锚定触发按钮，避免被 .chat-composer / .app-main-inner 裁切 */
+  /** Popover anchor avoids clipping by `.chat-composer` / fixed positioning avoids composer clipping */
   const [modelPopoverBox, setModelPopoverBox] = useState<{
     left: number
     bottom: number
@@ -203,6 +216,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       setAgentContext(null)
     }
   }, [activeProject.path])
+
+  // --- Effects: desktop IPC & settings sync / 副作用：桌面 IPC 与设置 ---
 
   useEffect(() => {
     void refreshAgentContext()

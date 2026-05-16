@@ -1,3 +1,8 @@
+/**
+ * 会话条目渲染（助手 Markdown、工具卡、思考、活动）。
+ * Timeline renderer for messages, tool chips, thinking, and agent activity rows.
+ */
+
 import { memo, useEffect, useMemo, useState } from 'react'
 import { useI18n } from '../../i18n/i18n'
 import type {
@@ -14,6 +19,7 @@ import { AttachmentThumb } from './AttachmentThumb'
 import { formatBytes } from './format'
 import { escapeHtml, renderMarkdown } from './markdown'
 
+/** Memoized transcript map / Memoized transcript list renderer */
 export const Transcript = memo(function Transcript({ items }: { items: TranscriptItem[] }) {
   return (
     <>

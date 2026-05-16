@@ -1,15 +1,23 @@
+/**
+ * 轻量 i18n：本地 JSON 目录、`localStorage` 初始语言与 React Context。
+ * Lightweight locale catalog with persisted preference and React context helpers.
+ */
+
 import { createContext, useCallback, useContext, useMemo, type ReactNode } from 'react'
 import en from '../locales/en.json'
 import zh from '../locales/zh.json'
 
+/** 受支持的界面语言 / Supported UI locales */
 export type AppLocale = 'en' | 'zh'
 
+/** `localStorage` 语言键 / Storage key for persisted locale */
 export const LOCALE_STORAGE_KEY = 'CodeX-UI-Template-locale-v1'
 
 type Messages = typeof en
 
 const CATALOG: Record<AppLocale, Messages> = { en, zh }
 
+/** 读取持久化语言回退 zh / Read persisted locale defaulting to zh */
 export function getInitialLocale(): AppLocale {
   try {
     const raw = localStorage.getItem(LOCALE_STORAGE_KEY)
@@ -40,6 +48,7 @@ function applyInterpolation(template: string, vars?: Record<string, string | num
   return out
 }
 
+/** 点路径翻译并支持 `{{var}}` 插值 / Dot-path lookup with optional interpolation */
 export function translate(
   locale: AppLocale,
   path: string,
@@ -56,6 +65,8 @@ export function translate(
 
 const zhTitle = getByPath(CATALOG.zh, 'thread.newThreadTitle')
 const enTitle = getByPath(CATALOG.en, 'thread.newThreadTitle')
+
+/** 视为「默认新线程标题」的本地化集合 / Known localized default thread titles */
 export const defaultThreadTitleSet = new Set([zhTitle, enTitle].filter(Boolean) as string[])
 
 type I18nContextValue = {
@@ -65,6 +76,7 @@ type I18nContextValue = {
 
 const I18nContext = createContext<I18nContextValue | null>(null)
 
+/** 提供静态（初次渲染）语言上下文 / Supplies locale + `t()` from initial storage snapshot */
 export function I18nProvider({ children }: { children: ReactNode }) {
   const locale = getInitialLocale()
   const t = useCallback(
@@ -75,6 +87,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>
 }
 
+/** 读取当前 `t` 与 locale / Consume i18n context */
 export function useI18n(): I18nContextValue {
   const ctx = useContext(I18nContext)
   if (!ctx) {

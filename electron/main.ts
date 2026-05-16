@@ -25,6 +25,11 @@ import type {
 } from '../src/claude-chat-types'
 import type { FileTreeNode, FileTreeResult } from '../src/components/types'
 
+/**
+ * Electron 主进程入口：BrowserWindow、托盘、IPC 与 Claude Agent。
+ * Electron main entry: window lifecycle, tray menu, IPC bridges, and Claude Agent runner.
+ */
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // The built directory structure
@@ -93,6 +98,8 @@ const FILE_TREE_IGNORED_DIRECTORIES = new Set([
   'out',
   'release',
 ])
+
+// --- Window, tray & branding / 窗口、托盘与 Dock ---
 
 function getWindowBackgroundColor() {
   return nativeTheme.shouldUseDarkColors ? '#181818' : '#f9f9f9'
@@ -355,6 +362,9 @@ if (gotSingleInstanceLock) {
     chatWorkspaceStore = new ChatWorkspaceStore(userDataPath)
     applyLoginItemSettingsFromPrefs(getDesktopPreferencesStore().read())
     currentTrayLocale = normalizeUiLocale(getDesktopPreferencesStore().read().locale)
+
+    // --- IPC handlers / IPC 注册 ---
+
     ipcMain.handle('desktop-preferences:get', () => {
       return getDesktopPreferencesStore().read()
     })
@@ -470,6 +480,8 @@ if (gotSingleInstanceLock) {
 } else {
   app.quit()
 }
+
+// --- Attachment ingest & file tree / 附件读取与文件树 ---
 
 async function readChatAttachments(filePaths: string[], allowImages: boolean): Promise<ClaudeChatAttachmentPickerResult> {
   const attachments: ClaudeChatAttachment[] = []

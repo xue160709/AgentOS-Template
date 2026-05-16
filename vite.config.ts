@@ -1,3 +1,8 @@
+/**
+ * Vite + React + Electron（vite-plugin-electron）一体化构建配置。
+ * Bundles renderer (`dist/`), main (`dist-electron/main.js`), and preload entrypoints.
+ */
+
 import { defineConfig } from 'vite'
 import path from 'node:path'
 import react from '@vitejs/plugin-react'

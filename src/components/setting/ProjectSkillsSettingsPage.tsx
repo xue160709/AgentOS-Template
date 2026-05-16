@@ -1,3 +1,8 @@
+/**
+ * 通用偏好：语言、托盘与侧栏技能开关。
+ * General preferences: locale restart prompt, tray/login toggles, sidebar skills.
+ */
+
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { IconInline } from '../../icon-inline'
 import { getInitialLocale, LOCALE_STORAGE_KEY, useI18n, type AppLocale } from '../../i18n/i18n'
@@ -7,6 +12,7 @@ type ProjectSkillsSettingsPageProps = {
   onEnabledChange: (enabled: boolean) => void
 }
 
+/** `#settings/skills` 视图 / General settings route */
 export function ProjectSkillsSettingsPage({ enabled, onEnabledChange }: ProjectSkillsSettingsPageProps) {
   const { locale: sessionLocale, t } = useI18n()
   const [pickerLocale, setPickerLocale] = useState<AppLocale>(() => getInitialLocale())

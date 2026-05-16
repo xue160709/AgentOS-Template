@@ -1,25 +1,33 @@
-/** UI 文本语言 — 与会话偏好（重启后全文切换）对齐；主进程写入 Agent 模板与追加 prompt */
+/**
+ * 桌面端偏好与 Agent Mode 相关共享类型（渲染进程与主进程对齐）。
+ * Desktop preference and Agent Mode shared types aligned across renderer and main.
+ */
+
+/** UI 文本语言；与会话偏好一致并由主进程写入模板 / UI text locale; matches session prefs and main-process templates */
 export type AppUiLocale = 'zh' | 'en'
 
-/** 桌面端（Electron）偏好，由主进程持久化到 userData */
+/** Electron 偏好：托盘、登录启动与语言（持久化 userData）/ Electron prefs: tray, login item, locale (persisted userData) */
 export type DesktopPreferences = {
   closeToTray: boolean
   openAtLogin: boolean
-  /** 缺省或未识别时读取端按 zh 处理 */
+  /** 缺省或未识别时按 zh 处理 / Defaults to zh when missing or unknown */
   locale?: AppUiLocale
 }
 
-/** 托盘菜单触发的动作（与主进程 IPC 载荷一致） */
+/** 托盘菜单动作（与 IPC 载荷一致）/ Tray menu action matching IPC payloads */
 export type TrayMenuAction = 'new-thread' | 'open-project'
 
+/** Agent Mode 文件写入状态 / Agent Mode scaffold file status */
 export type AgentModeFileStatus = 'created' | 'updated' | 'exists'
 
+/** Agent Mode 单次文件变更记录 / Single Agent Mode file change record */
 export type AgentModeFileChange = {
   relativePath: string
   path: string
   status: AgentModeFileStatus
 }
 
+/** Agent Mode 项目级开关与身份文案 / Project-level Agent Mode toggles and identity copy */
 export type AgentModeProjectSettings = {
   enabled: boolean
   todoEnabled: boolean
@@ -27,6 +35,7 @@ export type AgentModeProjectSettings = {
   identity: string
 }
 
+/** Agent Mode 状态查询结果 / Agent Mode status query result */
 export type AgentModeStatusResult =
   | {
       ok: true
@@ -42,6 +51,7 @@ export type AgentModeStatusResult =
       message: string
     }
 
+/** Agent Mode 设置读写结果 / Agent Mode settings read/write result */
 export type AgentModeSettingsResult =
   | {
       ok: true
@@ -54,6 +64,7 @@ export type AgentModeSettingsResult =
       message: string
     }
 
+/** Agent Mode 文件清单生成结果 / Agent Mode scaffold files generation result */
 export type AgentModeFilesResult =
   | {
       ok: true

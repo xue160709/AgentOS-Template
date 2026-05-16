@@ -1,5 +1,10 @@
 /// <reference types="vite-plugin-electron/electron-env" />
 
+/**
+ * 渲染进程全局 Window 类型：对齐 preload 暴露的 API。
+ * Augment `Window` with APIs mirrored from `preload.ts`.
+ */
+
 import type { ClaudeChatAPI } from '../src/claude-chat-types'
 import type {
   AgentContextResult,
@@ -39,13 +44,13 @@ declare global {
     }
   }
 
-  // Used in Renderer process, expose in `preload.ts`
+  // preload.ts 注入的类型扩展 / Augmented via preload script
   interface Window {
     ipcRenderer: import('electron').IpcRenderer
     claudeChat?: ClaudeChatAPI
     desktop?: {
       platform: NodeJS.Platform
-      /** macOS 透明窗口 + vibrancy，用于渲染层切换样式（系统级磨砂 / 桌面透出） */
+      /** macOS 透明磨砂窗口标记（渲染层样式钩子）/ Enables vibrancy-aware styling on macOS */
       windowEffects?: {
         macVibrancy: boolean
       }
@@ -69,7 +74,7 @@ declare global {
       getChatWorkspace?: () => Promise<ChatWorkspaceState | null>
       saveChatWorkspace?: (state: ChatWorkspaceState) => Promise<ChatWorkspaceState>
       quitApp?: () => Promise<void>
-      /** 在系统文件管理器中显示路径（macOS 为访达） */
+      /** 在访达/资源管理器中展示路径 / Reveal path in Finder or Explorer */
       showItemInFolder?: (targetPath: string) => Promise<void>
       getDesktopPreferences?: () => Promise<DesktopPreferences>
       setDesktopPreferences?: (partial: Partial<DesktopPreferences>) => Promise<DesktopPreferences>

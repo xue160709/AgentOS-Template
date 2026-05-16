@@ -1,8 +1,14 @@
+/**
+ * 右侧抽屉：文件树与 Agent 面板切换。
+ * Auxiliary drawer hosting Files vs Agent tabs for the workspace chrome.
+ */
+
 import { useEffect, type ReactNode, type RefObject } from 'react'
 import { IconInline } from '../icon-inline'
 import { useI18n } from '../i18n/i18n'
 import type { AppFileTreePaneHandle } from './AppFileTreePane'
 
+/** 侧栏 Tab：`files` 或 `agent` / Drawer tab identifiers */
 export type WorkspaceSidePanelTab = 'files' | 'agent'
 
 type AppWorkspaceSidePanelProps = {
@@ -10,13 +16,14 @@ type AppWorkspaceSidePanelProps = {
   activeTab: WorkspaceSidePanelTab
   onActiveTabChange: (tab: WorkspaceSidePanelTab) => void
   onClose: () => void
-  /** Agent 已开启时显示「Agent」标签，与目录共用侧栏 */
+  /** Agent 开启后展示额外 Tab / Shows Agent tab when Agent Mode is enabled */
   showAgentTab: boolean
   filePaneRef: RefObject<AppFileTreePaneHandle | null>
   filesPane: ReactNode
   agentPane: ReactNode
 }
 
+/** 右侧抽屉布局与 Tab 头 / Drawer chrome + segmented tabs */
 export function AppWorkspaceSidePanel({
   open,
   activeTab,

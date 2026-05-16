@@ -1,4 +1,6 @@
 // @see - https://www.electron.build/configuration/configuration
+// electron-builder 打包参数：产物输出至 release/<version>/，收集 dist 与 dist-electron。
+// Packaging manifest: writes installers under release/<version>/ bundling dist + dist-electron.
 {
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
   "appId": "com.agentos.desktop",
