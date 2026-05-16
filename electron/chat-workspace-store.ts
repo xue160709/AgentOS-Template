@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
+import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { normalizeChatWorkspaceState } from '../src/chat-workspace-persistence'
 import type { ChatWorkspaceState } from '../src/components/types'
@@ -22,10 +23,10 @@ export class ChatWorkspaceStore {
     }
   }
 
-  save(state: unknown): ChatWorkspaceState {
+  async save(state: unknown): Promise<ChatWorkspaceState> {
     const normalized = normalizeChatWorkspaceState(state)
-    mkdirSync(path.dirname(this.filePath), { recursive: true })
-    writeFileSync(this.filePath, `${JSON.stringify(normalized, null, 2)}\n`, 'utf8')
+    await mkdir(path.dirname(this.filePath), { recursive: true })
+    await writeFile(this.filePath, `${JSON.stringify(normalized, null, 2)}\n`, 'utf8')
     return normalized
   }
 }

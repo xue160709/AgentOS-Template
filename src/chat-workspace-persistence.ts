@@ -43,6 +43,12 @@ export async function loadChatWorkspaceState(): Promise<ChatWorkspaceState> {
 }
 
 export async function persistChatWorkspaceState(state: ChatWorkspaceState): Promise<void> {
+  try {
+    localStorage.setItem(CHAT_WORKSPACE_STORAGE_KEY, JSON.stringify(state))
+  } catch {
+    /* ignore */
+  }
+
   const save = typeof window !== 'undefined' ? window.desktop?.saveChatWorkspace : undefined
   if (save) {
     try {
@@ -50,12 +56,6 @@ export async function persistChatWorkspaceState(state: ChatWorkspaceState): Prom
     } catch {
       /* ignore */
     }
-  }
-
-  try {
-    localStorage.setItem(CHAT_WORKSPACE_STORAGE_KEY, JSON.stringify(state))
-  } catch {
-    /* ignore */
   }
 }
 

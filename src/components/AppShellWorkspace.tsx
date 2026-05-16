@@ -3,7 +3,7 @@ import { IconInline } from '../icon-inline'
 import { useI18n } from '../i18n/i18n'
 import type { AppViewId, ChatState, SettingsCategoryId, ThreadRunState, WorkspaceProject, WorkspaceThread } from './types'
 import { AppFilePanel } from './AppFilePanel'
-import { ChatPage, type ChatPageHandle } from './ChatPage'
+import { ChatPage, type ChatPageHandle } from './chat/ChatPage'
 import { DocsPage } from './DocsPage'
 import { SettingsPage } from './SettingsPage'
 

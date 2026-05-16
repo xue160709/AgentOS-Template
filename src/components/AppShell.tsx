@@ -29,7 +29,9 @@ import type {
 } from './types'
 import { AppShellSidebar } from './AppShellSidebar'
 import { AppShellWorkspace } from './AppShellWorkspace'
-import { type ChatPageHandle } from './ChatPage'
+import { type ChatPageHandle } from './chat/ChatPage'
+
+const CHAT_WORKSPACE_SAVE_DEBOUNCE_MS = 750
 
 export function AppShell() {
   const { t } = useI18n()
@@ -50,6 +52,9 @@ export function AppShell() {
   )
 
   const chatRef = useRef<ChatPageHandle>(null)
+  const workspaceSaveTimerRef = useRef<number | null>(null)
+  const workspaceSaveInFlightRef = useRef(false)
+  const pendingWorkspaceSaveRef = useRef<ChatWorkspaceState | null>(null)
   const projectSkillStatesRef = useRef(projectSkillStates)
   const shellRef = useRef<HTMLDivElement>(null)
   const appBodyRef = useRef<HTMLDivElement>(null)
@@ -248,10 +253,40 @@ export function AppShell() {
     }
   }, [projectSkillProjectKey, showProjectSkillsInSidebar, t])
 
+  const flushWorkspaceSave = useCallback(() => {
+    if (workspaceSaveInFlightRef.current) return
+    const pending = pendingWorkspaceSaveRef.current
+    if (!pending) return
+
+    pendingWorkspaceSaveRef.current = null
+    workspaceSaveInFlightRef.current = true
+    void persistChatWorkspaceState(pending).finally(() => {
+      workspaceSaveInFlightRef.current = false
+      if (pendingWorkspaceSaveRef.current) flushWorkspaceSave()
+    })
+  }, [])
+
   useEffect(() => {
     if (!chatWorkspace) return
-    void persistChatWorkspaceState(chatWorkspace)
-  }, [chatWorkspace])
+    pendingWorkspaceSaveRef.current = chatWorkspace
+    if (workspaceSaveTimerRef.current != null) {
+      window.clearTimeout(workspaceSaveTimerRef.current)
+    }
+    workspaceSaveTimerRef.current = window.setTimeout(() => {
+      workspaceSaveTimerRef.current = null
+      flushWorkspaceSave()
+    }, CHAT_WORKSPACE_SAVE_DEBOUNCE_MS)
+  }, [chatWorkspace, flushWorkspaceSave])
+
+  useEffect(() => {
+    return () => {
+      if (workspaceSaveTimerRef.current != null) {
+        window.clearTimeout(workspaceSaveTimerRef.current)
+        workspaceSaveTimerRef.current = null
+      }
+      flushWorkspaceSave()
+    }
+  }, [flushWorkspaceSave])
 
   const goHome = useCallback(() => {
     window.location.hash = ''

@@ -11,14 +11,9 @@ import {
   type KeyboardEvent,
 } from 'react'
 import { createPortal, flushSync } from 'react-dom'
-import DOMPurify from 'dompurify'
-import { marked } from 'marked'
 import type {
-  AgentContextAgentItem,
   AgentContextCatalog,
-  AgentContextSlashItem,
   AgentContextSource,
-  ClaudeAskUserQuestion,
   ClaudeChatAttachment,
   ClaudeAgentModelProvider,
   ClaudeAgentSettings,
@@ -26,11 +21,10 @@ import type {
   ClaudeChatEvent,
   ClaudePermissionMode,
   ProjectFileSearchItem,
-} from '../claude-chat-types'
-import { IconInline } from '../icon-inline'
-import { useI18n } from '../i18n/i18n'
+} from '../../claude-chat-types'
+import { IconInline } from '../../icon-inline'
+import { useI18n } from '../../i18n/i18n'
 import type {
-  ActivityStatus,
   ChatActivityItem,
   ChatMessageAttachment,
   ChatMessageItem,
@@ -38,16 +32,14 @@ import type {
   ChatThinkingItem,
   ChatToolItem,
   ThreadRunState,
-  ToolStatus,
   TranscriptItem,
   WorkspaceProject,
   WorkspaceThread,
-} from './types'
-
-marked.setOptions({
-  breaks: true,
-  gfm: true,
-})
+} from '../types'
+import { AgentInputPromptModal, type PendingUserInputPrompt, type UserInputDecision } from './AgentInputPromptModal'
+import { Composer } from './Composer'
+import type { BuiltInSlashCommand, ChatModelMenuRow, ComposerSuggestion, ComposerTrigger, PermissionModeRow } from './local-types'
+import { Transcript } from './Transcript'
 
 const SETTINGS_CHANGED_EVENT = 'claude-agent-settings:changed'
 const MAX_COMPOSER_SUGGESTIONS = 64
@@ -79,64 +71,6 @@ type SubmitPromptTarget = {
   project?: WorkspaceProject
 }
 
-type ChatModelMenuRow = {
-  pickKey: string
-  providerId: string
-  anthropicModelId: string
-  useOverlayPick: boolean
-  supportsImages: boolean
-  headline: string
-  metaLine: string
-}
-
-type ComposerTrigger =
-  | {
-      kind: 'slash'
-      query: string
-      start: number
-      end: number
-    }
-  | {
-      kind: 'mention'
-      query: string
-      start: number
-      end: number
-    }
-
-type ComposerSuggestion =
-  | {
-      id: string
-      kind: 'slash'
-      title: string
-      subtitle: string
-      insertText: string
-      item: AgentContextSlashItem | BuiltInSlashCommand
-    }
-  | {
-      id: string
-      kind: 'file'
-      title: string
-      subtitle: string
-      insertText: string
-      item: ProjectFileSearchItem
-    }
-  | {
-      id: string
-      kind: 'agent'
-      title: string
-      subtitle: string
-      insertText: string
-      item: AgentContextAgentItem
-    }
-
-type BuiltInSlashCommand = {
-  kind: 'built-in'
-  command: string
-  title: string
-  description: string
-  argumentHint: string
-}
-
 function getBuiltInSlashCommands(t: (path: string, vars?: Record<string, string | number>) => string): BuiltInSlashCommand[] {
   return [
     {
@@ -163,411 +97,7 @@ function getBuiltInSlashCommands(t: (path: string, vars?: Record<string, string 
   ]
 }
 
-type PendingUserInputPrompt =
-  | Extract<ClaudeChatEvent, { type: 'ask_user_question' }>
-  | Extract<ClaudeChatEvent, { type: 'permission_request' }>
-
-type UserInputDecision =
-  | {
-      behavior: 'allow'
-      updatedInput?: Record<string, unknown>
-    }
-  | {
-      behavior: 'deny'
-      message?: string
-    }
-
-type PermissionModeRow = {
-  mode: ClaudePermissionMode
-  label: string
-  description: string
-}
-
 const PERMISSION_MODE_STORAGE_KEY = 'codex-ui-template:claude-permission-mode'
-
-function AgentInputPromptModal({
-  prompt,
-  onResolve,
-}: {
-  prompt: PendingUserInputPrompt
-  onResolve: (decision: UserInputDecision) => void
-}) {
-  const { t } = useI18n()
-
-  if (prompt.type === 'permission_request') {
-    return (
-      <div className="agent-input-backdrop" role="presentation">
-        <section className="agent-input-dialog" role="dialog" aria-modal="true" aria-labelledby="agent-permission-title">
-          <div className="agent-input-dialog__header">
-            <span>{prompt.displayName || prompt.toolName}</span>
-            <h2 id="agent-permission-title">{prompt.title || t('chat.permissionRequestTitle')}</h2>
-            {prompt.description ? <p>{prompt.description}</p> : null}
-          </div>
-          {prompt.inputPreview ? <pre className="agent-input-preview">{prompt.inputPreview}</pre> : null}
-          <div className="agent-input-actions">
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={() => onResolve({ behavior: 'deny', message: t('chat.permissionDeniedByUser') })}
-            >
-              {t('chat.permissionDeny')}
-            </button>
-            <button type="button" className="btn btn-primary" onClick={() => onResolve({ behavior: 'allow' })}>
-              {t('chat.permissionAllow')}
-            </button>
-          </div>
-        </section>
-      </div>
-    )
-  }
-
-  return <AskUserQuestionModal prompt={prompt} onResolve={onResolve} />
-}
-
-function AskUserQuestionModal({
-  prompt,
-  onResolve,
-}: {
-  prompt: Extract<PendingUserInputPrompt, { type: 'ask_user_question' }>
-  onResolve: (decision: UserInputDecision) => void
-}) {
-  const { t } = useI18n()
-  const [singleAnswers, setSingleAnswers] = useState<Record<string, string>>({})
-  const [multiAnswers, setMultiAnswers] = useState<Record<string, string[]>>({})
-  const [customAnswers, setCustomAnswers] = useState<Record<string, string>>({})
-
-  useEffect(() => {
-    setSingleAnswers({})
-    setMultiAnswers({})
-    setCustomAnswers({})
-  }, [prompt.permissionRequestId])
-
-  const canSubmit = prompt.questions.every((question) => {
-    const custom = customAnswers[question.question]?.trim()
-    if (custom) return true
-    if (question.multiSelect) return (multiAnswers[question.question] ?? []).length > 0
-    return Boolean(singleAnswers[question.question])
-  })
-
-  const submitAnswers = () => {
-    const answers: Record<string, string | string[]> = {}
-    for (const question of prompt.questions) {
-      const custom = customAnswers[question.question]?.trim()
-      if (question.multiSelect) {
-        const selected = multiAnswers[question.question] ?? []
-        answers[question.question] = custom ? [...selected, custom] : selected
-        continue
-      }
-      answers[question.question] = custom || singleAnswers[question.question] || question.options[0]?.label || ''
-    }
-
-    onResolve({
-      behavior: 'allow',
-      updatedInput: {
-        questions: prompt.questions,
-        answers,
-      },
-    })
-  }
-
-  return (
-    <div className="agent-input-backdrop" role="presentation">
-      <section className="agent-input-dialog agent-input-dialog--question" role="dialog" aria-modal="true" aria-labelledby="agent-question-title">
-        <div className="agent-input-dialog__header">
-          <span>{t('chat.askQuestionEyebrow')}</span>
-          <h2 id="agent-question-title">{t('chat.askQuestionTitle')}</h2>
-        </div>
-        <div className="agent-question-list">
-          {prompt.questions.map((question, questionIndex) => (
-            <AskUserQuestionBlock
-              key={`${question.question}-${questionIndex}`}
-              question={question}
-              customValue={customAnswers[question.question] ?? ''}
-              multiValue={multiAnswers[question.question] ?? []}
-              singleValue={singleAnswers[question.question] ?? ''}
-              onCustomChange={(value) =>
-                setCustomAnswers((prev) => ({
-                  ...prev,
-                  [question.question]: value,
-                }))
-              }
-              onMultiChange={(label, checked) =>
-                setMultiAnswers((prev) => {
-                  const current = prev[question.question] ?? []
-                  const next = checked ? [...new Set([...current, label])] : current.filter((item) => item !== label)
-                  return { ...prev, [question.question]: next }
-                })
-              }
-              onSingleChange={(label) =>
-                setSingleAnswers((prev) => ({
-                  ...prev,
-                  [question.question]: label,
-                }))
-              }
-            />
-          ))}
-        </div>
-        <div className="agent-input-actions">
-          <button
-            type="button"
-            className="btn btn-ghost"
-            onClick={() => onResolve({ behavior: 'deny', message: t('chat.askQuestionCancelled') })}
-          >
-            {t('chat.askQuestionCancel')}
-          </button>
-          <button type="button" className="btn btn-primary" disabled={!canSubmit} onClick={submitAnswers}>
-            {t('chat.askQuestionSubmit')}
-          </button>
-        </div>
-      </section>
-    </div>
-  )
-}
-
-function AskUserQuestionBlock({
-  question,
-  singleValue,
-  multiValue,
-  customValue,
-  onSingleChange,
-  onMultiChange,
-  onCustomChange,
-}: {
-  question: ClaudeAskUserQuestion
-  singleValue: string
-  multiValue: string[]
-  customValue: string
-  onSingleChange: (label: string) => void
-  onMultiChange: (label: string, checked: boolean) => void
-  onCustomChange: (value: string) => void
-}) {
-  const { t } = useI18n()
-  const inputName = `ask-${stableDomId(question.question)}`
-
-  return (
-    <fieldset className="agent-question-block">
-      <legend>
-        <span>{question.header}</span>
-        {question.question}
-      </legend>
-      <div className="agent-question-options">
-        {question.options.map((option) => {
-          const checked = question.multiSelect ? multiValue.includes(option.label) : singleValue === option.label
-          return (
-            <label key={option.label} className={`agent-question-option${checked ? ' is-selected' : ''}`}>
-              <input
-                type={question.multiSelect ? 'checkbox' : 'radio'}
-                name={inputName}
-                checked={checked}
-                onChange={(event) => {
-                  if (question.multiSelect) {
-                    onMultiChange(option.label, event.currentTarget.checked)
-                    return
-                  }
-                  onSingleChange(option.label)
-                }}
-              />
-              <span className="agent-question-option__copy">
-                <span>{option.label}</span>
-                <span>{option.description}</span>
-              </span>
-              {option.preview ? (
-                <div
-                  className="agent-question-option__preview markdown-body"
-                  dangerouslySetInnerHTML={{ __html: renderMarkdown(option.preview) }}
-                />
-              ) : null}
-            </label>
-          )
-        })}
-      </div>
-      <label className="agent-question-custom">
-        <span>{t('chat.askQuestionCustom')}</span>
-        <input
-          type="text"
-          value={customValue}
-          placeholder={t('chat.askQuestionCustomPlaceholder')}
-          onChange={(event) => onCustomChange(event.currentTarget.value)}
-        />
-      </label>
-    </fieldset>
-  )
-}
-
-function ComposerAttachmentPreview({
-  attachment,
-  onRemove,
-}: {
-  attachment: ClaudeChatAttachment
-  onRemove: () => void
-}) {
-  const { t } = useI18n()
-  const label = attachment.kind === 'image' ? t('chat.attachmentImage') : t('chat.attachmentText')
-
-  return (
-    <div className={`composer-attachment composer-attachment--${attachment.kind}`}>
-      <AttachmentThumb attachment={attachment} />
-      <span className="composer-attachment__copy">
-        <span>{attachment.name}</span>
-        <span>{[label, attachment.preview || formatBytes(attachment.size)].filter(Boolean).join(' · ')}</span>
-      </span>
-      <button
-        type="button"
-        className="composer-attachment__remove"
-        title={t('chat.removeAttachment')}
-        aria-label={t('chat.removeAttachment')}
-        onClick={onRemove}
-      >
-        <IconInline name="x" />
-      </button>
-    </div>
-  )
-}
-
-function ChatAttachmentList({ attachments }: { attachments: ChatMessageAttachment[] }) {
-  return (
-    <div className="chat-message-attachments">
-      {attachments.map((attachment) => (
-        <div key={attachment.id} className={`chat-message-attachment chat-message-attachment--${attachment.kind}`}>
-          <AttachmentThumb attachment={attachment} />
-          <span className="chat-message-attachment__copy">
-            <span>{attachment.name}</span>
-            <span>{attachment.preview || formatBytes(attachment.size)}</span>
-          </span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function AttachmentThumb({ attachment }: { attachment: ClaudeChatAttachment | ChatMessageAttachment }) {
-  if (attachment.kind === 'image' && attachment.dataUrl) {
-    return <img className="attachment-thumb attachment-thumb--image" src={attachment.dataUrl} alt="" />
-  }
-  return (
-    <span className={`attachment-thumb attachment-thumb--${attachment.kind}`} aria-hidden="true">
-      <IconInline name={attachment.kind === 'image' ? 'image' : 'file'} />
-    </span>
-  )
-}
-
-function ChatMessage({ item }: { item: ChatMessageItem }) {
-  const bodyHtml = useMemo(() => {
-    if (item.role === 'assistant') {
-      return renderMarkdown(item.content || (item.status === 'streaming' ? '' : ' '))
-    }
-    return `<p>${escapeHtml(item.content).replace(/\n/g, '<br>')}</p>`
-  }, [item.content, item.role, item.status])
-
-  if (item.role === 'assistant' && !item.content.trim() && item.status === 'streaming') return null
-
-  const suffix = item.role === 'assistant' && item.status === 'streaming' ? '<span class="typing-dot"></span>' : ''
-  const hasBody = item.content.trim().length > 0 || item.role === 'assistant'
-  const attachments = item.attachments ?? []
-
-  return (
-    <article className={`chat-message chat-message--${item.role} chat-message--${item.status}`}>
-      <div className="chat-message__bubble markdown-body">
-        {attachments.length > 0 ? <ChatAttachmentList attachments={attachments} /> : null}
-        {hasBody ? <div dangerouslySetInnerHTML={{ __html: bodyHtml + suffix }} /> : null}
-      </div>
-    </article>
-  )
-}
-
-function ToolRow({ item }: { item: ChatToolItem }) {
-  const { t } = useI18n()
-  const statusLabel: Record<ToolStatus, string> = {
-    denied: t('chat.toolDenied'),
-    done: t('chat.toolDone'),
-    error: t('chat.toolError'),
-    running: t('chat.toolRunning'),
-  }
-  const hasDetails = Boolean(item.detail || item.inputPreview)
-  const [isOpen, setIsOpen] = useState(item.status === 'running')
-
-  useEffect(() => {
-    setIsOpen(item.status === 'running')
-  }, [item.status])
-
-  return (
-    <details
-      className={`tool-row tool-row--${item.status}`}
-      open={isOpen}
-      onToggle={(event) => setIsOpen(event.currentTarget.open)}
-    >
-      <summary className="status-row__summary">
-        <span className="status-row__chevron" aria-hidden="true" />
-        <span className="tool-row__dot" />
-        <span className="tool-row__name">{item.name}</span>
-        <span className="tool-row__status">{statusLabel[item.status]}</span>
-        {item.detail ? <span className="tool-row__detail">{item.detail}</span> : null}
-      </summary>
-      {hasDetails ? (
-        <div className="status-row__body">
-          {item.inputPreview ? <code>{item.inputPreview}</code> : null}
-        </div>
-      ) : null}
-    </details>
-  )
-}
-
-function ThinkingRow({ item }: { item: ChatThinkingItem }) {
-  const { t } = useI18n()
-  const [isOpen, setIsOpen] = useState(item.status === 'running')
-
-  useEffect(() => {
-    setIsOpen(item.status === 'running')
-  }, [item.status])
-
-  return (
-    <details
-      className={`thinking-row thinking-row--${item.status}`}
-      open={isOpen}
-      onToggle={(event) => setIsOpen(event.currentTarget.open)}
-    >
-      <summary className="thinking-row__header">
-        <span className="status-row__chevron" aria-hidden="true" />
-        <span className="thinking-row__dot" />
-        <span className="thinking-row__title">{item.title}</span>
-        <span className="thinking-row__status">{item.status === 'running' ? t('chat.thinkingRunning') : t('chat.thinkingDone')}</span>
-      </summary>
-      {item.content ? <pre>{item.content}</pre> : null}
-    </details>
-  )
-}
-
-function ActivityRow({ item }: { item: ChatActivityItem }) {
-  const { t } = useI18n()
-  const statusLabel: Record<ActivityStatus, string> = {
-    done: t('chat.activityDone'),
-    error: t('chat.activityError'),
-    info: t('chat.activityInfo'),
-    running: t('chat.activityRunning'),
-  }
-  const [isOpen, setIsOpen] = useState(item.status === 'running')
-
-  useEffect(() => {
-    setIsOpen(item.status === 'running')
-  }, [item.status])
-
-  return (
-    <details
-      className={`activity-row activity-row--${item.status}`}
-      open={isOpen}
-      onToggle={(event) => setIsOpen(event.currentTarget.open)}
-    >
-      <summary className="activity-row__main">
-        <span className="status-row__chevron" aria-hidden="true" />
-        <span className="activity-row__dot" />
-        <span className="activity-row__title">{item.title}</span>
-        <span className="activity-row__status">{statusLabel[item.status]}</span>
-        {item.detail ? <span className="activity-row__detail">{item.detail}</span> : null}
-      </summary>
-      {item.preview ? <pre>{item.preview}</pre> : null}
-    </details>
-  )
-}
 
 export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatPage(
   {
@@ -1728,11 +1258,6 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     if (!isRunningRef.current) void submitPrompt(inputValue, undefined, pendingAttachments)
   }
 
-  const hasSendText = inputValue.trim().length > 0
-  const hasComposerAttachments = pendingAttachments.length > 0
-  const hasUnsupportedImageAttachment =
-    !activeModelSupportsImages && pendingAttachments.some((attachment) => attachment.kind === 'image')
-
   return (
     <section
       className={`chat-page${hasMessages ? ' has-messages' : ''}`}
@@ -1746,12 +1271,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       </div>
       <div className="chat-scroll-region" id="chat-scroll-region" ref={scrollRegionRef} hidden={!hasMessages}>
         <div className="chat-transcript" id="chat-transcript" aria-live="polite">
-          {chatState.items.map((item) => {
-            if (item.type === 'tool') return <ToolRow key={item.id} item={item} />
-            if (item.type === 'thinking') return <ThinkingRow key={item.id} item={item} />
-            if (item.type === 'activity') return <ActivityRow key={item.id} item={item} />
-            return <ChatMessage key={item.id} item={item} />
-          })}
+          <Transcript items={chatState.items} />
         </div>
       </div>
       <button
@@ -1768,332 +1288,67 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       >
         <IconInline name="arrowDown" />
       </button>
-      <div className="chat-composer-wrap no-drag">
-        <form className="chat-composer" id="chat-form" onSubmit={handleFormSubmit}>
-          {pendingAttachments.length > 0 ? (
-            <div className="composer-attachments" aria-label={t('chat.attachmentsAria')}>
-              {pendingAttachments.map((attachment) => (
-                <ComposerAttachmentPreview
-                  key={attachment.id}
-                  attachment={attachment}
-                  onRemove={() => removeComposerAttachment(attachment.id)}
-                />
-              ))}
-            </div>
-          ) : null}
-          <textarea
-            ref={chatInputRef}
-            className="chat-input"
-            id="chat-input"
-            rows={1}
-            placeholder={t('chat.composerPlaceholder')}
-            autoComplete="off"
-            spellCheck={false}
-            value={inputValue}
-            onChange={(e) => {
-              setInputValue(e.target.value)
-              setComposerSelection({ start: e.target.selectionStart, end: e.target.selectionEnd })
-              setDismissedAutocompleteKey('')
-            }}
-            onCompositionStart={() => setIsComposingText(true)}
-            onCompositionEnd={() => setIsComposingText(false)}
-            onKeyDown={handleInputKeydown}
-            onKeyUp={syncComposerSelection}
-            onClick={syncComposerSelection}
-            onSelect={syncComposerSelection}
-          />
-          {composerAutocompleteOpen && composerAutocompleteBox
-            ? createPortal(
-                <div
-                  ref={composerAutocompleteSurfaceRef}
-                  className="composer-autocomplete-popover"
-                  role="listbox"
-                  aria-label={activeComposerTrigger?.kind === 'slash' ? t('chat.autocompleteSlashAria') : t('chat.autocompleteMentionAria')}
-                  style={{
-                    position: 'fixed',
-                    left: composerAutocompleteBox.left,
-                    bottom: composerAutocompleteBox.bottom,
-                    width: composerAutocompleteBox.width,
-                    maxHeight: composerAutocompleteBox.maxHeight,
-                  }}
-                >
-                  {composerSuggestions.map((suggestion, index) => (
-                    <button
-                      key={suggestion.id}
-                      type="button"
-                      role="option"
-                      aria-selected={index === composerSuggestionIndex}
-                      className={`composer-autocomplete-option${index === composerSuggestionIndex ? ' is-selected' : ''}`}
-                      onMouseEnter={() => setComposerSuggestionIndex(index)}
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => insertComposerSuggestion(suggestion)}
-                    >
-                      <IconInline name={suggestion.kind === 'file' ? 'file' : suggestion.kind === 'agent' ? 'branch' : 'chip'} />
-                      <span className="composer-autocomplete-option__copy">
-                        <span>{suggestion.title}</span>
-                        <span>{suggestion.subtitle}</span>
-                      </span>
-                    </button>
-                  ))}
-                </div>,
-                document.body,
-              )
-            : null}
-          <div className="composer-footer">
-            <div className="composer-actions">
-              <button
-                type="button"
-                className="composer-icon-button"
-                title={activeModelSupportsImages ? t('chat.addAttachmentTitle') : t('chat.addTextAttachmentTitle')}
-                aria-label={activeModelSupportsImages ? t('chat.addAttachmentAria') : t('chat.addTextAttachmentAria')}
-                disabled={isRunning}
-                onClick={() => void addComposerAttachments()}
-              >
-                <IconInline name="paperclip" />
-              </button>
-              <div className="composer-mode-picker" ref={permissionModePickerRef}>
-                <button
-                  ref={permissionModePopoverAnchorRef}
-                  type="button"
-                  className={`composer-mode-button${permissionModeOpen ? ' is-open' : ''}`}
-                  title={t('chat.permissionModeTitle')}
-                  aria-label={t('chat.permissionModeAria')}
-                  aria-expanded={permissionModeOpen}
-                  aria-haspopup="menu"
-                  disabled={isRunning}
-                  onClick={() => {
-                    if (isRunning) return
-                    setPermissionModeOpen((open) => !open)
-                  }}
-                >
-                  <IconInline name="shield" />
-                  <span>{permissionModeLabel}</span>
-                  <IconInline name="chevron" />
-                </button>
-                {permissionModeOpen && permissionModePopoverBox
-                  ? createPortal(
-                      <div
-                        ref={permissionModePopoverSurfaceRef}
-                        className="composer-mode-popover"
-                        role="menu"
-                        aria-label={t('chat.permissionModeMenuAria')}
-                        style={{
-                          position: 'fixed',
-                          left: permissionModePopoverBox.left,
-                          bottom: permissionModePopoverBox.bottom,
-                          width: permissionModePopoverBox.width,
-                          maxHeight: permissionModePopoverBox.maxHeight,
-                        }}
-                      >
-                        {permissionModeRows.map((row) => {
-                          const checked = row.mode === permissionMode
-                          return (
-                            <button
-                              key={row.mode}
-                              type="button"
-                              role="menuitemradio"
-                              className={`composer-mode-option${checked ? ' is-selected' : ''}`}
-                              aria-checked={checked}
-                              onClick={() => {
-                                setPermissionMode(row.mode)
-                                setPermissionModeOpen(false)
-                              }}
-                            >
-                              <span className="composer-mode-option__label">{row.label}</span>
-                              <span className="composer-mode-option__meta">{row.description}</span>
-                            </button>
-                          )
-                        })}
-                      </div>,
-                      document.body,
-                    )
-                  : null}
-              </div>
-            </div>
-            <div className="composer-actions composer-actions--end">
-              <span className={`composer-spinner${isRunning ? ' is-visible' : ''}`} id="composer-spinner" aria-hidden="true" />
-              <div className="composer-model-picker" ref={modelPickerRef}>
-                <button
-                  ref={modelPopoverAnchorRef}
-                  type="button"
-                  className={`composer-model-button${modelPickerOpen ? ' is-open' : ''}`}
-                  id="composer-model-trigger"
-                  title={t('chat.modelPickerTitle')}
-                  aria-label={t('chat.modelPickerAria')}
-                  aria-expanded={modelPickerOpen}
-                  aria-haspopup="menu"
-                  disabled={isRunning || modelMenuRows.length === 0}
-                  onClick={() => {
-                    if (isRunning || modelMenuRows.length === 0) return
-                    setModelPickerOpen((open) => !open)
-                  }}
-                >
-                  <span id="composer-model">{compactModelName(globalDisplayModel, t)}</span>
-                  <IconInline name="chevron" />
-                </button>
-                {modelPickerOpen && modelMenuRows.length > 0 && modelPopoverBox
-                  ? createPortal(
-                      <div
-                        ref={modelPopoverSurfaceRef}
-                        className="composer-model-popover"
-                        role="menu"
-                        aria-label={t('chat.modelMenuAria')}
-                        style={{
-                          position: 'fixed',
-                          left: modelPopoverBox.left,
-                          bottom: modelPopoverBox.bottom,
-                          width: modelPopoverBox.width,
-                          maxHeight: modelPopoverBox.maxHeight,
-                        }}
-                      >
-                        {modelMenuRows.map((row) => {
-                          const checked = row.pickKey === modelMenuSelectionKey
-                          return (
-                            <button
-                              key={row.pickKey}
-                              type="button"
-                              role="menuitemradio"
-                              className={`composer-model-option${checked ? ' is-selected' : ''}`}
-                              aria-checked={checked}
-                              title={row.metaLine || undefined}
-                              onClick={() => void pickChatMenuRow(row)}
-                            >
-                              <span className="composer-model-option__label">
-                                <span>{row.headline}</span>
-                                {row.supportsImages ? (
-                                  <span
-                                    className="composer-model-option__capability"
-                                    title={t('chat.modelSupportsImages')}
-                                    aria-label={t('chat.modelSupportsImages')}
-                                  >
-                                    <IconInline name="image" />
-                                  </span>
-                                ) : null}
-                              </span>
-                              <span className="composer-model-option__meta">{row.metaLine}</span>
-                            </button>
-                          )
-                        })}
-                      </div>,
-                      document.body,
-                    )
-                  : null}
-              </div>
-              {/* 关掉，需要再打开
-              <button type="button" className="composer-icon-button" id="btn-dictate" title="语音输入" aria-label="语音输入">
-                <IconInline name="mic" />
-              </button>
-              */}
-              <button
-                type="submit"
-                className="composer-send-button"
-                id="btn-send"
-                title={isRunning ? t('chat.stop') : hasUnsupportedImageAttachment ? t('chat.imageInputDisabledTitle') : t('chat.send')}
-                aria-label={isRunning ? t('chat.stop') : t('chat.send')}
-                disabled={!isRunning && ((!hasSendText && !hasComposerAttachments) || hasUnsupportedImageAttachment)}
-                onClick={handleSendClick}
-              >
-                <IconInline name={isRunning ? 'stop' : 'send'} />
-              </button>
-            </div>
-          </div>
-        </form>
-
-        <div className="chat-context-strip" aria-label={t('chat.contextStripAria')}>
-          <div className="chat-project-picker" ref={projectPickerRef}>
-            <button
-              ref={projectPopoverAnchorRef}
-              type="button"
-              className={`chat-project-trigger${projectPickerOpen ? ' is-open' : ''}`}
-              aria-haspopup="menu"
-              aria-expanded={projectPickerOpen}
-              title={t('chat.switchProject')}
-              onClick={() => setProjectPickerOpen((open) => !open)}
-            >
-              <IconInline name="folder" />
-              <span>{activeProject.name}</span>
-              <IconInline name="chevron" />
-            </button>
-            {projectPickerOpen && projectPopoverBox
-              ? createPortal(
-                  <div
-                    ref={projectPopoverSurfaceRef}
-                    className="chat-project-popover"
-                    role="menu"
-                    aria-label={t('chat.projectMenuAria')}
-                    style={{
-                      position: 'fixed',
-                      left: projectPopoverBox.left,
-                      bottom: projectPopoverBox.bottom,
-                      width: projectPopoverBox.width,
-                      maxHeight: projectPopoverBox.maxHeight,
-                    }}
-                  >
-                <div className="chat-project-popover-title">{t('chat.projectMenuTitle')}</div>
-                <div className="chat-project-options">
-                  {projects.map((project) => {
-                    const selected = project.id === activeProject.id
-                    return (
-                      <button
-                        key={project.id}
-                        type="button"
-                        role="menuitemradio"
-                        aria-checked={selected}
-                        className={`chat-project-option${selected ? ' is-selected' : ''}`}
-                        onClick={() => {
-                          onSelectProject(project.id)
-                          setProjectPickerOpen(false)
-                        }}
-                      >
-                        <IconInline name="folder" />
-                        <span className="chat-project-option-copy">
-                          <span>{project.name}</span>
-                          <span>{project.path}</span>
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-                <div className="chat-project-popover-title">{t('chat.addProjectTitle')}</div>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="chat-project-option"
-                  onClick={() => {
-                    setProjectPickerOpen(false)
-                    void onCreateProject('existing')
-                  }}
-                >
-                  <IconInline name="folder" />
-                  <span className="chat-project-option-copy">
-                    <span>{t('chat.useExistingFolder')}</span>
-                    <span>{t('chat.useExistingFolderSub')}</span>
-                  </span>
-                </button>
-                  </div>,
-                  document.body,
-                )
-              : null}
-          </div>
-          <button
-            type="button"
-            className="chat-context-action"
-            title={t('chat.refreshContextTitle')}
-            disabled={agentContextLoading}
-            onClick={() => void refreshAgentContext()}
-          >
-            <IconInline name="chip" />
-            <span>
-              {agentContextLoading
-                ? t('chat.scanning')
-                : t('chat.skillsAgentsCount', {
-                    skills: agentContext?.skills.length ?? 0,
-                    agents: agentContext?.agents.length ?? 0,
-                  })}
-            </span>
-          </button>
-        </div>
-      </div>
+      <Composer
+        activeProject={activeProject}
+        projects={projects}
+        inputValue={inputValue}
+        isRunning={isRunning}
+        activeModelSupportsImages={activeModelSupportsImages}
+        pendingAttachments={pendingAttachments}
+        permissionMode={permissionMode}
+        permissionModeLabel={permissionModeLabel}
+        permissionModeRows={permissionModeRows}
+        permissionModeOpen={permissionModeOpen}
+        permissionModePopoverBox={permissionModePopoverBox}
+        modelPickerOpen={modelPickerOpen}
+        modelMenuRows={modelMenuRows}
+        modelMenuSelectionKey={modelMenuSelectionKey}
+        modelPopoverBox={modelPopoverBox}
+        displayModelName={compactModelName(globalDisplayModel, t)}
+        projectPickerOpen={projectPickerOpen}
+        projectPopoverBox={projectPopoverBox}
+        composerAutocompleteOpen={composerAutocompleteOpen}
+        composerAutocompleteBox={composerAutocompleteBox}
+        activeComposerTrigger={activeComposerTrigger}
+        composerSuggestions={composerSuggestions}
+        composerSuggestionIndex={composerSuggestionIndex}
+        agentContext={agentContext}
+        agentContextLoading={agentContextLoading}
+        chatInputRef={chatInputRef}
+        composerAutocompleteSurfaceRef={composerAutocompleteSurfaceRef}
+        permissionModePickerRef={permissionModePickerRef}
+        permissionModePopoverAnchorRef={permissionModePopoverAnchorRef}
+        permissionModePopoverSurfaceRef={permissionModePopoverSurfaceRef}
+        modelPickerRef={modelPickerRef}
+        modelPopoverAnchorRef={modelPopoverAnchorRef}
+        modelPopoverSurfaceRef={modelPopoverSurfaceRef}
+        projectPickerRef={projectPickerRef}
+        projectPopoverAnchorRef={projectPopoverAnchorRef}
+        projectPopoverSurfaceRef={projectPopoverSurfaceRef}
+        setPermissionMode={setPermissionMode}
+        setPermissionModeOpen={setPermissionModeOpen}
+        setModelPickerOpen={setModelPickerOpen}
+        setProjectPickerOpen={setProjectPickerOpen}
+        setComposerSuggestionIndex={setComposerSuggestionIndex}
+        onInputChange={(value, selectionStart, selectionEnd) => {
+          setInputValue(value)
+          setComposerSelection({ start: selectionStart, end: selectionEnd })
+          setDismissedAutocompleteKey('')
+        }}
+        onCompositionStart={() => setIsComposingText(true)}
+        onCompositionEnd={() => setIsComposingText(false)}
+        onInputKeyDown={handleInputKeydown}
+        onSyncComposerSelection={syncComposerSelection}
+        onFormSubmit={handleFormSubmit}
+        onSendClick={handleSendClick}
+        onAddComposerAttachments={() => void addComposerAttachments()}
+        onRemoveComposerAttachment={removeComposerAttachment}
+        onInsertComposerSuggestion={insertComposerSuggestion}
+        onPickChatMenuRow={(row) => void pickChatMenuRow(row)}
+        onSelectProject={onSelectProject}
+        onCreateProject={onCreateProject}
+        onRefreshAgentContext={() => void refreshAgentContext()}
+      />
       {activeUserInputPrompt
         ? createPortal(
             <AgentInputPromptModal prompt={activeUserInputPrompt} onResolve={(decision) => void resolveActiveUserInputPrompt(decision)} />,
@@ -2229,13 +1484,6 @@ function toChatMessageAttachment(attachment: ClaudeChatAttachment): ChatMessageA
   }
 }
 
-function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) return ''
-  if (bytes < 1024) return `${Math.round(bytes)} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)} MB`
-}
-
 function formatContextScope(scope: 'user' | 'project', t: (path: string, vars?: Record<string, string | number>) => string): string {
   return scope === 'user' ? t('chat.scopeUser') : t('chat.scopeProject')
 }
@@ -2279,22 +1527,6 @@ function getPermissionModeRows(t: (path: string, vars?: Record<string, string | 
       description: t('chat.permissionModeFullDesc'),
     },
   ]
-}
-
-function stableDomId(value: string): string {
-  let hash = 0
-  for (let index = 0; index < value.length; index += 1) {
-    hash = (hash * 31 + value.charCodeAt(index)) >>> 0
-  }
-  return hash.toString(36)
-}
-
-function renderMarkdown(markdown: string): string {
-  const html = marked.parse(markdown, { async: false }) as string
-  return DOMPurify.sanitize(html, {
-    ADD_ATTR: ['target', 'rel'],
-    USE_PROFILES: { html: true },
-  })
 }
 
 function providerAcceptsAnthropicId(provider: ClaudeAgentModelProvider, modelId: string): boolean {
@@ -2452,15 +1684,6 @@ function playAgentDoneSound(): void {
   } catch {
     /* Some systems block Web Audio until the next user gesture. */
   }
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;')
 }
 
 /** 贴底跟随：距底部小于此值视为在底部 */

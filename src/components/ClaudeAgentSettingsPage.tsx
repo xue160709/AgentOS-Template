@@ -10,8 +10,6 @@ import { getInitialLocale, translate, useI18n } from '../i18n/i18n'
 
 const SETTINGS_CHANGED_EVENT = 'claude-agent-settings:changed'
 
-const AUTOSAVE_DEBOUNCE_MS = 600
-
 function cloneSettingsSnapshot(snapshot: ClaudeAgentSettingsSnapshot): ClaudeAgentSettingsSnapshot {
   return JSON.parse(JSON.stringify(snapshot)) as ClaudeAgentSettingsSnapshot
 }
@@ -46,8 +44,6 @@ export function ClaudeAgentSettingsPage() {
   const [status, setStatus] = useState('')
   const [saveDisabled, setSaveDisabled] = useState(false)
   const [busy, setBusy] = useState(false)
-  /** 首次从主进程读入后再允许防抖自动保存，避免与 load 竞态 */
-  const [settingsReady, setSettingsReady] = useState(false)
 
   const latestRef = useRef({
     providers,
@@ -84,17 +80,6 @@ export function ClaudeAgentSettingsPage() {
     const snap = lastSyncedSnapshotRef.current
     dirtyRef.current = snap ? isSettingsDirty(configSource, chatActiveProviderId, chatActiveAnthropicModel, providers, snap) : false
   }, [chatActiveAnthropicModel, chatActiveProviderId, configSource, providers, lastSyncedSeq])
-
-  const autosaveFingerprint = useMemo(
-    () =>
-      JSON.stringify({
-        configSource,
-        chatActiveProviderId,
-        chatActiveAnthropicModel,
-        providers: providers.map(({ apiKey: _apiKey, ...rest }) => rest),
-      }),
-    [chatActiveAnthropicModel, chatActiveProviderId, configSource, providers],
-  )
 
   const applySnapshot = useCallback((snapshot: ClaudeAgentSettingsSnapshot) => {
     const nextProviders = snapshot.settings.providers.length
@@ -164,7 +149,6 @@ export function ClaudeAgentSettingsPage() {
         return
       }
       if (!silent) {
-        setSettingsReady(false)
         setStatus(t('settings.models.loading'))
       }
       try {
@@ -175,25 +159,13 @@ export function ClaudeAgentSettingsPage() {
         setSaveDisabled(false)
         if (!silent) {
           setStatus(t('settings.models.loaded'))
-          setSettingsReady(true)
         }
       } catch (error) {
         setStatus(error instanceof Error ? error.message : String(error))
-        if (!silent) {
-          setSettingsReady(false)
-        }
       }
     },
     [applySnapshot, t],
   )
-
-  useEffect(() => {
-    if (saveDisabled || !settingsReady) return
-    const handle = window.setTimeout(() => {
-      void persist()
-    }, AUTOSAVE_DEBOUNCE_MS)
-    return () => window.clearTimeout(handle)
-  }, [autosaveFingerprint, persist, saveDisabled, settingsReady])
 
   const addProvider = () => {
     const provider = createModelProvider()
@@ -496,9 +468,6 @@ export function ClaudeAgentSettingsPage() {
                               placeholder="sk-ant-..."
                               value={provider.apiKey}
                               onChange={(event) => updateProvider(pid, 'apiKey', event.target.value)}
-                              onBlur={() => {
-                                void persist()
-                              }}
                             />
                           </div>
                           <div className="settings-field-row">
@@ -621,7 +590,16 @@ export function ClaudeAgentSettingsPage() {
         ) : null}
 
         <div className="settings-footer">
-          <div className="settings-actions settings-actions--status-only">
+          <div className="settings-actions">
+            <button
+              type="button"
+              className="btn btn-primary btn-compact"
+              disabled={!isDirty || busy || saveDisabled}
+              onClick={() => void persist()}
+              aria-controls="claude-settings-form"
+            >
+              {t('settings.models.saveChanges')}
+            </button>
             <span className="settings-status" id="claude-settings-status" role="status" aria-live="polite">
               {status}
             </span>
