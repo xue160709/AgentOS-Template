@@ -38,7 +38,6 @@ export function AppShell() {
   const { t } = useI18n()
   const [activeViewId, setActiveViewId] = useState<AppViewId>(() => viewFromLocation())
   const [settingsCategory, setSettingsCategory] = useState<SettingsCategoryId>(() => settingsCategoryFromLocation())
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [canBack, setCanBack] = useState(false)
   const [canForward, setCanForward] = useState(false)
   const [headerStatus, setHeaderStatus] = useState(() => translate(getInitialLocale(), 'shell.headerDefault'))
@@ -125,6 +124,8 @@ export function AppShell() {
     [chatWorkspace?.threads],
   )
 
+  const sidebarCollapsed = chatWorkspace?.sidebarPrefs.collapsed ?? false
+
   useEffect(() => {
     if (!projectIdsKey) return
     setHiddenSkillPathsByProject((prev) => {
@@ -142,6 +143,19 @@ export function AppShell() {
       return changed ? next : prev
     })
   }, [projectIdsKey])
+
+  useEffect(() => {
+    if (!projectIdsKey) return
+    updateChatWorkspace((prev) => {
+      const allowed = new Set(prev.projects.map((project) => project.id))
+      const filtered = prev.sidebarPrefs.collapsedProjectIds.filter((id) => allowed.has(id))
+      if (filtered.length === prev.sidebarPrefs.collapsedProjectIds.length) return prev
+      return {
+        ...prev,
+        sidebarPrefs: { ...prev.sidebarPrefs, collapsedProjectIds: filtered },
+      }
+    })
+  }, [projectIdsKey, updateChatWorkspace])
 
   useEffect(() => {
     let cancelled = false
@@ -514,6 +528,25 @@ export function AppShell() {
     }))
   }, [updateChatWorkspace])
 
+  const toggleSidebarCollapsed = useCallback(() => {
+    updateChatWorkspace((prev) => ({
+      ...prev,
+      sidebarPrefs: { ...prev.sidebarPrefs, collapsed: !prev.sidebarPrefs.collapsed },
+    }))
+  }, [updateChatWorkspace])
+
+  const toggleSidebarProjectCollapsed = useCallback((projectId: string) => {
+    updateChatWorkspace((prev) => {
+      const nextIds = new Set(prev.sidebarPrefs.collapsedProjectIds)
+      if (nextIds.has(projectId)) nextIds.delete(projectId)
+      else nextIds.add(projectId)
+      return {
+        ...prev,
+        sidebarPrefs: { ...prev.sidebarPrefs, collapsedProjectIds: [...nextIds] },
+      }
+    })
+  }, [updateChatWorkspace])
+
   const removeProject = useCallback(
     (projectId: string) => {
       let didRemove = false
@@ -539,6 +572,10 @@ export function AppShell() {
           threads: nextThreads,
           activeProjectId,
           activeThreadId,
+          sidebarPrefs: {
+            ...prev.sidebarPrefs,
+            collapsedProjectIds: prev.sidebarPrefs.collapsedProjectIds.filter((id) => id !== projectId),
+          },
         }
       })
       if (!didRemove) return
@@ -738,6 +775,7 @@ export function AppShell() {
           threadRunStates={threadRunStates}
           activeProjectId={chatWorkspace.activeProjectId}
           activeThreadId={chatWorkspace.activeThreadId}
+          collapsedProjectIds={chatWorkspace.sidebarPrefs.collapsedProjectIds}
           showProjectSkills={showProjectSkillsInSidebar}
           projectSkillStates={projectSkillStates}
           selectedProjectSkill={selectedProjectSkill}
@@ -752,10 +790,11 @@ export function AppShell() {
           onToggleThreadPinned={toggleThreadPinned}
           onArchiveThread={archiveThread}
           onToggleProjectPinned={toggleProjectPinned}
+          onToggleSidebarProjectCollapsed={toggleSidebarProjectCollapsed}
           onRemoveProject={removeProject}
           onRevealProjectInFileManager={revealProjectInFileManager}
           onHideProjectSkill={hideProjectSkill}
-          onToggleCollapsed={() => setSidebarCollapsed((c) => !c)}
+          onToggleCollapsed={toggleSidebarCollapsed}
           sidebarRef={appSidebarRef}
           splitterRef={sidebarSplitterRef}
           onSplitterPointerDown={handleSidebarPointerDown}

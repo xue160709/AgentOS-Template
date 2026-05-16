@@ -1,5 +1,11 @@
-import type { ChatState, ChatWorkspaceState, WorkspaceProject, WorkspaceThread } from './components/types'
-import type { ChatMessageAttachment } from './components/types'
+import type {
+  ChatMessageAttachment,
+  ChatState,
+  ChatWorkspaceState,
+  WorkspaceProject,
+  WorkspaceSidebarPrefs,
+  WorkspaceThread,
+} from './components/types'
 
 export const CHAT_WORKSPACE_STORAGE_KEY = 'CodeX-UI-Template-chat-workspace-v1'
 const LEGACY_CHAT_STATE_STORAGE_KEY = 'CodeX-UI-Template-chat-state-v1'
@@ -10,6 +16,10 @@ export function createEmptyChatState(): ChatState {
 
 export function createId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+export function createDefaultSidebarPrefs(): WorkspaceSidebarPrefs {
+  return { collapsed: false, collapsedProjectIds: [] }
 }
 
 export function latestVisibleThreadForProject(
@@ -99,7 +109,26 @@ export function createDefaultChatWorkspaceState(): ChatWorkspaceState {
           },
         ]
       : [],
+    sidebarPrefs: createDefaultSidebarPrefs(),
   }
+}
+
+function normalizeSidebarPrefs(value: unknown, projectIds: Set<string>): WorkspaceSidebarPrefs {
+  const defaults = createDefaultSidebarPrefs()
+  if (!isRecord(value)) return defaults
+  const raw = value.sidebarPrefs
+  if (!isRecord(raw)) return defaults
+
+  const collapsed = raw.collapsed === true
+
+  let collapsedProjectIds = defaults.collapsedProjectIds
+  if (Array.isArray(raw.collapsedProjectIds)) {
+    collapsedProjectIds = raw.collapsedProjectIds.filter(
+      (id): id is string => typeof id === 'string' && projectIds.has(id),
+    )
+  }
+
+  return { collapsed, collapsedProjectIds }
 }
 
 export function normalizeChatWorkspaceState(value: unknown): ChatWorkspaceState {
@@ -140,6 +169,8 @@ export function normalizeChatWorkspaceState(value: unknown): ChatWorkspaceState 
     ]
   })
 
+  const sidebarPrefs = normalizeSidebarPrefs(value, projectIds)
+
   const activeProjectId =
     typeof value.activeProjectId === 'string' && projectIds.has(value.activeProjectId)
       ? value.activeProjectId
@@ -154,13 +185,17 @@ export function normalizeChatWorkspaceState(value: unknown): ChatWorkspaceState 
     ? undefined
     : activeThread?.projectId === activeProjectId
       ? activeThread
-      : latestVisibleThreadForProject({ activeProjectId, activeThreadId: '', projects, threads }, activeProjectId)
+      : latestVisibleThreadForProject(
+          { activeProjectId, activeThreadId: '', projects, threads, sidebarPrefs },
+          activeProjectId,
+        )
 
   return {
     activeProjectId,
     activeThreadId: activeProjectThread?.id ?? '',
     projects,
     threads,
+    sidebarPrefs,
   }
 }
 

@@ -44,6 +44,7 @@ type AppShellSidebarProps = {
   threadRunStates: Record<string, ThreadRunState>
   activeProjectId: string
   activeThreadId: string
+  collapsedProjectIds: readonly string[]
   showProjectSkills: boolean
   projectSkillStates: Record<string, ProjectSkillListState>
   selectedProjectSkill: SelectedProjectSkill | null
@@ -58,6 +59,7 @@ type AppShellSidebarProps = {
   onToggleThreadPinned: (threadId: string) => void
   onArchiveThread: (threadId: string) => void
   onToggleProjectPinned: (projectId: string) => void
+  onToggleSidebarProjectCollapsed: (projectId: string) => void
   onRemoveProject: (projectId: string) => void
   onRevealProjectInFileManager: (projectPath: string) => void
   onHideProjectSkill: (projectId: string, skillPath: string) => void
@@ -75,6 +77,7 @@ export function AppShellSidebar({
   threadRunStates,
   activeProjectId,
   activeThreadId,
+  collapsedProjectIds,
   showProjectSkills,
   projectSkillStates,
   selectedProjectSkill,
@@ -89,6 +92,7 @@ export function AppShellSidebar({
   onToggleThreadPinned,
   onArchiveThread,
   onToggleProjectPinned,
+  onToggleSidebarProjectCollapsed,
   onRemoveProject,
   onRevealProjectInFileManager,
   onHideProjectSkill,
@@ -101,7 +105,7 @@ export function AppShellSidebar({
   const isSettingsSidebar = activeViewId === 'settings'
   const [confirmingArchiveThreadId, setConfirmingArchiveThreadId] = useState<string | null>(null)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
-  const [collapsedProjectIds, setCollapsedProjectIds] = useState<Set<string>>(() => new Set())
+  const collapsedProjectIdSet = useMemo(() => new Set(collapsedProjectIds), [collapsedProjectIds])
   const [skillTip, setSkillTip] = useState<{
     text: string
     skillPath: string
@@ -118,35 +122,7 @@ export function AppShellSidebar({
     })
   }, [projects])
 
-  useEffect(() => {
-    const projectIds = new Set(projects.map((project) => project.id))
-    setCollapsedProjectIds((current) => {
-      let changed = false
-      const next = new Set<string>()
-      for (const projectId of current) {
-        if (projectIds.has(projectId)) {
-          next.add(projectId)
-        } else {
-          changed = true
-        }
-      }
-      return changed ? next : current
-    })
-  }, [projects])
-
   const closeContextMenu = () => setContextMenu(null)
-
-  const toggleProjectExpanded = (projectId: string) => {
-    setCollapsedProjectIds((current) => {
-      const next = new Set(current)
-      if (next.has(projectId)) {
-        next.delete(projectId)
-      } else {
-        next.add(projectId)
-      }
-      return next
-    })
-  }
 
   useEffect(() => {
     if (contextMenu) setSkillTip(null)
@@ -434,7 +410,7 @@ export function AppShellSidebar({
                   {sortedProjects.map((project) => {
                     const projectThreads = threadsByProject.get(project.id) ?? []
                     const projectActive = activeProjectId === project.id
-                    const projectExpanded = !collapsedProjectIds.has(project.id)
+                    const projectExpanded = !collapsedProjectIdSet.has(project.id)
                     const projectSkillState = projectSkillStates[project.id]
                     const projectSkills = projectSkillState?.skills ?? []
                     const hiddenPaths = new Set(hiddenSkillPathsByProject[project.id] ?? [])
@@ -474,7 +450,7 @@ export function AppShellSidebar({
                             onClick={(event) => {
                               event.stopPropagation()
                               setConfirmingArchiveThreadId(null)
-                              toggleProjectExpanded(project.id)
+                              onToggleSidebarProjectCollapsed(project.id)
                             }}
                           >
                             <IconInline name="chevron" />

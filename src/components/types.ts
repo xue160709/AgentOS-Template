@@ -74,8 +74,16 @@ export type WorkspaceProject = {
   path: string
   createdAt: number
   updatedAt: number
-  /** 置顶排序用；越大越靠前 */
+  /** 项目置顶排序：越大越靠前（持久化在工作区数据中） */
   pinnedAt?: number
+}
+
+/** 侧栏布局与折叠偏好（与 {@link WorkspaceProject.pinnedAt} / {@link WorkspaceThread.pinnedAt} 置顶数据同属工作区持久化） */
+export type WorkspaceSidebarPrefs = {
+  /** 整条侧栏是否收起 */
+  collapsed: boolean
+  /** 侧栏内收起对话列表的项目 id */
+  collapsedProjectIds: string[]
 }
 
 export type WorkspaceThread = {
@@ -84,6 +92,7 @@ export type WorkspaceThread = {
   title: string
   createdAt: number
   updatedAt: number
+  /** 对话置顶排序：越大越靠前（持久化在工作区数据中） */
   pinnedAt?: number
   archivedAt?: number
   chatState: ChatState
@@ -122,6 +131,7 @@ export type ChatWorkspaceState = {
   activeThreadId: string
   projects: WorkspaceProject[]
   threads: WorkspaceThread[]
+  sidebarPrefs: WorkspaceSidebarPrefs
 }
 
 export type ProjectSkillListState = {
