@@ -28,6 +28,7 @@ type ThreadRow = {
   projectId: string
   rolloutPath: string
   title: string
+  purpose: string | null
   createdAt: number
   updatedAt: number
   pinnedAt: number | null
@@ -89,6 +90,7 @@ export class ChatWorkspaceStore {
     if (!existsSync(this.dbPath) || !this.canUseSqlite()) return null
 
     try {
+      this.ensureThreadPurposeColumn()
       const projects = this.selectJson<ProjectRow>(
         [
           'SELECT',
@@ -103,7 +105,7 @@ export class ChatWorkspaceStore {
       const threads = this.selectJson<ThreadRow>(
         [
           'SELECT',
-          'id, project_id AS projectId, rollout_path AS rolloutPath, title,',
+          'id, project_id AS projectId, rollout_path AS rolloutPath, title, purpose,',
           'created_at AS createdAt, updated_at AS updatedAt,',
           'pinned_at AS pinnedAt, archived_at AS archivedAt,',
           'session_id AS sessionId, model, cwd',
@@ -136,6 +138,7 @@ export class ChatWorkspaceStore {
           id: thread.id,
           projectId: thread.projectId,
           title: thread.title,
+          purpose: normalizeThreadPurpose(thread.purpose),
           createdAt: thread.createdAt,
           updatedAt: thread.updatedAt,
           pinnedAt: thread.pinnedAt ?? undefined,
@@ -153,6 +156,7 @@ export class ChatWorkspaceStore {
     if (!this.canUseSqlite()) return
 
     try {
+      this.ensureThreadPurposeColumn()
       const existingRolloutPaths = this.readThreadRolloutPathMap()
       const statements: string[] = [
         'PRAGMA foreign_keys = ON;',
@@ -178,6 +182,7 @@ export class ChatWorkspaceStore {
           created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL,
           title TEXT NOT NULL,
+          purpose TEXT,
           pinned_at INTEGER,
           archived_at INTEGER,
           session_id TEXT,
@@ -237,12 +242,12 @@ export class ChatWorkspaceStore {
         statements.push(
           `INSERT INTO threads (
              id, project_id, rollout_path, created_at, updated_at, title, pinned_at, archived_at,
-             session_id, model, cwd, message_count, first_user_message, preview, response_duration_ms
+             purpose, session_id, model, cwd, message_count, first_user_message, preview, response_duration_ms
            )
            VALUES (
              ${sqlValue(thread.id)}, ${sqlValue(thread.projectId)}, ${sqlValue(rolloutPath)}, ${sqlValue(thread.createdAt)},
              ${sqlValue(thread.updatedAt)}, ${sqlValue(thread.title)}, ${sqlValue(thread.pinnedAt)}, ${sqlValue(thread.archivedAt)},
-             ${sqlValue(thread.chatState.sessionId)}, ${sqlValue(thread.chatState.model)}, ${sqlValue(thread.chatState.cwd)},
+             ${sqlValue(thread.purpose)}, ${sqlValue(thread.chatState.sessionId)}, ${sqlValue(thread.chatState.model)}, ${sqlValue(thread.chatState.cwd)},
              ${sqlValue(messageCount(thread.chatState.items))}, ${sqlValue(firstUser)}, ${sqlValue(preview)},
              ${sqlValue(responseDurationMs)}
            )
@@ -252,6 +257,7 @@ export class ChatWorkspaceStore {
              created_at = excluded.created_at,
              updated_at = excluded.updated_at,
              title = excluded.title,
+             purpose = excluded.purpose,
              pinned_at = excluded.pinned_at,
              archived_at = excluded.archived_at,
              session_id = excluded.session_id,
@@ -337,6 +343,18 @@ export class ChatWorkspaceStore {
     }
   }
 
+  private ensureThreadPurposeColumn(): void {
+    if (!existsSync(this.dbPath) || !this.canUseSqlite()) return
+    try {
+      const columns = this.selectJson<{ name: string }>('PRAGMA table_info(threads)')
+      if (columns.length > 0 && !columns.some((column) => column.name === 'purpose')) {
+        this.runSql('ALTER TABLE threads ADD COLUMN purpose TEXT;')
+      }
+    } catch {
+      /* Fresh databases create the column through CREATE TABLE. */
+    }
+  }
+
   private canUseSqlite(): boolean {
     if (this.sqliteAvailable != null) return this.sqliteAvailable
     try {
@@ -372,6 +390,7 @@ function serializeRollout(thread: WorkspaceThread): string {
         id: thread.id,
         projectId: thread.projectId,
         title: thread.title,
+        purpose: thread.purpose,
         createdAt: thread.createdAt,
         updatedAt: thread.updatedAt,
         archivedAt: thread.archivedAt,
@@ -439,6 +458,10 @@ function lastAssistantDuration(items: TranscriptItem[]): number | undefined {
     (candidate) => candidate.type === 'message' && candidate.role === 'assistant' && typeof candidate.durationMs === 'number',
   )
   return message?.type === 'message' ? message.durationMs : undefined
+}
+
+function normalizeThreadPurpose(value: string | null): WorkspaceThread['purpose'] {
+  return value === 'home-plugin-customization' ? value : undefined
 }
 
 function safeFilename(value: string): string {

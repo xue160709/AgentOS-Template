@@ -12,6 +12,7 @@ type AgentModeControlsProps = {
   loading: boolean
   onAgentSwitchChange: (checked: boolean) => void
   onTodoSwitchChange: (checked: boolean) => void
+  onCustomizeHome?: () => void
 }
 
 /** Agent/TODO 开关控件 / Dual switches for Agent Mode + TODO scaffold */
@@ -22,6 +23,7 @@ export function AgentModeControls({
   loading,
   onAgentSwitchChange,
   onTodoSwitchChange,
+  onCustomizeHome,
 }: AgentModeControlsProps) {
   const { t } = useI18n()
 
@@ -51,26 +53,38 @@ export function AgentModeControls({
         </span>
       </label>
       {enabled ? (
-        <label className="agent-mode-switch">
-          <span className="agent-mode-switch__copy">
-            <span>{t('workspace.todoModeToggle')}</span>
-            <span>{t('workspace.todoModeToggleDesc')}</span>
-          </span>
-          <span className="settings-switch-control">
-            <input
-              className="settings-switch-input"
-              type="checkbox"
-              checked={todoEnabled}
-              disabled={loading}
-              onChange={(event) => {
-                onTodoSwitchChange(event.target.checked)
-              }}
-            />
-            <span className="settings-switch-track" aria-hidden="true">
-              <span className="settings-switch-thumb" />
+        <>
+          <label className="agent-mode-switch">
+            <span className="agent-mode-switch__copy">
+              <span>{t('workspace.todoModeToggle')}</span>
+              <span>{t('workspace.todoModeToggleDesc')}</span>
             </span>
-          </span>
-        </label>
+            <span className="settings-switch-control">
+              <input
+                className="settings-switch-input"
+                type="checkbox"
+                checked={todoEnabled}
+                disabled={loading}
+                onChange={(event) => {
+                  onTodoSwitchChange(event.target.checked)
+                }}
+              />
+              <span className="settings-switch-track" aria-hidden="true">
+                <span className="settings-switch-thumb" />
+              </span>
+            </span>
+          </label>
+          {onCustomizeHome ? (
+            <button
+              type="button"
+              className="agent-mode-customize-home"
+              disabled={loading}
+              onClick={onCustomizeHome}
+            >
+              {t('workspace.customizeAgentPanel')}
+            </button>
+          ) : null}
+        </>
       ) : null}
     </div>
   )

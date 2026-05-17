@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import zh from '../src/locales/zh.json'
 import en from '../src/locales/en.json'
-import type { AgentModeProjectSettings, AppUiLocale, DesktopPreferences } from '../src/desktop-types'
+import type { AgentModeProjectSettings, AppUiLocale, DesktopPreferences, HomePluginRunOptions } from '../src/desktop-types'
 import { ensureAgentModeFiles, getAgentModeStatus, setAgentModeState } from './agent-mode-files'
 import { AgentModeSettingsStore } from './agent-mode-settings-store'
 import { discoverAgentContext, searchProjectFiles } from './agent-context'
@@ -14,6 +14,7 @@ import { ClaudeAgentSettingsStore } from './claude-agent-settings'
 import { ChatWorkspaceStore } from './chat-workspace-store'
 import { DesktopPreferencesStore } from './desktop-preferences-store'
 import { loadMainProcessEnv } from './env-loader'
+import { runProjectHomePlugin } from './home-plugin-runner'
 import { normalizeUiLocale } from './ui-locale'
 import type {
   ActiveChatPickPayload,
@@ -451,6 +452,9 @@ if (gotSingleInstanceLock) {
     })
     ipcMain.handle('desktop:list-agent-context', (_event, rootPath: string) => {
       return discoverAgentContext(rootPath)
+    })
+    ipcMain.handle('desktop:run-home-plugin', (_event, rootPath: string, options?: HomePluginRunOptions) => {
+      return runProjectHomePlugin(rootPath, options)
     })
     ipcMain.handle('desktop:get-agent-mode-status', (_event, rootPath: string, rawLocale?: unknown) => {
       return getAgentModeStatus(rootPath, getAgentModeSettingsStore(), resolveAgentModeIpcLocale(rawLocale))

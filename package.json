@@ -22,10 +22,13 @@
     "vite-plugin-electron-renderer": "^0.14.5"
   },
   "dependencies": {
+    "@a2ui/react": "^0.10.0",
+    "@a2ui/web_core": "^0.10.0",
     "@anthropic-ai/claude-agent-sdk": "^0.3.142",
     "dompurify": "^3.4.3",
     "marked": "^18.0.3",
     "react": "^19.2.6",
-    "react-dom": "^19.2.6"
+    "react-dom": "^19.2.6",
+    "zod": "^4.4.3"
   }
 }

@@ -10,6 +10,8 @@ export type ClaudeChatSubmitPayload = {
   text: string
   attachments?: ClaudeChatAttachment[]
   threadId?: string
+  /** 特殊提示词通道；普通聊天省略 / Special prompt channel; omitted for normal chat */
+  promptMode?: 'home-plugin-customization'
   /**
    * 上次 Agent SDK 会话 ID（chatState 持久化）；主进程重启后可恢复同一会话；若已有活跃 session 则忽略。
    * Last Agent SDK session id (persisted in chatState); resumes after main restart; ignored if session already active.

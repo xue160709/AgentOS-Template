@@ -100,10 +100,12 @@
     "agentModeEnabling": "Preparing Agent Mode files...",
     "agentModeDisabling": "Turning off Agent Mode...",
     "todoModeUpdating": "Updating TODO Mode...",
-    "agentModeFailed": "Failed to enable Agent Mode"
+    "agentModeFailed": "Failed to enable Agent Mode",
+    "customizeAgentPanel": "Customize Agent panel"
   },
   "thread": {
-    "newThreadTitle": "New thread"
+    "newThreadTitle": "New thread",
+    "homePluginCustomizationTitle": "Customize Agent panel"
   },
   "project": {
     "promptNewName": "New project name",
@@ -256,16 +258,6 @@
   "chat": {
     "ariaPage": "Claude Agent chat",
     "emptyHeading": "What do you need help with?",
-    "startCardsAria": "Starter suggestions",
-    "startCardPlanTitle": "Plan an MVP",
-    "startCardPlanDesc": "Turn this project into requirements, scope, and a dev plan.",
-    "startCardPlanPrompt": "Read the current project and help me shape an MVP development plan.",
-    "startCardRefactorTitle": "Find refactor points",
-    "startCardRefactorDesc": "Review structure and duplicated logic before proposing changes.",
-    "startCardRefactorPrompt": "Review the current frontend structure and identify the component boundaries most worth refactoring.",
-    "startCardAgentTitle": "Prepare Agent memory",
-    "startCardAgentDesc": "Check Agent files, memory folders, and system prompt injection.",
-    "startCardAgentPrompt": "Check whether this project's Agent Mode files and memory mechanism are complete.",
     "scrollBottomTitle": "Scroll to bottom",
     "scrollBottomAria": "Scroll to bottom",
     "composerPlaceholder": "Describe the next change",

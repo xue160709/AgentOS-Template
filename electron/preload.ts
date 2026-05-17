@@ -40,6 +40,9 @@ contextBridge.exposeInMainWorld('desktop', {
   listAgentContext(rootPath: string) {
     return ipcRenderer.invoke('desktop:list-agent-context', rootPath)
   },
+  runHomePlugin(rootPath: string, options?: unknown) {
+    return ipcRenderer.invoke('desktop:run-home-plugin', rootPath, options)
+  },
   getAgentModeStatus(rootPath: string, locale?: 'zh' | 'en') {
     return ipcRenderer.invoke('desktop:get-agent-mode-status', rootPath, locale)
   },

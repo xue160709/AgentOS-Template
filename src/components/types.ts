@@ -135,6 +135,8 @@ export type WorkspaceThread = {
   id: string
   projectId: string
   title: string
+  /** 特殊线程用途，例如项目首页插件定制 / Special thread purpose, such as project home customization */
+  purpose?: 'home-plugin-customization'
   createdAt: number
   updatedAt: number
   /** 置顶权重：越大越靠前（持久化）/ Pin rank: larger sorts higher (persisted) */

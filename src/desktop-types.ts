@@ -78,3 +78,31 @@ export type AgentModeFilesResult =
       rootPath: string
       message: string
     }
+
+/** Home Plugin 运行状态 / Home Plugin run state */
+export type HomePluginRunStatus = 'empty' | 'ready' | 'unchanged'
+
+/** Home Plugin 运行选项 / Home Plugin run options */
+export type HomePluginRunOptions = {
+  /** 渲染层已持有的输出 hash；相同时主进程返回 unchanged / Renderer-held hash; returns unchanged when equal */
+  knownOutputHash?: string
+}
+
+/** 项目首页插件输出 / Project home plugin output */
+export type HomePluginRunResult =
+  | {
+      ok: true
+      rootPath: string
+      pluginPath?: string
+      status: HomePluginRunStatus
+      outputHash?: string
+      messages?: unknown[]
+      diagnostics?: string[]
+    }
+  | {
+      ok: false
+      rootPath: string
+      pluginPath?: string
+      message: string
+      diagnostics?: string[]
+    }

@@ -18,6 +18,8 @@ import type {
   AgentModeStatusResult,
   AppUiLocale,
   DesktopPreferences,
+  HomePluginRunOptions,
+  HomePluginRunResult,
   TrayMenuAction,
 } from '../src/desktop-types'
 import type { ChatWorkspaceState, FileTreeResult } from '../src/components/types'
@@ -59,6 +61,7 @@ declare global {
       listProjectFiles?: (rootPath: string) => Promise<FileTreeResult>
       searchProjectFiles?: (rootPath: string, query: string) => Promise<ProjectFileSearchResult>
       listAgentContext?: (rootPath: string) => Promise<AgentContextResult>
+      runHomePlugin?: (rootPath: string, options?: HomePluginRunOptions) => Promise<HomePluginRunResult>
       getAgentModeStatus?: (rootPath: string, locale?: AppUiLocale) => Promise<AgentModeStatusResult>
       ensureAgentModeFiles?: (rootPath: string, locale?: AppUiLocale) => Promise<AgentModeFilesResult>
       setAgentModeState?: (

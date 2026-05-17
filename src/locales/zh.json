@@ -100,10 +100,12 @@
     "agentModeEnabling": "正在准备 Agent 模式文件...",
     "agentModeDisabling": "正在关闭 Agent 模式...",
     "todoModeUpdating": "正在更新 TODO 模式...",
-    "agentModeFailed": "开启 Agent 模式失败"
+    "agentModeFailed": "开启 Agent 模式失败",
+    "customizeAgentPanel": "定制Agent面板"
   },
   "thread": {
-    "newThreadTitle": "新对话"
+    "newThreadTitle": "新对话",
+    "homePluginCustomizationTitle": "定制Agent面板"
   },
   "project": {
     "promptNewName": "新项目名称",
@@ -256,16 +258,6 @@
   "chat": {
     "ariaPage": "Claude Agent 聊天",
     "emptyHeading": "你需要我做什么？",
-    "startCardsAria": "开始建议",
-    "startCardPlanTitle": "梳理 MVP 计划",
-    "startCardPlanDesc": "用当前项目做一轮需求、范围和开发计划整理。",
-    "startCardPlanPrompt": "请先阅读当前项目，帮我梳理一个 MVP 开发计划。",
-    "startCardRefactorTitle": "检查可重构点",
-    "startCardRefactorDesc": "先定位结构和重复逻辑，再给出可执行改造。",
-    "startCardRefactorPrompt": "请检查当前项目的前端结构，找出最值得重构的组件边界。",
-    "startCardAgentTitle": "准备 Agent 记忆",
-    "startCardAgentDesc": "检查 Agent 文件、记忆目录和 system prompt 注入。",
-    "startCardAgentPrompt": "请检查当前项目的 Agent 模式文件和记忆机制是否完整。",
     "scrollBottomTitle": "滚动到底部",
     "scrollBottomAria": "滚动到底部",
     "composerPlaceholder": "要求后续变更",

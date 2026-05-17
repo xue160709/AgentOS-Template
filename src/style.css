@@ -723,10 +723,17 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
 .app-thread-select {
   display: flex;
   align-items: center;
+  gap: calc(var(--spacing) * 1);
   width: 100%;
   min-height: inherit;
   padding: 0 calc(var(--spacing) * 1.5);
   border-radius: inherit;
+}
+
+.app-thread-purpose-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--color-token-text-tertiary);
 }
 
 .app-thread-title {
@@ -1157,6 +1164,37 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
   color: var(--color-token-description-foreground);
   font-size: var(--text-xs);
   line-height: 1.45;
+}
+
+.agent-mode-customize-home {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 32px;
+  margin: calc(var(--spacing) * 1) 0 calc(var(--spacing) * 2);
+  padding: 0 calc(var(--spacing) * 3);
+  border: 1px solid var(--color-token-border-light);
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--color-token-main-surface-primary) 96%, var(--color-token-foreground));
+  color: var(--color-token-text-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition:
+    background var(--transition-duration-basic) var(--transition-ease-basic),
+    border-color var(--transition-duration-basic) var(--transition-ease-basic);
+}
+
+.agent-mode-customize-home:hover:not(:disabled) {
+  border-color: var(--color-token-border);
+  background: var(--color-token-list-hover-background);
+}
+
+.agent-mode-customize-home:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .agent-mode-panel-body {
@@ -2454,12 +2492,13 @@ button.app-file-tree-row {
   position: relative;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   gap: calc(var(--spacing) * 3);
   height: 100%;
   min-height: 0;
-  padding: calc(var(--spacing) * 10) calc(var(--spacing) * 6) 10vh;
-  overflow: hidden;
+  padding: 0 calc(var(--spacing) * 6) 10vh;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: var(--color-token-main-surface-primary);
 }
 
@@ -2478,8 +2517,12 @@ button.app-file-tree-row {
 .chat-start-view {
   display: flex;
   width: 100%;
+  flex: 0 0 auto;
   flex-direction: column;
   align-items: center;
+  padding-top: clamp(180px, 34vh, 420px);
+  padding-bottom: calc(var(--spacing) * 8);
+  box-sizing: border-box;
 }
 
 .chat-start-view__hero {
@@ -2521,74 +2564,54 @@ button.app-file-tree-row {
   color: var(--color-token-text-primary);
 }
 
-.chat-start-view__cards {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: calc(var(--spacing) * 2);
+.project-home-surface {
+  width: 100%;
+  overflow: visible;
+  margin-top: calc(var(--spacing) * 10);
+  --a2ui-color-background: transparent;
+  --a2ui-color-surface: color-mix(in oklab, var(--color-token-main-surface-primary) 96%, var(--color-token-foreground));
+  --a2ui-color-on-surface: var(--color-token-text-primary);
+  --a2ui-color-on-background: var(--color-token-text-primary);
+  --a2ui-color-border: var(--color-token-border-light);
+  --a2ui-color-primary: var(--color-token-button-background);
+  --a2ui-color-on-primary: var(--color-token-button-foreground);
+  --a2ui-border: 1px solid var(--a2ui-color-border);
+  --a2ui-border-radius: var(--radius-md);
+  --a2ui-card-border-radius: var(--radius-md);
+  --a2ui-card-box-shadow: none;
+  --a2ui-card-margin: 0;
+  --a2ui-card-padding: calc(var(--spacing) * 3);
+  --a2ui-column-gap: calc(var(--spacing) * 2);
+  --a2ui-row-gap: calc(var(--spacing) * 2);
+  --a2ui-list-gap: calc(var(--spacing) * 2);
+  --a2ui-spacing-xs: calc(var(--spacing) * 1);
+  --a2ui-spacing-s: calc(var(--spacing) * 1.5);
+  --a2ui-spacing-m: calc(var(--spacing) * 2);
+  --a2ui-spacing-l: calc(var(--spacing) * 3);
+  --a2ui-font-size-xs: var(--text-xs);
+  --a2ui-font-size-s: var(--text-sm);
+  --a2ui-font-size-m: var(--text-base);
+  --a2ui-font-size-l: var(--text-lg);
+  --a2ui-font-size-xl: var(--text-heading-sm);
+  --a2ui-font-size-2xl: var(--text-heading-md);
+  --a2ui-line-height-body: 1.45;
+  --a2ui-line-height-headings: 1.25;
+  --a2ui-text-caption-color: var(--color-token-text-tertiary);
+  --a2ui-text-a-color: var(--color-token-text-link-foreground);
+}
+
+.project-home-surface > div {
+  width: 100%;
+}
+
+.project-home-surface-error {
   margin-top: calc(var(--spacing) * 3);
-}
-
-.chat-start-card {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
-  align-items: start;
-  gap: calc(var(--spacing) * 2);
-  min-height: 86px;
   padding: calc(var(--spacing) * 2.5);
-  border: 1px solid var(--color-token-border-light);
+  border: 1px solid color-mix(in oklab, var(--color-token-error-foreground) 30%, transparent);
   border-radius: var(--radius-md);
-  color: inherit;
-  background: color-mix(in oklab, var(--color-token-background-secondary) 62%, transparent);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition:
-    background var(--transition-duration-basic) var(--transition-ease-basic),
-    border-color var(--transition-duration-basic) var(--transition-ease-basic),
-    transform var(--transition-duration-basic) var(--transition-ease-basic);
-}
-
-.chat-start-card:hover {
-  border-color: var(--color-token-border);
-  background: var(--color-token-list-hover-background);
-  transform: translateY(-1px);
-}
-
-.chat-start-card:focus-visible {
-  outline: 2px solid var(--color-focus-border);
-  outline-offset: 2px;
-}
-
-.chat-start-card__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--color-token-border-light);
-  border-radius: var(--radius-md);
-  color: var(--color-token-text-secondary);
-  background: var(--color-token-main-surface-primary);
-}
-
-.chat-start-card__copy {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: calc(var(--spacing) * 0.75);
-}
-
-.chat-start-card__copy > span:first-child {
-  color: var(--color-token-text-primary);
+  color: var(--color-token-error-foreground);
   font-size: var(--text-sm);
-  font-weight: var(--font-weight-medium);
-  line-height: 1.3;
-}
-
-.chat-start-card__copy > span:last-child {
-  color: var(--color-token-text-secondary);
-  font-size: var(--text-xs);
-  line-height: 1.4;
+  line-height: 1.45;
 }
 
 .chat-scroll-region {
@@ -4275,6 +4298,10 @@ button.app-file-tree-row {
     padding-inline: calc(var(--spacing) * 4);
   }
 
+  .chat-start-view {
+    padding-top: clamp(112px, 24vh, 220px);
+  }
+
   .chat-start-view__hero h1 {
     font-size: var(--text-heading-lg);
   }
@@ -4287,10 +4314,6 @@ button.app-file-tree-row {
 
   .chat-start-view__project {
     margin-left: 0;
-  }
-
-  .chat-start-view__cards {
-    grid-template-columns: 1fr;
   }
 
   .chat-scroll-region {

@@ -44,6 +44,7 @@ type AppShellWorkspaceProps = {
   onThreadChatStateChange: (threadId: string, update: ChatState | ((prev: ChatState) => ChatState)) => void
   onThreadPromptSubmit: (threadId: string, prompt: string) => void
   onThreadRunStateChange: (threadId: string, state: ThreadRunState | null) => void
+  onCustomizeHomePlugin: (projectId: string) => void
   showProjectSkillsInSidebar: boolean
   onShowProjectSkillsInSidebarChange: (enabled: boolean) => void
 }
@@ -65,6 +66,7 @@ export function AppShellWorkspace({
   onThreadChatStateChange,
   onThreadPromptSubmit,
   onThreadRunStateChange,
+  onCustomizeHomePlugin,
   showProjectSkillsInSidebar,
   onShowProjectSkillsInSidebarChange,
 }: AppShellWorkspaceProps) {
@@ -147,6 +149,7 @@ export function AppShellWorkspace({
             onThreadChatStateChange={onThreadChatStateChange}
             onThreadPromptSubmit={onThreadPromptSubmit}
             onThreadRunStateChange={onThreadRunStateChange}
+            onCustomizeHome={onCustomizeHomePlugin}
           />
           <DocsPage hidden={activeViewId !== 'docs'} />
           <SettingsPage
@@ -179,6 +182,7 @@ export function AppShellWorkspace({
                 onTodoSwitchChange={(checked) => {
                   void agentMode.updateAgentModeState({ todoEnabled: checked })
                 }}
+                onCustomizeHome={() => onCustomizeHomePlugin(activeProject.id)}
               />
             </div>
           }

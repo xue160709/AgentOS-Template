@@ -72,6 +72,7 @@ type ChatPageProps = {
   onThreadChatStateChange: (threadId: string, update: ChatState | ((prev: ChatState) => ChatState)) => void
   onThreadPromptSubmit: (threadId: string, prompt: string) => void
   onThreadRunStateChange: (threadId: string, state: ThreadRunState | null) => void
+  onCustomizeHome: (projectId: string) => void
 }
 
 // --- Internal helpers / 模块内辅助 ---
@@ -126,6 +127,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     onThreadChatStateChange,
     onThreadPromptSubmit,
     onThreadRunStateChange,
+    onCustomizeHome,
   },
   ref,
 ) {
@@ -1168,10 +1170,12 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     }
 
     try {
+      const submittingThread = threads.find((thread) => thread.id === submittingThreadId)
       const { requestId } = await window.claudeChat.submit({
         text,
         attachments: attachmentsForSubmit,
         threadId: submittingThreadId,
+        promptMode: submittingThread?.purpose === 'home-plugin-customization' ? 'home-plugin-customization' : undefined,
         sessionId: resumeSessionId,
         cwd: projectForSubmit.path,
         permissionMode,
@@ -1470,18 +1474,6 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     [activeProject.path, setThreadChatState, t],
   )
 
-  const useStartSuggestion = useCallback((prompt: string) => {
-    setInputValue(prompt)
-    setComposerSelection({ start: prompt.length, end: prompt.length })
-    setDismissedAutocompleteKey('')
-    requestAnimationFrame(() => {
-      const input = chatInputRef.current
-      if (!input) return
-      input.focus()
-      input.setSelectionRange(prompt.length, prompt.length)
-    })
-  }, [])
-
   const composer = (
     <Composer
       inputValue={inputValue}
@@ -1556,7 +1548,11 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
           onRewindFileChanges={rewindFileChanges}
         />
       ) : (
-        <ChatStartView project={activeProject} composer={composer} onUseSuggestion={useStartSuggestion} />
+        <ChatStartView
+          project={activeProject}
+          composer={composer}
+          onCustomizeHome={() => onCustomizeHome(activeProject.id)}
+        />
       )}
       {activeUserInputPrompt
         ? createPortal(
