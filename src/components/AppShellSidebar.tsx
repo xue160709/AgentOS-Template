@@ -27,6 +27,9 @@ import type {
 } from './types'
 import { SETTINGS_SIDEBAR_NAV } from './app-shell-constants.ts'
 
+/** 侧栏单区块预览条数（超过则显示「展开显示」）/ Max items before "show more" in sidebar sections */
+const SIDEBAR_SECTION_PREVIEW_LIMIT = 5
+
 type ContextMenuItem = {
   id: string
   label: string
@@ -117,6 +120,8 @@ export function AppShellSidebar({
     skillPath: string
     anchor: { left: number; top: number; width: number; height: number }
   } | null>(null)
+  const [expandedSkillListByProject, setExpandedSkillListByProject] = useState<Record<string, boolean>>({})
+  const [expandedThreadListByProject, setExpandedThreadListByProject] = useState<Record<string, boolean>>({})
   const menuPanelRef = useRef<HTMLDivElement>(null)
   const skillTipPanelRef = useRef<HTMLDivElement>(null)
   const isDarwin = typeof window !== 'undefined' && window.desktop?.platform === 'darwin'
@@ -423,6 +428,18 @@ export function AppShellSidebar({
                     const visibleSkills = projectSkills.filter((skill) => !hiddenPaths.has(skill.path))
                     const showSkillsSection = Boolean(projectSkillState?.loading) || visibleSkills.length > 0
                     const showThreadHistoryDivider = showProjectSkills
+                    const skillsListOverflow = visibleSkills.length > SIDEBAR_SECTION_PREVIEW_LIMIT
+                    const skillsListFullyExpanded = expandedSkillListByProject[project.id] ?? false
+                    const displayedSkills =
+                      skillsListOverflow && !skillsListFullyExpanded
+                        ? visibleSkills.slice(0, SIDEBAR_SECTION_PREVIEW_LIMIT)
+                        : visibleSkills
+                    const threadsListOverflow = projectThreads.length > SIDEBAR_SECTION_PREVIEW_LIMIT
+                    const threadsListFullyExpanded = expandedThreadListByProject[project.id] ?? false
+                    const displayedThreads =
+                      threadsListOverflow && !threadsListFullyExpanded
+                        ? projectThreads.slice(0, SIDEBAR_SECTION_PREVIEW_LIMIT)
+                        : projectThreads
                     return (
                       <section key={project.id} className={`app-project-group${projectActive ? ' is-active' : ''}${project.pinnedAt ? ' is-pinned' : ''}`}>
                         <div
@@ -473,7 +490,8 @@ export function AppShellSidebar({
                                   {projectSkillState?.loading ? (
                                     <div className="app-skill-empty">{t('sidebar.scanning')}</div>
                                   ) : (
-                                    visibleSkills.map((skill) => {
+                                    <>
+                                      {displayedSkills.map((skill) => {
                                       const tipText = skill.description.trim()
                                       const tipActive = Boolean(tipText) && skillTip?.skillPath === skill.path
                                       const skillActive =
@@ -542,7 +560,35 @@ export function AppShellSidebar({
                                           </div>
                                         </div>
                                       )
-                                    })
+                                    })}
+                                      {skillsListOverflow && !skillsListFullyExpanded ? (
+                                        <button
+                                          type="button"
+                                          className="app-sidebar-expand-section"
+                                          aria-label={t('sidebar.expandListShowAria', { section: t('sidebar.skillsDivider') })}
+                                          onClick={() => {
+                                            setConfirmingArchiveThreadId(null)
+                                            setExpandedSkillListByProject((prev) => ({ ...prev, [project.id]: true }))
+                                          }}
+                                        >
+                                          {t('sidebar.expandListShow')}
+                                        </button>
+                                      ) : null}
+                                      {skillsListOverflow && skillsListFullyExpanded ? (
+                                        <button
+                                          type="button"
+                                          className="app-sidebar-expand-section"
+                                          aria-label={t('sidebar.collapseListShowAria', { section: t('sidebar.skillsDivider') })}
+                                          onClick={() => {
+                                            setConfirmingArchiveThreadId(null)
+                                            setSkillTip(null)
+                                            setExpandedSkillListByProject((prev) => ({ ...prev, [project.id]: false }))
+                                          }}
+                                        >
+                                          {t('sidebar.collapseListShow')}
+                                        </button>
+                                      ) : null}
+                                    </>
                                   )}
                                 </div>
                               </div>
@@ -556,7 +602,7 @@ export function AppShellSidebar({
                               {projectThreads.length === 0 ? (
                                 <div className="app-thread-empty">{t('sidebar.noThreadHistory')}</div>
                               ) : null}
-                              {projectThreads.map((thread) => {
+                              {displayedThreads.map((thread) => {
                                 const isThreadActive = activeThreadId === thread.id
                                 const isConfirming = confirmingArchiveThreadId === thread.id
                                 const isPinned = Boolean(thread.pinnedAt)
@@ -638,6 +684,32 @@ export function AppShellSidebar({
                                   </div>
                                 )
                               })}
+                              {threadsListOverflow && !threadsListFullyExpanded ? (
+                                <button
+                                  type="button"
+                                  className="app-sidebar-expand-section"
+                                  aria-label={t('sidebar.expandListShowAria', { section: t('sidebar.threadHistory') })}
+                                  onClick={() => {
+                                    setConfirmingArchiveThreadId(null)
+                                    setExpandedThreadListByProject((prev) => ({ ...prev, [project.id]: true }))
+                                  }}
+                                >
+                                  {t('sidebar.expandListShow')}
+                                </button>
+                              ) : null}
+                              {threadsListOverflow && threadsListFullyExpanded ? (
+                                <button
+                                  type="button"
+                                  className="app-sidebar-expand-section"
+                                  aria-label={t('sidebar.collapseListShowAria', { section: t('sidebar.threadHistory') })}
+                                  onClick={() => {
+                                    setConfirmingArchiveThreadId(null)
+                                    setExpandedThreadListByProject((prev) => ({ ...prev, [project.id]: false }))
+                                  }}
+                                >
+                                  {t('sidebar.collapseListShow')}
+                                </button>
+                              ) : null}
                             </div>
                           </div>
                         ) : null}

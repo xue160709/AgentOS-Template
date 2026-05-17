@@ -631,6 +631,32 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
   line-height: 15px;
 }
 
+.app-sidebar-expand-section {
+  align-self: stretch;
+  margin: 0;
+  padding: calc(var(--spacing) * 0.375) calc(var(--spacing) * 2) calc(var(--spacing) * 0.5)
+    calc(var(--spacing) * 7);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-token-text-tertiary);
+  font: inherit;
+  font-size: var(--text-xs);
+  line-height: 15px;
+  text-align: left;
+  cursor: pointer;
+  transition: color var(--transition-duration-basic) var(--transition-ease-basic);
+}
+
+.app-sidebar-expand-section:hover {
+  color: var(--color-token-text-secondary);
+}
+
+.app-sidebar-expand-section:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--color-token-focus-border) 70%, transparent);
+  outline-offset: 2px;
+}
+
 .app-thread-row {
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr) auto;
