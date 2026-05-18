@@ -101,11 +101,30 @@
     "agentModeDisabling": "正在关闭 Agent 模式...",
     "todoModeUpdating": "正在更新 TODO 模式...",
     "agentModeFailed": "开启 Agent 模式失败",
-    "customizeAgentPanel": "定制Agent面板"
+    "customizeAgentPanel": "定制Agent面板",
+    "addAgentCard": "添加",
+    "addDataCard": "数据卡片",
+    "addTaskCard": "任务卡片",
+    "sortAgentCards": "排序",
+    "editAgentCard": "修改",
+    "cardMenuAria": "{{name}} 卡片菜单",
+    "agentCardsEmptyTitle": "还没有 Agent 卡片",
+    "agentCardsEmptyDesc": "点击添加，先创建一张数据卡片。",
+    "taskCardReservedTitle": "任务卡片能力已预留",
+    "taskCardReservedDesc": "TODO 模式先放在这里，后续任务模板、任务生成和任务卡片管理会接入这个区域。",
+    "moveCardUp": "上移卡片",
+    "moveCardDown": "下移卡片",
+    "cardSize": {
+      "small": "小 · 1列",
+      "medium": "中 · 2列",
+      "large": "大 · 3列"
+    }
   },
   "thread": {
     "newThreadTitle": "新对话",
     "homePluginCustomizationTitle": "定制Agent面板",
+    "homePluginCardCreateTitle": "创建数据卡片",
+    "homePluginCardEditTitle": "修改 {{name}}",
     "homePluginCustomizationPrompt": "请重新扫描当前项目，基于当前文件和数据源重建定制 Agent 面板。先从用户视角判断首页最应该展示什么，再实现或更新 .agents/home-plugins/project-home/，加入必要的数据可视化和可打开源文件的二层交互，最后运行可用验证并修复问题。"
   },
   "project": {
@@ -259,6 +278,7 @@
   "chat": {
     "ariaPage": "Claude Agent 聊天",
     "emptyHeading": "你需要我做什么？",
+    "dataCardDraftHeading": "我们需要构建什么产品卡片？",
     "scrollBottomTitle": "滚动到底部",
     "scrollBottomAria": "滚动到底部",
     "composerPlaceholder": "要求后续变更",

@@ -34,7 +34,7 @@ import { ClaudeChatEventCoalescer } from './claude-agent-runner/event-coalescer'
 import { fileDiffFromPostToolUse } from './claude-agent-runner/file-diff'
 import { buildSdkPromptInput, normalizeSubmitAttachments, resolveWorkspaceCwd } from './claude-agent-runner/input'
 import { ClaudeSdkMessageRouter } from './claude-agent-runner/sdk-message-router'
-import { HOME_PLUGIN_CUSTOMIZATION_SYSTEM_PROMPT } from './home-plugin-customization-prompt'
+import { HOME_PLUGIN_CARD_CUSTOMIZATION_SYSTEM_PROMPT, HOME_PLUGIN_CUSTOMIZATION_SYSTEM_PROMPT } from './home-plugin-customization-prompt'
 
 /**
  * 主进程内封装 Claude Agent SDK `query`：会话恢复、权限闸门与事件转发。
@@ -154,7 +154,10 @@ export class ClaudeAgentRunner {
       cancelled: false,
       didEmitText: false,
       didEmitThinking: false,
-      promptMode: payload.promptMode === 'home-plugin-customization' ? payload.promptMode : undefined,
+      promptMode:
+        payload.promptMode === 'home-plugin-customization' || payload.promptMode === 'home-plugin-card-customization'
+          ? payload.promptMode
+          : undefined,
       permissionMode: normalizeChatPermissionMode(payload.permissionMode),
       seenToolUseIds: new Set(),
       toolNamesByUseId: new Map(),
@@ -383,7 +386,9 @@ export class ClaudeAgentRunner {
       const appendSystemPrompt = buildRequestAppendSystemPrompt(activeRequest, runtimeContext.appendSystemPrompt)
       const resolvedPrompt = await resolvePromptWithContext(prompt, runtimeContext.catalog, {
         forcedSkillCommand:
-          activeRequest.promptMode === 'home-plugin-customization' ? HOME_PLUGIN_CUSTOMIZATION_SKILL : undefined,
+          activeRequest.promptMode === 'home-plugin-customization' || activeRequest.promptMode === 'home-plugin-card-customization'
+            ? HOME_PLUGIN_CUSTOMIZATION_SKILL
+            : undefined,
       })
       const promptInput = buildSdkPromptInput(resolvedPrompt, attachments)
       const sdkEnv = buildSdkEnv(config)
@@ -684,6 +689,9 @@ function buildRequestAppendSystemPrompt(activeRequest: ActiveRequest, basePrompt
   const sections = [basePrompt?.trim()].filter((section): section is string => Boolean(section))
   if (activeRequest.promptMode === 'home-plugin-customization') {
     sections.push(HOME_PLUGIN_CUSTOMIZATION_SYSTEM_PROMPT)
+  }
+  if (activeRequest.promptMode === 'home-plugin-card-customization') {
+    sections.push(HOME_PLUGIN_CARD_CUSTOMIZATION_SYSTEM_PROMPT)
   }
   return sections.length > 0 ? sections.join('\n\n') : undefined
 }

@@ -677,7 +677,8 @@ export function AppShellSidebar({
                                 const isThreadActive = activeThreadId === thread.id
                                 const isConfirming = confirmingArchiveThreadId === thread.id
                                 const isPinned = Boolean(thread.pinnedAt)
-                                const isHomePluginThread = thread.purpose === 'home-plugin-customization'
+                                const isHomePluginThread =
+                                  thread.purpose === 'home-plugin-customization' || thread.purpose === 'home-plugin-card-customization'
                                 const runState = threadRunStates[thread.id]
                                 const isThreadRunning = Boolean(runState)
                                 const timeLabel = formatThreadTime(thread.updatedAt, locale, t)

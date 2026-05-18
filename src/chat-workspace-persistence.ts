@@ -199,6 +199,7 @@ export function normalizeChatWorkspaceState(value: unknown): ChatWorkspaceState 
         projectId: thread.projectId,
         title: typeof thread.title === 'string' && thread.title.trim() ? thread.title : '新对话',
         purpose: normalizeThreadPurpose(thread.purpose),
+        homePluginSlug: typeof thread.homePluginSlug === 'string' && thread.homePluginSlug.trim() ? thread.homePluginSlug.trim() : undefined,
         createdAt: toFiniteNumber(thread.createdAt, Date.now()),
         updatedAt: toFiniteNumber(thread.updatedAt, Date.now()),
         pinnedAt: toOptionalFiniteNumber(thread.pinnedAt),
@@ -437,7 +438,7 @@ function toOptionalFiniteNumber(value: unknown): number | undefined {
 }
 
 function normalizeThreadPurpose(value: unknown): WorkspaceThread['purpose'] {
-  return value === 'home-plugin-customization' ? value : undefined
+  return value === 'home-plugin-customization' || value === 'home-plugin-card-customization' ? value : undefined
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

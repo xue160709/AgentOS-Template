@@ -29,6 +29,7 @@ type ThreadRow = {
   rolloutPath: string
   title: string
   purpose: string | null
+  homePluginSlug: string | null
   createdAt: number
   updatedAt: number
   pinnedAt: number | null
@@ -90,7 +91,7 @@ export class ChatWorkspaceStore {
     if (!existsSync(this.dbPath) || !this.canUseSqlite()) return null
 
     try {
-      this.ensureThreadPurposeColumn()
+      this.ensureThreadMetadataColumns()
       const projects = this.selectJson<ProjectRow>(
         [
           'SELECT',
@@ -105,7 +106,7 @@ export class ChatWorkspaceStore {
       const threads = this.selectJson<ThreadRow>(
         [
           'SELECT',
-          'id, project_id AS projectId, rollout_path AS rolloutPath, title, purpose,',
+          'id, project_id AS projectId, rollout_path AS rolloutPath, title, purpose, home_plugin_slug AS homePluginSlug,',
           'created_at AS createdAt, updated_at AS updatedAt,',
           'pinned_at AS pinnedAt, archived_at AS archivedAt,',
           'session_id AS sessionId, model, cwd',
@@ -139,6 +140,7 @@ export class ChatWorkspaceStore {
           projectId: thread.projectId,
           title: thread.title,
           purpose: normalizeThreadPurpose(thread.purpose),
+          homePluginSlug: thread.homePluginSlug?.trim() || undefined,
           createdAt: thread.createdAt,
           updatedAt: thread.updatedAt,
           pinnedAt: thread.pinnedAt ?? undefined,
@@ -156,7 +158,7 @@ export class ChatWorkspaceStore {
     if (!this.canUseSqlite()) return
 
     try {
-      this.ensureThreadPurposeColumn()
+      this.ensureThreadMetadataColumns()
       const existingRolloutPaths = this.readThreadRolloutPathMap()
       const statements: string[] = [
         'PRAGMA foreign_keys = ON;',
@@ -183,6 +185,7 @@ export class ChatWorkspaceStore {
           updated_at INTEGER NOT NULL,
           title TEXT NOT NULL,
           purpose TEXT,
+          home_plugin_slug TEXT,
           pinned_at INTEGER,
           archived_at INTEGER,
           session_id TEXT,
@@ -242,12 +245,12 @@ export class ChatWorkspaceStore {
         statements.push(
           `INSERT INTO threads (
              id, project_id, rollout_path, created_at, updated_at, title, pinned_at, archived_at,
-             purpose, session_id, model, cwd, message_count, first_user_message, preview, response_duration_ms
+             purpose, home_plugin_slug, session_id, model, cwd, message_count, first_user_message, preview, response_duration_ms
            )
            VALUES (
              ${sqlValue(thread.id)}, ${sqlValue(thread.projectId)}, ${sqlValue(rolloutPath)}, ${sqlValue(thread.createdAt)},
              ${sqlValue(thread.updatedAt)}, ${sqlValue(thread.title)}, ${sqlValue(thread.pinnedAt)}, ${sqlValue(thread.archivedAt)},
-             ${sqlValue(thread.purpose)}, ${sqlValue(thread.chatState.sessionId)}, ${sqlValue(thread.chatState.model)}, ${sqlValue(thread.chatState.cwd)},
+             ${sqlValue(thread.purpose)}, ${sqlValue(thread.homePluginSlug)}, ${sqlValue(thread.chatState.sessionId)}, ${sqlValue(thread.chatState.model)}, ${sqlValue(thread.chatState.cwd)},
              ${sqlValue(messageCount(thread.chatState.items))}, ${sqlValue(firstUser)}, ${sqlValue(preview)},
              ${sqlValue(responseDurationMs)}
            )
@@ -258,6 +261,7 @@ export class ChatWorkspaceStore {
              updated_at = excluded.updated_at,
              title = excluded.title,
              purpose = excluded.purpose,
+             home_plugin_slug = excluded.home_plugin_slug,
              pinned_at = excluded.pinned_at,
              archived_at = excluded.archived_at,
              session_id = excluded.session_id,
@@ -343,12 +347,15 @@ export class ChatWorkspaceStore {
     }
   }
 
-  private ensureThreadPurposeColumn(): void {
+  private ensureThreadMetadataColumns(): void {
     if (!existsSync(this.dbPath) || !this.canUseSqlite()) return
     try {
       const columns = this.selectJson<{ name: string }>('PRAGMA table_info(threads)')
       if (columns.length > 0 && !columns.some((column) => column.name === 'purpose')) {
         this.runSql('ALTER TABLE threads ADD COLUMN purpose TEXT;')
+      }
+      if (columns.length > 0 && !columns.some((column) => column.name === 'home_plugin_slug')) {
+        this.runSql('ALTER TABLE threads ADD COLUMN home_plugin_slug TEXT;')
       }
     } catch {
       /* Fresh databases create the column through CREATE TABLE. */
@@ -391,6 +398,7 @@ function serializeRollout(thread: WorkspaceThread): string {
         projectId: thread.projectId,
         title: thread.title,
         purpose: thread.purpose,
+        homePluginSlug: thread.homePluginSlug,
         createdAt: thread.createdAt,
         updatedAt: thread.updatedAt,
         archivedAt: thread.archivedAt,
@@ -461,7 +469,7 @@ function lastAssistantDuration(items: TranscriptItem[]): number | undefined {
 }
 
 function normalizeThreadPurpose(value: string | null): WorkspaceThread['purpose'] {
-  return value === 'home-plugin-customization' ? value : undefined
+  return value === 'home-plugin-customization' || value === 'home-plugin-card-customization' ? value : undefined
 }
 
 function safeFilename(value: string): string {

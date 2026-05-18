@@ -101,11 +101,30 @@
     "agentModeDisabling": "Turning off Agent Mode...",
     "todoModeUpdating": "Updating TODO Mode...",
     "agentModeFailed": "Failed to enable Agent Mode",
-    "customizeAgentPanel": "Customize Agent panel"
+    "customizeAgentPanel": "Customize Agent panel",
+    "addAgentCard": "Add",
+    "addDataCard": "Data card",
+    "addTaskCard": "Task card",
+    "sortAgentCards": "Sort",
+    "editAgentCard": "Edit",
+    "cardMenuAria": "{{name}} card menu",
+    "agentCardsEmptyTitle": "No Agent cards yet",
+    "agentCardsEmptyDesc": "Click Add to create the first data card.",
+    "taskCardReservedTitle": "Task card area is reserved",
+    "taskCardReservedDesc": "TODO Mode lives here for now. Task templates, task generation, and task-card management can attach to this area later.",
+    "moveCardUp": "Move card up",
+    "moveCardDown": "Move card down",
+    "cardSize": {
+      "small": "Small · 1 col",
+      "medium": "Medium · 2 cols",
+      "large": "Large · 3 cols"
+    }
   },
   "thread": {
     "newThreadTitle": "New thread",
     "homePluginCustomizationTitle": "Customize Agent panel",
+    "homePluginCardCreateTitle": "Create data card",
+    "homePluginCardEditTitle": "Edit {{name}}",
     "homePluginCustomizationPrompt": "Rescan the current project and rebuild the customized Agent panel from the current files and data sources. First decide what the home surface should show from the user's perspective, then create or update .agents/home-plugins/project-home/ with useful data visualization and source-opening second-level interactions, and finally run available validation and fix any issues."
   },
   "project": {
@@ -259,6 +278,7 @@
   "chat": {
     "ariaPage": "Claude Agent chat",
     "emptyHeading": "What do you need help with?",
+    "dataCardDraftHeading": "What product card should we build?",
     "scrollBottomTitle": "Scroll to bottom",
     "scrollBottomAria": "Scroll to bottom",
     "composerPlaceholder": "Describe the next change",

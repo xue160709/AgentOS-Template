@@ -12,7 +12,6 @@ import {
   persistChatWorkspaceState,
 } from '../chat-workspace-persistence'
 import {
-  HOME_PLUGINS_DIR_RELATIVE,
   SIDEBAR_HIDDEN_SKILLS_STORAGE_KEY,
   SIDEBAR_PROJECT_SKILLS_STORAGE_KEY,
   SIDEBAR_WIDTH_STORAGE_KEY,
@@ -23,6 +22,7 @@ import {
   viewFromLocation,
 } from './app-shell-constants.ts'
 import { defaultThreadTitleSet, getInitialLocale, translate, useI18n } from '../i18n/i18n'
+import type { HomePluginRunItem } from '../desktop-types'
 import type {
   AppViewId,
   ChatState,
@@ -61,6 +61,7 @@ export function AppShell() {
   const [hiddenSkillPathsByProject, setHiddenSkillPathsByProject] = useState<Record<string, string[]>>(() =>
     readHiddenSkillPathsMap(),
   )
+  const [homeModeResetKey, setHomeModeResetKey] = useState(0)
 
   const chatRef = useRef<ChatPageHandle>(null)
   const workspaceSaveTimerRef = useRef<number | null>(null)
@@ -404,27 +405,51 @@ export function AppShell() {
     [goHome, updateChatWorkspace, t],
   )
 
-  const openHomePluginCustomizationThread = useCallback(
-    (projectId: string) => {
+  const createHomePluginCardThread = useCallback(
+    (projectId: string, initialPrompt: string) => {
+      setSelectedProjectSkill(null)
+      const threadId = createId('thread')
+      const now = Date.now()
+      updateChatWorkspace((prev) => {
+        if (!prev.projects.some((project) => project.id === projectId)) return prev
+        const nextThread: WorkspaceThread = {
+          id: threadId,
+          projectId,
+          title: deriveDataCardThreadTitle(initialPrompt, t),
+          purpose: 'home-plugin-card-customization',
+          createdAt: now,
+          updatedAt: now,
+          chatState: createEmptyChatState(),
+        }
+        return {
+          ...prev,
+          activeProjectId: projectId,
+          activeThreadId: threadId,
+          projects: touchProject(prev.projects, projectId, now),
+          threads: [nextThread, ...prev.threads],
+        }
+      })
+      goHome()
+      return threadId
+    },
+    [goHome, t, updateChatWorkspace],
+  )
+
+  const openHomePluginCardThread = useCallback(
+    (projectId: string, item: HomePluginRunItem) => {
       setSelectedProjectSkill(null)
       let threadId = ''
       let createdThread = false
-      let reusedExistingThread = false
       const now = Date.now()
-      const projectPath =
-        chatWorkspace?.projects.find((project) => project.id === projectId)?.path.trim() ?? ''
+      const boundThreadId = item.manifest.threadId?.trim()
 
       updateChatWorkspace((prev) => {
         if (!prev.projects.some((project) => project.id === projectId)) return prev
-        const existing = prev.threads.find(
-          (thread) =>
-            thread.projectId === projectId &&
-            thread.purpose === 'home-plugin-customization' &&
-            !thread.archivedAt,
-        )
+        const existing = boundThreadId
+          ? prev.threads.find((thread) => thread.id === boundThreadId && thread.projectId === projectId && !thread.archivedAt)
+          : undefined
         if (existing) {
           threadId = existing.id
-          reusedExistingThread = true
           return {
             ...prev,
             activeProjectId: projectId,
@@ -437,8 +462,9 @@ export function AppShell() {
         const nextThread: WorkspaceThread = {
           id: threadId,
           projectId,
-          title: t('thread.homePluginCustomizationTitle'),
-          purpose: 'home-plugin-customization',
+          title: t('thread.homePluginCardEditTitle', { name: item.manifest.name }),
+          purpose: 'home-plugin-card-customization',
+          homePluginSlug: item.slug,
           createdAt: now,
           updatedAt: now,
           chatState: createEmptyChatState(),
@@ -454,28 +480,14 @@ export function AppShell() {
       goHome()
 
       void (async () => {
-        let shouldAutoSubmit = false
-        if (!reusedExistingThread && createdThread && projectPath) {
-          const hasHomePluginsDir =
-            (await window.desktop?.pathExistsUnderProject?.(projectPath, HOME_PLUGINS_DIR_RELATIVE)) ?? true
-          shouldAutoSubmit = !hasHomePluginsDir
-        }
-
-        if (threadId && createdThread) {
-          await window.claudeChat?.newThread(threadId)
-        }
-
+        if (threadId && createdThread) await window.claudeChat?.newThread(threadId)
         requestAnimationFrame(() => {
-          if (!threadId || !shouldAutoSubmit) {
+          if (!threadId || !createdThread) {
             void chatRef.current?.focusComposer()
             return
           }
-          const submit = chatRef.current?.submitPromptInThread(
-            projectId,
-            threadId,
-            t('thread.homePluginCustomizationPrompt'),
-            'home-plugin-customization',
-          )
+          const prompt = buildEditHomePluginCardPrompt(item, threadId)
+          const submit = chatRef.current?.submitPromptInThread(projectId, threadId, prompt, 'home-plugin-card-customization')
           if (!submit) {
             void chatRef.current?.focusComposer()
             return
@@ -486,7 +498,7 @@ export function AppShell() {
         })
       })()
     },
-    [chatWorkspace?.projects, goHome, updateChatWorkspace, t],
+    [goHome, t, updateChatWorkspace],
   )
 
   const runProjectSkill = useCallback((projectId: string, prompt: string) => {
@@ -504,6 +516,7 @@ export function AppShell() {
   const selectProject = useCallback(
     (projectId: string) => {
       setSelectedProjectSkill(null)
+      setHomeModeResetKey((value) => value + 1)
       updateChatWorkspace((prev) => {
         if (!prev.projects.some((project) => project.id === projectId)) return prev
         return {
@@ -958,7 +971,9 @@ export function AppShell() {
           onThreadChatStateChange={updateThreadChatState}
           onThreadPromptSubmit={handleThreadPromptSubmit}
           onThreadRunStateChange={updateThreadRunState}
-          onCustomizeHomePlugin={openHomePluginCustomizationThread}
+          homeModeResetKey={homeModeResetKey}
+          onCreateHomePluginCardThread={createHomePluginCardThread}
+          onEditHomePluginCard={openHomePluginCardThread}
           showProjectSkillsInSidebar={showProjectSkillsInSidebar}
           onShowProjectSkillsInSidebarChange={updateShowProjectSkillsInSidebar}
         />
@@ -976,6 +991,27 @@ function resolveChatStateUpdate(
 
 function touchProject(projects: WorkspaceProject[], projectId: string, time = Date.now()): WorkspaceProject[] {
   return projects.map((project) => (project.id === projectId ? { ...project, updatedAt: time } : project))
+}
+
+function deriveDataCardThreadTitle(prompt: string, t: (path: string, vars?: Record<string, string | number>) => string): string {
+  const normalized = prompt.replace(/\s+/g, ' ').trim()
+  if (!normalized) return t('thread.homePluginCardCreateTitle')
+  return normalized.length > 18 ? `${normalized.slice(0, 18)}...` : normalized
+}
+
+function buildEditHomePluginCardPrompt(item: HomePluginRunItem, threadId: string): string {
+  const pluginDir = `.agents/home-plugins/${item.slug}`
+  return [
+    `请修改数据卡片：${item.manifest.name}`,
+    `当前专用 threadId：${threadId}`,
+    `目标插件目录：${pluginDir}`,
+    '',
+    '开始前请先读取：',
+    `${pluginDir}/manifest.json`,
+    `${pluginDir}/extractor.js`,
+    '',
+    '要求：只修改这一张卡片，不要创建或改写其他 Home Plugin；修改后保持 small / medium / large 三种响应式展示契约。',
+  ].join('\n')
 }
 
 function titleFromPrompt(prompt: string, fallbackTitle: string): string {

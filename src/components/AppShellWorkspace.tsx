@@ -14,7 +14,6 @@ import type {
   WorkspaceProject,
   WorkspaceThread,
 } from './types'
-import { AgentModeControls } from './AgentModeControls'
 import { AgentModeMenu } from './AgentModeMenu'
 import { AppFileTreePane, type AppFileTreePaneHandle } from './AppFileTreePane'
 import { AppWorkspaceSidePanel, type WorkspaceSidePanelTab } from './AppWorkspaceSidePanel'
@@ -22,6 +21,7 @@ import { ChatPage, type ChatPageHandle } from './chat/ChatPage'
 import { DocsPage } from './DocsPage'
 import { SettingsPage } from './setting/SettingsPage'
 import { useWorkspaceAgentMode } from './useWorkspaceAgentMode'
+import type { HomePluginRunItem } from '../desktop-types'
 
 type SidePanelState = {
   open: boolean
@@ -44,7 +44,9 @@ type AppShellWorkspaceProps = {
   onThreadChatStateChange: (threadId: string, update: ChatState | ((prev: ChatState) => ChatState)) => void
   onThreadPromptSubmit: (threadId: string, prompt: string) => void
   onThreadRunStateChange: (threadId: string, state: ThreadRunState | null) => void
-  onCustomizeHomePlugin: (projectId: string) => void
+  homeModeResetKey: number
+  onCreateHomePluginCardThread: (projectId: string, initialPrompt: string) => string | void
+  onEditHomePluginCard: (projectId: string, item: HomePluginRunItem) => void
   showProjectSkillsInSidebar: boolean
   onShowProjectSkillsInSidebarChange: (enabled: boolean) => void
 }
@@ -66,7 +68,9 @@ export function AppShellWorkspace({
   onThreadChatStateChange,
   onThreadPromptSubmit,
   onThreadRunStateChange,
-  onCustomizeHomePlugin,
+  homeModeResetKey,
+  onCreateHomePluginCardThread,
+  onEditHomePluginCard,
   showProjectSkillsInSidebar,
   onShowProjectSkillsInSidebarChange,
 }: AppShellWorkspaceProps) {
@@ -80,12 +84,6 @@ export function AppShellWorkspace({
     if (activeViewId === 'settings') setSidePanel((prev) => ({ ...prev, open: false }))
   }, [activeViewId])
 
-  useEffect(() => {
-    if (!agentMode.enabled && sidePanel.tab === 'agent') {
-      setSidePanel((prev) => ({ ...prev, tab: 'files' }))
-    }
-  }, [agentMode.enabled, sidePanel.tab])
-
   const toggleSidePanelTab = useCallback((tab: WorkspaceSidePanelTab) => {
     setSidePanel((prev) => {
       if (prev.open && prev.tab === tab) {
@@ -93,10 +91,6 @@ export function AppShellWorkspace({
       }
       return { open: true, tab }
     })
-  }, [])
-
-  const openSidePanelWithTab = useCallback((tab: WorkspaceSidePanelTab) => {
-    setSidePanel({ open: true, tab })
   }, [])
 
   const folderToolbarActive = sidePanel.open && sidePanel.tab === 'files'
@@ -114,10 +108,6 @@ export function AppShellWorkspace({
           <div className="app-workspace-actions no-drag">
             <AgentModeMenu
               agent={agentMode}
-              sidePanelOpen={sidePanel.open}
-              sidePanelTab={sidePanel.tab}
-              onToggleSidePanelTab={toggleSidePanelTab}
-              onAgentEnabledFromPopover={() => openSidePanelWithTab('agent')}
             />
             <button
               type="button"
@@ -149,7 +139,15 @@ export function AppShellWorkspace({
             onThreadChatStateChange={onThreadChatStateChange}
             onThreadPromptSubmit={onThreadPromptSubmit}
             onThreadRunStateChange={onThreadRunStateChange}
-            onCustomizeHome={onCustomizeHomePlugin}
+            agentModeEnabled={agentMode.enabled}
+            todoEnabled={agentMode.todoEnabled}
+            agentModeLoading={agentMode.loading}
+            homeModeResetKey={homeModeResetKey}
+            onTodoModeChange={(checked) => {
+              void agentMode.updateAgentModeState({ todoEnabled: checked })
+            }}
+            onCreateHomePluginCardThread={onCreateHomePluginCardThread}
+            onEditHomePluginCard={onEditHomePluginCard}
           />
           <DocsPage hidden={activeViewId !== 'docs'} />
           <SettingsPage
@@ -165,27 +163,8 @@ export function AppShellWorkspace({
           activeTab={sidePanel.tab}
           onActiveTabChange={(tab) => setSidePanel((prev) => ({ ...prev, open: true, tab }))}
           onClose={() => setSidePanel((prev) => ({ ...prev, open: false }))}
-          showAgentTab={agentMode.enabled}
           filePaneRef={filePaneRef}
           filesPane={<AppFileTreePane ref={filePaneRef} project={activeProject} isVisible={sidePanel.open && sidePanel.tab === 'files'} />}
-          agentPane={
-            <div className="app-file-panel-body agent-mode-panel-body">
-              <AgentModeControls
-                variant="embedded"
-                enabled={agentMode.enabled}
-                todoEnabled={agentMode.todoEnabled}
-                loading={agentMode.loading}
-                onAgentSwitchChange={(checked) => {
-                  if (checked) void agentMode.enableAgentMode()
-                  else void agentMode.updateAgentModeState({ enabled: false })
-                }}
-                onTodoSwitchChange={(checked) => {
-                  void agentMode.updateAgentModeState({ todoEnabled: checked })
-                }}
-                onCustomizeHome={() => onCustomizeHomePlugin(activeProject.id)}
-              />
-            </div>
-          }
         />
       </div>
     </div>

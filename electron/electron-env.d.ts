@@ -18,6 +18,7 @@ import type {
   AgentModeStatusResult,
   AppUiLocale,
   DesktopPreferences,
+  HomePluginOrderSaveResult,
   HomePluginRunOptions,
   HomePluginRunResult,
   TrayMenuAction,
@@ -64,6 +65,7 @@ declare global {
       /** 相对路径须不含 `..`；用于探测项目下目录/文件是否存在 / Relative path must not contain `..` */
       pathExistsUnderProject?: (rootPath: string, relativePath: string) => Promise<boolean>
       runHomePlugin?: (rootPath: string, options?: HomePluginRunOptions) => Promise<HomePluginRunResult>
+      saveHomePluginOrder?: (rootPath: string, order: string[]) => Promise<HomePluginOrderSaveResult>
       getAgentModeStatus?: (rootPath: string, locale?: AppUiLocale) => Promise<AgentModeStatusResult>
       ensureAgentModeFiles?: (rootPath: string, locale?: AppUiLocale) => Promise<AgentModeFilesResult>
       setAgentModeState?: (

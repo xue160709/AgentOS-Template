@@ -82,10 +82,44 @@ export type AgentModeFilesResult =
 /** Home Plugin 运行状态 / Home Plugin run state */
 export type HomePluginRunStatus = 'empty' | 'ready' | 'unchanged'
 
+/** Home Plugin 卡片尺寸 / Home Plugin card display span */
+export type HomePluginCardSize = 'small' | 'medium' | 'large'
+
+/** Home Plugin manifest 元数据 / Home Plugin manifest metadata */
+export type HomePluginManifest = {
+  id: string
+  name: string
+  version: string
+  description: string
+  entry: string
+  outputFormat: string
+  kind: 'data' | 'task'
+  preferredSize: HomePluginCardSize
+  threadId?: string
+  createdAt?: string
+  updatedAt?: string
+  order?: number
+}
+
+/** 单个 Home Plugin 卡片运行结果 / Single Home Plugin card run item */
+export type HomePluginRunItem = {
+  slug: string
+  rootPath: string
+  pluginPath: string
+  manifest: HomePluginManifest
+  status: HomePluginRunStatus
+  outputHash?: string
+  messages?: unknown[]
+  variants?: Partial<Record<HomePluginCardSize, unknown[]>>
+  diagnostics?: string[]
+}
+
 /** Home Plugin 运行选项 / Home Plugin run options */
 export type HomePluginRunOptions = {
   /** 渲染层已持有的输出 hash；相同时主进程返回 unchanged / Renderer-held hash; returns unchanged when equal */
   knownOutputHash?: string
+  /** 多插件模式下按 slug 传入已知 hash / Per-plugin known hashes for multi-plugin mode */
+  knownOutputHashes?: Record<string, string>
 }
 
 /** 项目首页插件输出 / Project home plugin output */
@@ -93,10 +127,13 @@ export type HomePluginRunResult =
   | {
       ok: true
       rootPath: string
+      pluginRootPath?: string
       pluginPath?: string
       status: HomePluginRunStatus
       outputHash?: string
       messages?: unknown[]
+      plugins?: HomePluginRunItem[]
+      order?: string[]
       diagnostics?: string[]
     }
   | {
@@ -105,4 +142,18 @@ export type HomePluginRunResult =
       pluginPath?: string
       message: string
       diagnostics?: string[]
+    }
+
+/** Home Plugin 排序保存结果 / Home Plugin order save result */
+export type HomePluginOrderSaveResult =
+  | {
+      ok: true
+      rootPath: string
+      pluginRootPath: string
+      order: string[]
+    }
+  | {
+      ok: false
+      rootPath: string
+      message: string
     }

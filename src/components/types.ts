@@ -141,7 +141,9 @@ export type WorkspaceThread = {
   projectId: string
   title: string
   /** 特殊线程用途，例如项目首页插件定制 / Special thread purpose, such as project home customization */
-  purpose?: 'home-plugin-customization'
+  purpose?: 'home-plugin-customization' | 'home-plugin-card-customization'
+  /** 关联的 Home Plugin 目录名；用于单卡片修改线程 / Bound Home Plugin slug for card customization threads */
+  homePluginSlug?: string
   createdAt: number
   updatedAt: number
   /** 置顶权重：越大越靠前（持久化）/ Pin rank: larger sorts higher (persisted) */

@@ -28,6 +28,7 @@ import type {
   ClaudePermissionMode,
   ProjectFileSearchItem,
 } from '../../claude-chat-types'
+import type { HomePluginRunItem } from '../../desktop-types'
 import { useI18n } from '../../i18n/i18n'
 import type {
   ChatActivityItem,
@@ -80,7 +81,13 @@ type ChatPageProps = {
   onThreadChatStateChange: (threadId: string, update: ChatState | ((prev: ChatState) => ChatState)) => void
   onThreadPromptSubmit: (threadId: string, prompt: string) => void
   onThreadRunStateChange: (threadId: string, state: ThreadRunState | null) => void
-  onCustomizeHome: (projectId: string) => void
+  agentModeEnabled: boolean
+  todoEnabled: boolean
+  agentModeLoading: boolean
+  homeModeResetKey: number
+  onTodoModeChange: (checked: boolean) => void
+  onCreateHomePluginCardThread: (projectId: string, initialPrompt: string) => string | void
+  onEditHomePluginCard: (projectId: string, item: HomePluginRunItem) => void
 }
 
 // --- Internal helpers / 模块内辅助 ---
@@ -120,6 +127,17 @@ function getBuiltInSlashCommands(t: (path: string, vars?: Record<string, string 
   ]
 }
 
+function buildDataCardPrompt(userRequest: string, threadId: string): string {
+  return [
+    '请基于下面的需求，只创建一张独立的数据卡片 Home Plugin。',
+    `当前专用 threadId：${threadId}`,
+    '要求：选择合适的小/中/大尺寸，在 manifest.json 写入 preferredSize、kind: "data"、threadId、createdAt、updatedAt；不要一次生成多张卡片。',
+    '',
+    '用户需求：',
+    userRequest,
+  ].join('\n')
+}
+
 const PERMISSION_MODE_STORAGE_KEY = 'codex-ui-template:claude-permission-mode'
 
 /** 主聊天路由组件（forwardRef 暴露托盘动作）/ Primary chat route exposing imperative methods */
@@ -136,7 +154,13 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     onThreadChatStateChange,
     onThreadPromptSubmit,
     onThreadRunStateChange,
-    onCustomizeHome,
+    agentModeEnabled,
+    todoEnabled,
+    agentModeLoading,
+    homeModeResetKey,
+    onTodoModeChange,
+    onCreateHomePluginCardThread,
+    onEditHomePluginCard,
   },
   ref,
 ) {
@@ -164,6 +188,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   const [composerSuggestionIndex, setComposerSuggestionIndex] = useState(0)
   /** 与 Electron Claude 设置对齐；Composer 展示此标签 / Mirrors Electron agent settings label shown in composer */
   const [globalDisplayModel, setGlobalDisplayModel] = useState('Claude Agent')
+  const [homeComposerMode, setHomeComposerMode] = useState<'normal' | 'data-card-draft'>('normal')
 
   const scrollRegionRef = useRef<HTMLDivElement>(null)
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
@@ -298,6 +323,10 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       /* Browser preview can run without the Electron bridge. */
     })
   }, [activeThread?.id, activeProject.id, applyGlobalModelFromSettings])
+
+  useEffect(() => {
+    setHomeComposerMode('normal')
+  }, [homeModeResetKey])
 
   useEffect(() => {
     window.claudeChat?.getSettings().then(applyGlobalModelFromSettings).catch(() => {
@@ -652,7 +681,10 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     return {
       threadId: activeThread.id,
       project: projectForThread,
-      promptMode: activeThread.purpose === 'home-plugin-customization' ? 'home-plugin-customization' : undefined,
+      promptMode:
+        activeThread.purpose === 'home-plugin-customization' || activeThread.purpose === 'home-plugin-card-customization'
+          ? activeThread.purpose
+          : undefined,
     }
   }, [activeProject, activeThread, projects])
 
@@ -1221,7 +1253,9 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       const submittingThread = threads.find((thread) => thread.id === submittingThreadId)
       const promptMode =
         target?.promptMode ??
-        (submittingThread?.purpose === 'home-plugin-customization' ? 'home-plugin-customization' : undefined)
+        (submittingThread?.purpose === 'home-plugin-customization' || submittingThread?.purpose === 'home-plugin-card-customization'
+          ? submittingThread.purpose
+          : undefined)
       const { requestId } = await window.claudeChat.submit({
         text,
         attachments: attachmentsForSubmit,
@@ -1462,8 +1496,29 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     [activeComposerTrigger, inputValue],
   )
 
+  const submitDataCardDraft = async () => {
+    const text = inputValue.trim()
+    if (!text) return
+    const threadId = onCreateHomePluginCardThread(activeProject.id, text)
+    if (!threadId) return
+    activeThreadIdRef.current = threadId
+    isFirstTranscriptLayoutRef.current = true
+    scrollIntentRef.current = 'force-bottom'
+    setHomeComposerMode('normal')
+    await window.claudeChat?.newThread(threadId)
+    await submitPrompt(buildDataCardPrompt(text, threadId), {
+      threadId,
+      project: activeProject,
+      promptMode: 'home-plugin-card-customization',
+    })
+  }
+
   const handleFormSubmit = (event: FormEvent) => {
     event.preventDefault()
+    if (homeComposerMode === 'data-card-draft' && !hasMessages && !activeThread) {
+      void submitDataCardDraft()
+      return
+    }
     void submitPrompt(inputValue, getActiveSubmitTarget(), pendingAttachments)
   }
 
@@ -1499,6 +1554,10 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
 
     if (event.key !== 'Enter' || event.shiftKey || isComposingText) return
     event.preventDefault()
+    if (homeComposerMode === 'data-card-draft' && !hasMessages && !activeThread) {
+      void submitDataCardDraft()
+      return
+    }
     void submitPrompt(inputValue, getActiveSubmitTarget(), pendingAttachments)
   }
 
@@ -1591,7 +1650,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     />
   )
 
-  const showThreadView = hasMessages || activeThread?.purpose === 'home-plugin-customization'
+  const showThreadView =
+    hasMessages || activeThread?.purpose === 'home-plugin-customization' || activeThread?.purpose === 'home-plugin-card-customization'
 
   return (
     <section
@@ -1619,7 +1679,16 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
         <ChatStartView
           project={activeProject}
           composer={composer}
-          onCustomizeHome={() => onCustomizeHome(activeProject.id)}
+          agentModeEnabled={agentModeEnabled}
+          todoEnabled={todoEnabled}
+          agentModeLoading={agentModeLoading}
+          heading={homeComposerMode === 'data-card-draft' ? t('chat.dataCardDraftHeading') : undefined}
+          onTodoSwitchChange={onTodoModeChange}
+          onStartDataCardDraft={() => {
+            setHomeComposerMode('data-card-draft')
+            requestAnimationFrame(() => chatInputRef.current?.focus())
+          }}
+          onEditHomePluginCard={(item) => onEditHomePluginCard(activeProject.id, item)}
         />
       )}
       {activeUserInputPrompt
