@@ -18,8 +18,16 @@ import type {
   AgentModeStatusResult,
   AppUiLocale,
   DesktopPreferences,
+  HomePluginOrderSaveResult,
+  HomePluginLayoutSaveResult,
   HomePluginRunOptions,
   HomePluginRunResult,
+  HomePluginTaskConfig,
+  HomePluginTaskEvent,
+  HomePluginTaskReadResult,
+  HomePluginTaskRunResult,
+  HomePluginTaskSaveResult,
+  HomePluginTaskStopResult,
   TrayMenuAction,
 } from '../src/desktop-types'
 import type { ChatWorkspaceState, FileTreeResult } from '../src/components/types'
@@ -64,6 +72,19 @@ declare global {
       /** 相对路径须不含 `..`；用于探测项目下目录/文件是否存在 / Relative path must not contain `..` */
       pathExistsUnderProject?: (rootPath: string, relativePath: string) => Promise<boolean>
       runHomePlugin?: (rootPath: string, options?: HomePluginRunOptions) => Promise<HomePluginRunResult>
+      saveHomePluginOrder?: (rootPath: string, order: string[]) => Promise<HomePluginOrderSaveResult>
+      saveHomePluginLayout?: (
+        rootPath: string,
+        order: string[],
+        cards: Array<{ slug: string; preferredSize: import('../src/desktop-types').HomePluginCardSize }>,
+      ) => Promise<HomePluginLayoutSaveResult>
+      saveTaskHomePlugin?: (
+        rootPath: string,
+        payload: Omit<HomePluginTaskConfig, 'version' | 'slug' | 'createdAt' | 'updatedAt'> & { slug?: string },
+      ) => Promise<HomePluginTaskSaveResult>
+      getTaskHomePlugin?: (rootPath: string, slug: string) => Promise<HomePluginTaskReadResult>
+      runTaskHomePlugin?: (rootPath: string, slug: string) => Promise<HomePluginTaskRunResult>
+      stopTaskHomePlugin?: (rootPath: string, slug: string) => Promise<HomePluginTaskStopResult>
       getAgentModeStatus?: (rootPath: string, locale?: AppUiLocale) => Promise<AgentModeStatusResult>
       ensureAgentModeFiles?: (rootPath: string, locale?: AppUiLocale) => Promise<AgentModeFilesResult>
       setAgentModeState?: (
@@ -83,10 +104,15 @@ declare global {
       showItemInFolder?: (targetPath: string) => Promise<void>
       /** 使用系统默认应用打开路径 / Open path with the system default app */
       openPath?: (targetPath: string) => Promise<void>
+      /** 可选的桌面端 PNG 剪贴板桥；不存在时渲染层回退浏览器 Clipboard API / Optional PNG clipboard bridge; renderer falls back when absent */
+      copyPngToClipboard?: (dataUrl: string) => Promise<boolean>
+      /** 桌面端 SVG 渲染到图片剪贴板 / Render SVG through Electron and write it as an image clipboard item */
+      copySvgToClipboard?: (svg: string) => Promise<boolean>
       getDesktopPreferences?: () => Promise<DesktopPreferences>
       setDesktopPreferences?: (partial: Partial<DesktopPreferences>) => Promise<DesktopPreferences>
       syncTrayLocale?: (locale: 'zh' | 'en') => Promise<void>
       onTrayMenuAction?: (handler: (action: TrayMenuAction) => void) => () => void
+      onHomePluginTaskEvent?: (handler: (event: HomePluginTaskEvent) => void) => () => void
     }
   }
 }

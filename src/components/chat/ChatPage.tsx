@@ -28,6 +28,7 @@ import type {
   ClaudePermissionMode,
   ProjectFileSearchItem,
 } from '../../claude-chat-types'
+import type { HomePluginRunItem } from '../../desktop-types'
 import { useI18n } from '../../i18n/i18n'
 import type {
   ChatActivityItem,
@@ -49,6 +50,7 @@ import { Composer } from './Composer'
 import type { BuiltInSlashCommand, ChatModelMenuRow, ComposerSuggestion, ComposerTrigger, PermissionModeRow } from './local-types'
 
 const SETTINGS_CHANGED_EVENT = 'claude-agent-settings:changed'
+const PROCESS_TRACE_TOGGLE_EVENT = 'chat-process-trace:toggle'
 const MAX_COMPOSER_SUGGESTIONS = 64
 const MAX_COMPOSER_ATTACHMENTS = 8
 
@@ -79,7 +81,12 @@ type ChatPageProps = {
   onThreadChatStateChange: (threadId: string, update: ChatState | ((prev: ChatState) => ChatState)) => void
   onThreadPromptSubmit: (threadId: string, prompt: string) => void
   onThreadRunStateChange: (threadId: string, state: ThreadRunState | null) => void
-  onCustomizeHome: (projectId: string) => void
+  agentModeEnabled: boolean
+  todoEnabled: boolean
+  agentModeLoading: boolean
+  homeModeResetKey: number
+  onCreateHomePluginCardThread: (projectId: string, initialPrompt: string) => string | void
+  onEditHomePluginCard: (projectId: string, item: HomePluginRunItem) => void
 }
 
 // --- Internal helpers / 模块内辅助 ---
@@ -119,6 +126,23 @@ function getBuiltInSlashCommands(t: (path: string, vars?: Record<string, string 
   ]
 }
 
+function buildDataCardPrompt(userRequest: string, threadId: string): string {
+  return [
+    '请基于下面的需求，只创建一张独立的数据卡片 Home Plugin。',
+    `当前专用 threadId：${threadId}`,
+    '要求：选择合适的小/中/大尺寸，在 manifest.json 写入 preferredSize、kind: "data"、threadId、createdAt、updatedAt；不要一次生成多张卡片。',
+    '',
+    '用户需求：',
+    userRequest,
+  ].join('\n')
+}
+
+function promptModeForThreadPurpose(purpose: WorkspaceThread['purpose']): ClaudeChatSubmitPayload['promptMode'] | undefined {
+  if (purpose === 'home-plugin-customization' || purpose === 'home-plugin-card-customization') return purpose
+  if (purpose === 'task-run') return 'home-plugin-task-run'
+  return undefined
+}
+
 const PERMISSION_MODE_STORAGE_KEY = 'codex-ui-template:claude-permission-mode'
 
 /** 主聊天路由组件（forwardRef 暴露托盘动作）/ Primary chat route exposing imperative methods */
@@ -135,7 +159,12 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     onThreadChatStateChange,
     onThreadPromptSubmit,
     onThreadRunStateChange,
-    onCustomizeHome,
+    agentModeEnabled,
+    todoEnabled,
+    agentModeLoading,
+    homeModeResetKey,
+    onCreateHomePluginCardThread,
+    onEditHomePluginCard,
   },
   ref,
 ) {
@@ -163,6 +192,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   const [composerSuggestionIndex, setComposerSuggestionIndex] = useState(0)
   /** 与 Electron Claude 设置对齐；Composer 展示此标签 / Mirrors Electron agent settings label shown in composer */
   const [globalDisplayModel, setGlobalDisplayModel] = useState('Claude Agent')
+  const [homeComposerMode, setHomeComposerMode] = useState<'normal' | 'data-card-draft'>('normal')
 
   const scrollRegionRef = useRef<HTMLDivElement>(null)
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
@@ -196,6 +226,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   const scrollIntentRef = useRef<'none' | 'force-bottom'>('none')
   /** 取消 / Esc 关闭编辑时抑制贴底，避免 ResizeObserver 误判 isNearBottom 把视口滚到底 */
   const suppressTranscriptResizeStickRef = useRef(false)
+  const suppressTranscriptResizeStickTimerRef = useRef<number | null>(null)
   const isFirstTranscriptLayoutRef = useRef(true)
   const isRunningRef = useRef(false)
   const globalDisplayModelRef = useRef(globalDisplayModel)
@@ -296,6 +327,10 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       /* Browser preview can run without the Electron bridge. */
     })
   }, [activeThread?.id, activeProject.id, applyGlobalModelFromSettings])
+
+  useEffect(() => {
+    setHomeComposerMode('normal')
+  }, [homeModeResetKey])
 
   useEffect(() => {
     window.claudeChat?.getSettings().then(applyGlobalModelFromSettings).catch(() => {
@@ -529,11 +564,33 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     setShowScrollButton((prev) => shouldShowScrollToBottom(sr, prev))
   }, [])
 
-  const notifyUserMessageEditDismissed = useCallback(() => {
+  const suppressTranscriptResizeStick = useCallback((durationMs = 320) => {
     suppressTranscriptResizeStickRef.current = true
-    window.setTimeout(() => {
+    if (suppressTranscriptResizeStickTimerRef.current !== null) {
+      window.clearTimeout(suppressTranscriptResizeStickTimerRef.current)
+    }
+    suppressTranscriptResizeStickTimerRef.current = window.setTimeout(() => {
       suppressTranscriptResizeStickRef.current = false
-    }, 280)
+      suppressTranscriptResizeStickTimerRef.current = null
+    }, durationMs)
+  }, [])
+
+  const notifyUserMessageEditDismissed = useCallback(() => {
+    suppressTranscriptResizeStick(280)
+  }, [suppressTranscriptResizeStick])
+
+  useEffect(() => {
+    const onProcessTraceToggle = () => suppressTranscriptResizeStick(360)
+    window.addEventListener(PROCESS_TRACE_TOGGLE_EVENT, onProcessTraceToggle)
+    return () => window.removeEventListener(PROCESS_TRACE_TOGGLE_EVENT, onProcessTraceToggle)
+  }, [suppressTranscriptResizeStick])
+
+  useEffect(() => {
+    return () => {
+      if (suppressTranscriptResizeStickTimerRef.current !== null) {
+        window.clearTimeout(suppressTranscriptResizeStickTimerRef.current)
+      }
+    }
   }, [])
 
   useLayoutEffect(() => {
@@ -628,7 +685,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     return {
       threadId: activeThread.id,
       project: projectForThread,
-      promptMode: activeThread.purpose === 'home-plugin-customization' ? 'home-plugin-customization' : undefined,
+      promptMode: promptModeForThreadPurpose(activeThread.purpose),
     }
   }, [activeProject, activeThread, projects])
 
@@ -761,12 +818,13 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
           if (idx >= 0) {
             const next = [...prev.items]
             const it = next[idx] as ChatThinkingItem
-            next[idx] = { ...it, status: 'running' }
+            next[idx] = { ...it, requestId: it.requestId ?? event.requestId, status: 'running' }
             return { ...prev, items: next }
           }
           const row: ChatThinkingItem = {
             type: 'thinking',
             id: event.thinkingId,
+            requestId: event.requestId,
             thinkingId: event.thinkingId,
             title: event.title,
             content: '',
@@ -784,12 +842,13 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
           if (idx >= 0) {
             const next = [...prev.items]
             const it = next[idx] as ChatThinkingItem
-            next[idx] = { ...it, content: it.content + event.text, status: 'running' }
+            next[idx] = { ...it, requestId: it.requestId ?? event.requestId, content: it.content + event.text, status: 'running' }
             return { ...prev, items: next }
           }
           const row: ChatThinkingItem = {
             type: 'thinking',
             id: event.thinkingId,
+            requestId: event.requestId,
             thinkingId: event.thinkingId,
             title: 'Think',
             content: event.text,
@@ -806,7 +865,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
           if (idx < 0) return prev
           const next = [...prev.items]
           const it = next[idx] as ChatThinkingItem
-          next[idx] = { ...it, status: 'done' }
+          next[idx] = { ...it, requestId: it.requestId ?? event.requestId, status: 'done' }
           return { ...prev, items: next }
         })
         return
@@ -819,12 +878,13 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
           if (existingIdx >= 0) {
             const next = [...prev.items]
             const it = next[existingIdx] as ChatToolItem
-            next[existingIdx] = { ...it, inputPreview: event.inputPreview || it.inputPreview, status: 'running' }
+            next[existingIdx] = { ...it, requestId: it.requestId ?? event.requestId, inputPreview: event.inputPreview || it.inputPreview, status: 'running' }
             return { ...prev, items: next }
           }
           const row: ChatToolItem = {
             type: 'tool',
             id: `tool-${event.toolUseId}`,
+            requestId: event.requestId,
             toolUseId: event.toolUseId,
             name: event.name,
             inputPreview: event.inputPreview,
@@ -843,6 +903,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
           const it = next[idx] as ChatToolItem
           next[idx] = {
             ...it,
+            requestId: it.requestId ?? event.requestId,
             inputPreview: event.inputPreview ?? it.inputPreview,
             detail: event.detail ?? it.detail,
           }
@@ -857,7 +918,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
           if (idx < 0) return prev
           const next = [...prev.items]
           const it = next[idx] as ChatToolItem
-          next[idx] = { ...it, status: event.status, detail: event.detail ?? it.detail }
+          next[idx] = { ...it, requestId: it.requestId ?? event.requestId, status: event.status, detail: event.detail ?? it.detail }
           return { ...prev, items: next }
         })
         return
@@ -883,6 +944,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
             const it = next[idx] as ChatActivityItem
             next[idx] = {
               ...it,
+              requestId: it.requestId ?? event.requestId,
               title: event.title,
               status: event.status,
               detail: event.detail,
@@ -893,6 +955,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
           const row: ChatActivityItem = {
             type: 'activity',
             id: event.activityId,
+            requestId: event.requestId,
             title: event.title,
             status: event.status,
             detail: event.detail,
@@ -1189,9 +1252,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
 
     try {
       const submittingThread = threads.find((thread) => thread.id === submittingThreadId)
-      const promptMode =
-        target?.promptMode ??
-        (submittingThread?.purpose === 'home-plugin-customization' ? 'home-plugin-customization' : undefined)
+      const promptMode = target?.promptMode ?? promptModeForThreadPurpose(submittingThread?.purpose)
       const { requestId } = await window.claudeChat.submit({
         text,
         attachments: attachmentsForSubmit,
@@ -1432,8 +1493,29 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     [activeComposerTrigger, inputValue],
   )
 
+  const submitDataCardDraft = async () => {
+    const text = inputValue.trim()
+    if (!text) return
+    const threadId = onCreateHomePluginCardThread(activeProject.id, text)
+    if (!threadId) return
+    activeThreadIdRef.current = threadId
+    isFirstTranscriptLayoutRef.current = true
+    scrollIntentRef.current = 'force-bottom'
+    setHomeComposerMode('normal')
+    await window.claudeChat?.newThread(threadId)
+    await submitPrompt(buildDataCardPrompt(text, threadId), {
+      threadId,
+      project: activeProject,
+      promptMode: 'home-plugin-card-customization',
+    })
+  }
+
   const handleFormSubmit = (event: FormEvent) => {
     event.preventDefault()
+    if (homeComposerMode === 'data-card-draft' && !hasMessages && !activeThread) {
+      void submitDataCardDraft()
+      return
+    }
     void submitPrompt(inputValue, getActiveSubmitTarget(), pendingAttachments)
   }
 
@@ -1469,6 +1551,10 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
 
     if (event.key !== 'Enter' || event.shiftKey || isComposingText) return
     event.preventDefault()
+    if (homeComposerMode === 'data-card-draft' && !hasMessages && !activeThread) {
+      void submitDataCardDraft()
+      return
+    }
     void submitPrompt(inputValue, getActiveSubmitTarget(), pendingAttachments)
   }
 
@@ -1561,7 +1647,11 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     />
   )
 
-  const showThreadView = hasMessages || activeThread?.purpose === 'home-plugin-customization'
+  const showThreadView =
+    hasMessages ||
+    activeThread?.purpose === 'home-plugin-customization' ||
+    activeThread?.purpose === 'home-plugin-card-customization' ||
+    activeThread?.purpose === 'task-run'
 
   return (
     <section
@@ -1589,7 +1679,15 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
         <ChatStartView
           project={activeProject}
           composer={composer}
-          onCustomizeHome={() => onCustomizeHome(activeProject.id)}
+          agentModeEnabled={agentModeEnabled}
+          todoEnabled={todoEnabled}
+          agentModeLoading={agentModeLoading}
+          heading={homeComposerMode === 'data-card-draft' ? t('chat.dataCardDraftHeading') : undefined}
+          onStartDataCardDraft={() => {
+            setHomeComposerMode('data-card-draft')
+            requestAnimationFrame(() => chatInputRef.current?.focus())
+          }}
+          onEditHomePluginCard={(item) => onEditHomePluginCard(activeProject.id, item)}
         />
       )}
       {activeUserInputPrompt
@@ -1677,9 +1775,9 @@ function buildMentionSuggestions(
   const files: ComposerSuggestion[] = fileResults.map((file) => ({
     id: `file-${file.path}`,
     kind: 'file',
-    title: file.relativePath,
+    title: file.type === 'directory' ? `${file.relativePath}/` : file.relativePath,
     subtitle: file.type === 'directory' ? t('chat.mentionFileTypeDir') : t('chat.mentionFileTypeFile'),
-    insertText: `${formatFileMention(file.relativePath)} `,
+    insertText: `${formatFileMention(file.relativePath, file.type)} `,
     item: file,
   }))
 
@@ -1709,9 +1807,10 @@ function normalizeSuggestionQuery(value: string): string {
   return value.trim().toLowerCase()
 }
 
-function formatFileMention(relativePath: string): string {
-  if (!/[\s"']/u.test(relativePath)) return `@${relativePath}`
-  return `@"${relativePath.replace(/"/g, '\\"')}"`
+function formatFileMention(relativePath: string, type: ProjectFileSearchItem['type']): string {
+  const mentionPath = type === 'directory' ? `${relativePath.replace(/\/+$/u, '')}/` : relativePath
+  if (!/[\s"']/u.test(mentionPath)) return `@${mentionPath}`
+  return `@"${mentionPath.replace(/"/g, '\\"')}"`
 }
 
 function toChatMessageAttachment(attachment: ClaudeChatAttachment): ChatMessageAttachment {
@@ -1979,8 +2078,8 @@ function playAgentDoneSound(): void {
       oscillator.type = 'sine'
       oscillator.frequency.setValueAtTime(frequency, start)
       gain.gain.setValueAtTime(0.0001, start)
-      gain.gain.exponentialRampToValueAtTime(0.055, start + 0.018)
-      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.18)
+      gain.gain.exponentialRampToValueAtTime(0.12, start + 0.018);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.18);
       oscillator.connect(gain)
       gain.connect(ctx.destination)
       oscillator.start(start)

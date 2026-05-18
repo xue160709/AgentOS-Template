@@ -4,7 +4,15 @@
  */
 
 import { ipcRenderer, contextBridge, type IpcRendererEvent } from 'electron'
-import type { DesktopPreferences, TrayMenuAction } from '../src/desktop-types'
+import type {
+  DesktopPreferences,
+  HomePluginTaskEvent,
+  HomePluginTaskReadResult,
+  HomePluginTaskRunResult,
+  HomePluginTaskSaveResult,
+  HomePluginTaskStopResult,
+  TrayMenuAction,
+} from '../src/desktop-types'
 import type {
   ActiveChatPickPayload,
   ClaudeAgentSettings,
@@ -17,6 +25,7 @@ import type {
 
 const CLAUDE_CHAT_EVENT_CHANNEL = 'claude-chat:event'
 const TRAY_MENU_ACTION_CHANNEL = 'desktop:tray-action'
+const TASK_HOME_PLUGIN_EVENT_CHANNEL = 'desktop:task-home-plugin-event'
 
 // --- Desktop bridge / 桌面通用 API ---
 
@@ -45,6 +54,24 @@ contextBridge.exposeInMainWorld('desktop', {
   },
   runHomePlugin(rootPath: string, options?: unknown) {
     return ipcRenderer.invoke('desktop:run-home-plugin', rootPath, options)
+  },
+  saveHomePluginOrder(rootPath: string, order: unknown) {
+    return ipcRenderer.invoke('desktop:save-home-plugin-order', rootPath, order)
+  },
+  saveHomePluginLayout(rootPath: string, order: unknown, cards: unknown) {
+    return ipcRenderer.invoke('desktop:save-home-plugin-layout', rootPath, order, cards)
+  },
+  saveTaskHomePlugin(rootPath: string, payload: unknown) {
+    return ipcRenderer.invoke('desktop:save-task-home-plugin', rootPath, payload) as Promise<HomePluginTaskSaveResult>
+  },
+  getTaskHomePlugin(rootPath: string, slug: string) {
+    return ipcRenderer.invoke('desktop:get-task-home-plugin', rootPath, slug) as Promise<HomePluginTaskReadResult>
+  },
+  runTaskHomePlugin(rootPath: string, slug: string) {
+    return ipcRenderer.invoke('desktop:run-task-home-plugin', rootPath, slug) as Promise<HomePluginTaskRunResult>
+  },
+  stopTaskHomePlugin(rootPath: string, slug: string) {
+    return ipcRenderer.invoke('desktop:stop-task-home-plugin', rootPath, slug) as Promise<HomePluginTaskStopResult>
   },
   getAgentModeStatus(rootPath: string, locale?: 'zh' | 'en') {
     return ipcRenderer.invoke('desktop:get-agent-mode-status', rootPath, locale)
@@ -85,6 +112,12 @@ contextBridge.exposeInMainWorld('desktop', {
   syncTrayLocale(locale: 'zh' | 'en') {
     return ipcRenderer.invoke('desktop:sync-tray-locale', locale) as Promise<void>
   },
+  copyPngToClipboard(dataUrl: string) {
+    return ipcRenderer.invoke('desktop:copy-png-to-clipboard', dataUrl) as Promise<boolean>
+  },
+  copySvgToClipboard(svg: string) {
+    return ipcRenderer.invoke('desktop:copy-svg-to-clipboard', svg) as Promise<boolean>
+  },
   onTrayMenuAction(handler: (action: TrayMenuAction) => void) {
     const listener = (_event: IpcRendererEvent, raw: unknown) => {
       if (raw === 'new-thread') handler('new-thread')
@@ -92,6 +125,11 @@ contextBridge.exposeInMainWorld('desktop', {
     }
     ipcRenderer.on(TRAY_MENU_ACTION_CHANNEL, listener)
     return () => ipcRenderer.off(TRAY_MENU_ACTION_CHANNEL, listener)
+  },
+  onHomePluginTaskEvent(handler: (event: HomePluginTaskEvent) => void) {
+    const listener = (_event: IpcRendererEvent, event: HomePluginTaskEvent) => handler(event)
+    ipcRenderer.on(TASK_HOME_PLUGIN_EVENT_CHANNEL, listener)
+    return () => ipcRenderer.off(TASK_HOME_PLUGIN_EVENT_CHANNEL, listener)
   },
 })
 

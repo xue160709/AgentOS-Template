@@ -3,7 +3,7 @@
  * Timeline renderer for messages, tool chips, thinking, and agent activity rows.
  */
 
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { IconInline } from '../../icon-inline'
 import { useI18n } from '../../i18n/i18n'
 import type {
@@ -23,6 +23,19 @@ import { GenerativeWidget } from './GenerativeWidget'
 import { containsGenerativeWidget, parseGenerativeUiSegments } from './generative-ui'
 import { escapeHtml, renderMarkdown } from './markdown'
 
+type ProcessTranscriptItem = ChatToolItem | ChatThinkingItem | ChatActivityItem
+
+type TranscriptRenderEntry =
+  | {
+      kind: 'item'
+      item: TranscriptItem
+    }
+  | {
+      kind: 'assistant-turn'
+      message: ChatMessageItem
+      processItems: ProcessTranscriptItem[]
+    }
+
 /** Memoized transcript map / Memoized transcript list renderer */
 export const Transcript = memo(function Transcript({
   items,
@@ -41,46 +54,215 @@ export const Transcript = memo(function Transcript({
   onReviewFileChanges?: (changeSetId: string) => void
   onRewindFileChanges?: (item: ChatFileDiffItem) => void
 }) {
+  const entries = useMemo(() => groupTranscriptForRendering(items), [items])
+  const renderItem = (item: TranscriptItem): ReactNode => {
+    if (item.type === 'tool') return <ToolRow key={item.id} item={item} />
+    if (item.type === 'thinking') return <ThinkingRow key={item.id} item={item} />
+    if (item.type === 'activity') return <ActivityRow key={item.id} item={item} />
+    if (item.type === 'file_diff') {
+      return (
+        <FileDiffRow
+          key={item.id}
+          item={item}
+          onReviewFileChanges={onReviewFileChanges}
+          onRewindFileChanges={onRewindFileChanges}
+        />
+      )
+    }
+    return (
+      <ChatMessage
+        key={item.id}
+        item={item}
+        canEdit={!isRunning}
+        onCopyMessage={onCopyMessage}
+        onEditUserMessage={onEditUserMessage}
+        onUserMessageEditDismissed={onUserMessageEditDismissed}
+      />
+    )
+  }
+
   return (
     <>
-      {items.map((item) => {
-        if (item.type === 'tool') return <ToolRow key={item.id} item={item} />
-        if (item.type === 'thinking') return <ThinkingRow key={item.id} item={item} />
-        if (item.type === 'activity') return <ActivityRow key={item.id} item={item} />
-        if (item.type === 'file_diff') {
-          return (
-            <FileDiffRow
-              key={item.id}
-              item={item}
-              onReviewFileChanges={onReviewFileChanges}
-              onRewindFileChanges={onRewindFileChanges}
-            />
-          )
-        }
+      {entries.map((entry) => {
+        if (entry.kind !== 'assistant-turn') return renderItem(entry.item)
+        const hasProcessTrace = Boolean(entry.message.durationMs && entry.processItems.length > 0)
         return (
-          <ChatMessage
-            key={item.id}
-            item={item}
-            canEdit={!isRunning}
-            onCopyMessage={onCopyMessage}
-            onEditUserMessage={onEditUserMessage}
-            onUserMessageEditDismissed={onUserMessageEditDismissed}
-          />
+          <Fragment key={`assistant-turn-${entry.message.id}`}>
+            {hasProcessTrace ? (
+              <ProcessTraceBlock
+                durationMs={entry.message.durationMs}
+                processItems={entry.processItems}
+                renderItem={renderItem}
+              />
+            ) : (
+              entry.processItems.map((item) => renderItem(item))
+            )}
+            <ChatMessage
+              item={entry.message}
+              canEdit={!isRunning}
+              showDurationLabel={!hasProcessTrace}
+              onCopyMessage={onCopyMessage}
+              onEditUserMessage={onEditUserMessage}
+              onUserMessageEditDismissed={onUserMessageEditDismissed}
+            />
+          </Fragment>
         )
       })}
     </>
   )
 })
 
+function groupTranscriptForRendering(items: TranscriptItem[]): TranscriptRenderEntry[] {
+  const assistantRequestIds = new Set<string>()
+  for (const item of items) {
+    if (item.type === 'message' && item.role === 'assistant') {
+      const requestId = getAssistantRequestId(item)
+      if (requestId) assistantRequestIds.add(requestId)
+    }
+  }
+
+  const processItemsByRequestId = new Map<string, ProcessTranscriptItem[]>()
+  for (const item of items) {
+    if (!isProcessTranscriptItem(item)) continue
+    const requestId = getProcessRequestId(item)
+    if (!requestId || !assistantRequestIds.has(requestId)) continue
+    const current = processItemsByRequestId.get(requestId) ?? []
+    current.push(item)
+    processItemsByRequestId.set(requestId, current)
+  }
+
+  const entries: TranscriptRenderEntry[] = []
+  let pendingProcessItems: ProcessTranscriptItem[] = []
+  let lastAssistantEntry: Extract<TranscriptRenderEntry, { kind: 'assistant-turn' }> | null = null
+
+  const flushProcessItems = () => {
+    for (const item of pendingProcessItems) entries.push({ kind: 'item', item })
+    pendingProcessItems = []
+  }
+
+  for (const item of items) {
+    if (isProcessTranscriptItem(item)) {
+      const requestId = getProcessRequestId(item)
+      if (requestId && assistantRequestIds.has(requestId)) continue
+      if (lastAssistantEntry) {
+        lastAssistantEntry.processItems = uniqueProcessItems([...lastAssistantEntry.processItems, item])
+        continue
+      }
+      pendingProcessItems.push(item)
+      continue
+    }
+
+    if (item.type === 'message' && item.role === 'assistant') {
+      const requestId = getAssistantRequestId(item)
+      const requestProcessItems = requestId ? processItemsByRequestId.get(requestId) ?? [] : []
+      const entry: Extract<TranscriptRenderEntry, { kind: 'assistant-turn' }> = {
+        kind: 'assistant-turn',
+        message: item,
+        processItems: uniqueProcessItems([...pendingProcessItems, ...requestProcessItems]),
+      }
+      entries.push(entry)
+      pendingProcessItems = []
+      lastAssistantEntry = entry
+      continue
+    }
+
+    flushProcessItems()
+    entries.push({ kind: 'item', item })
+    if (item.type === 'message' && item.role === 'user') lastAssistantEntry = null
+  }
+
+  flushProcessItems()
+  return entries
+}
+
+function isProcessTranscriptItem(item: TranscriptItem): item is ProcessTranscriptItem {
+  return item.type === 'tool' || item.type === 'thinking' || item.type === 'activity'
+}
+
+function getAssistantRequestId(item: ChatMessageItem): string | undefined {
+  return item.id.startsWith('assistant-') ? item.id.slice('assistant-'.length) : undefined
+}
+
+function getProcessRequestId(item: ProcessTranscriptItem): string | undefined {
+  if ('requestId' in item && item.requestId) return item.requestId
+  const id = item.type === 'activity' ? item.id : item.type === 'thinking' ? item.thinkingId : ''
+  const match = id.match(/^(?:activity|thinking)-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-/i)
+  return match?.[1]
+}
+
+function uniqueProcessItems(items: ProcessTranscriptItem[]): ProcessTranscriptItem[] {
+  const seen = new Set<string>()
+  const unique: ProcessTranscriptItem[] = []
+  for (const item of items) {
+    const key = getProcessItemKey(item)
+    if (seen.has(key)) continue
+    seen.add(key)
+    unique.push(item)
+  }
+  return unique
+}
+
+function getProcessItemKey(item: ProcessTranscriptItem): string {
+  if (item.type === 'tool') return `tool:${item.toolUseId}`
+  if (item.type === 'thinking') return `thinking:${item.thinkingId}`
+  return `activity:${item.id}`
+}
+
+function ProcessTraceBlock({
+  durationMs,
+  processItems,
+  renderItem,
+}: {
+  durationMs?: number
+  processItems: ProcessTranscriptItem[]
+  renderItem: (item: TranscriptItem) => ReactNode
+}) {
+  const { t } = useI18n()
+  const [isOpen, setIsOpen] = useState(false)
+  const durationLabel = durationMs ? formatDuration(durationMs) : ''
+
+  if (!durationLabel || processItems.length === 0) return null
+
+  return (
+    <section className="chat-process-group">
+      <button
+        type="button"
+        className="chat-message__duration chat-message__duration--toggle chat-process-group__summary"
+        title={t('chat.responseDurationTitle')}
+        aria-label={t('chat.responseDurationTitle')}
+        aria-expanded={isOpen}
+        onClick={(event) => {
+          const scrollRegion = event.currentTarget.closest('.chat-scroll-region') as HTMLElement | null
+          const scrollTop = scrollRegion?.scrollTop
+          window.dispatchEvent(new CustomEvent('chat-process-trace:toggle'))
+          setIsOpen((value) => !value)
+          if (scrollRegion && scrollTop !== undefined) {
+            window.requestAnimationFrame(() => {
+              scrollRegion.scrollTop = Math.min(scrollTop, Math.max(0, scrollRegion.scrollHeight - scrollRegion.clientHeight))
+            })
+          }
+        }}
+      >
+        <span>{t('chat.responseProcessed')}</span>
+        <span>{durationLabel}</span>
+        <IconInline name="chevron" />
+      </button>
+      {isOpen ? <div className="chat-process-group__body">{processItems.map((item) => renderItem(item))}</div> : null}
+    </section>
+  )
+}
+
 const ChatMessage = memo(function ChatMessage({
   item,
   canEdit,
+  showDurationLabel = true,
   onCopyMessage,
   onEditUserMessage,
   onUserMessageEditDismissed,
 }: {
   item: ChatMessageItem
   canEdit: boolean
+  showDurationLabel?: boolean
   onCopyMessage?: (text: string) => void
   onEditUserMessage?: (messageId: string, text: string) => void
   onUserMessageEditDismissed?: () => void
@@ -106,11 +288,13 @@ const ChatMessage = memo(function ChatMessage({
 
   if (item.role === 'assistant' && !item.content.trim() && item.status === 'streaming') return null
 
-  const hasBody = item.content.trim().length > 0 || item.role === 'assistant'
   const attachments = item.attachments ?? []
-  const durationLabel = item.role === 'assistant' && item.durationMs ? formatDuration(item.durationMs) : ''
+  const hasBody =
+    item.role === 'assistant' ? item.content.trim().length > 0 || attachments.length > 0 : item.content.trim().length > 0
+  const durationLabel = showDurationLabel && item.role === 'assistant' && item.durationMs ? formatDuration(item.durationMs) : ''
   const canCopy = item.content.trim().length > 0
   const canSaveEdit = draft.trim().length > 0 && draft.trim() !== item.content.trim()
+  const shouldRenderBubble = isEditing || hasBody
 
   const saveEdit = () => {
     const next = draft.trim()
@@ -119,6 +303,57 @@ const ChatMessage = memo(function ChatMessage({
     onEditUserMessage?.(item.id, next)
   }
 
+  const contentNode = (
+    <>
+      {attachments.length > 0 ? <ChatAttachmentList attachments={attachments} /> : null}
+      {isEditing ? (
+        <div className="chat-message-edit">
+          <textarea
+            ref={editTextareaRef}
+            value={draft}
+            aria-label={t('chat.editMessageAria')}
+            onChange={(event) => setDraft(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                event.preventDefault()
+                if (canSaveEdit) saveEdit()
+              }
+              if (event.key === 'Escape') {
+                event.preventDefault()
+                onUserMessageEditDismissed?.()
+                setIsEditing(false)
+                setDraft(item.content)
+              }
+            }}
+          />
+          <div className="chat-message-edit__actions">
+            <button
+              type="button"
+              className="chat-message-edit__btn chat-message-edit__btn--cancel"
+              onClick={() => {
+                onUserMessageEditDismissed?.()
+                setIsEditing(false)
+              }}
+            >
+              <IconInline name="x" />
+              <span>{t('chat.editCancel')}</span>
+            </button>
+            <button type="button" className="chat-message-edit__btn chat-message-edit__btn--submit" disabled={!canSaveEdit} onClick={saveEdit}>
+              <IconInline name="check" />
+              <span>{t('chat.editSubmit')}</span>
+            </button>
+          </div>
+        </div>
+      ) : hasBody ? (
+        item.role === 'assistant' ? (
+          <AssistantMessageContent content={item.content} status={item.status} />
+        ) : (
+          <div dangerouslySetInnerHTML={{ __html: bodyHtml }} />
+        )
+      ) : null}
+    </>
+  )
+
   return (
     <article className={`chat-message chat-message--${item.role} chat-message--${item.status}`}>
       <div className="chat-message__stack">
@@ -126,58 +361,10 @@ const ChatMessage = memo(function ChatMessage({
           <span className="chat-message__duration" title={t('chat.responseDurationTitle')} aria-label={t('chat.responseDurationTitle')}>
             <span>{t('chat.responseProcessed')}</span>
             <span>{durationLabel}</span>
-            <IconInline name="chevron" />
           </span>
         ) : null}
-        <div className="chat-message__bubble markdown-body">
-          {attachments.length > 0 ? <ChatAttachmentList attachments={attachments} /> : null}
-          {isEditing ? (
-            <div className="chat-message-edit">
-              <textarea
-                ref={editTextareaRef}
-                value={draft}
-                aria-label={t('chat.editMessageAria')}
-                onChange={(event) => setDraft(event.currentTarget.value)}
-                onKeyDown={(event) => {
-                  if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-                    event.preventDefault()
-                    if (canSaveEdit) saveEdit()
-                  }
-                  if (event.key === 'Escape') {
-                    event.preventDefault()
-                    onUserMessageEditDismissed?.()
-                    setIsEditing(false)
-                    setDraft(item.content)
-                  }
-                }}
-              />
-              <div className="chat-message-edit__actions">
-                <button
-                  type="button"
-                  className="chat-message-edit__btn chat-message-edit__btn--cancel"
-                  onClick={() => {
-                    onUserMessageEditDismissed?.()
-                    setIsEditing(false)
-                  }}
-                >
-                  <IconInline name="x" />
-                  <span>{t('chat.editCancel')}</span>
-                </button>
-                <button type="button" className="chat-message-edit__btn chat-message-edit__btn--submit" disabled={!canSaveEdit} onClick={saveEdit}>
-                  <IconInline name="check" />
-                  <span>{t('chat.editSubmit')}</span>
-                </button>
-              </div>
-            </div>
-          ) : hasBody ? (
-            item.role === 'assistant' ? (
-              <AssistantMessageContent content={item.content} status={item.status} />
-            ) : (
-              <div dangerouslySetInnerHTML={{ __html: bodyHtml }} />
-            )
-          ) : null}
-        </div>
-        {!isEditing ? (
+        {shouldRenderBubble ? <div className="chat-message__bubble markdown-body">{contentNode}</div> : null}
+        {!isEditing && shouldRenderBubble ? (
           <div className="chat-message-actions" aria-label={t('chat.messageActionsAria')}>
             <button
               type="button"
@@ -274,55 +461,68 @@ const ToolRow = memo(function ToolRow({ item }: { item: ChatToolItem }) {
     error: t('chat.toolError'),
     running: t('chat.toolRunning'),
   }
-  const hasDetails = Boolean(item.detail || item.inputPreview)
+  const hasDetails = Boolean(item.inputPreview?.trim())
   const [isOpen, setIsOpen] = useState(item.status === 'running')
 
   useEffect(() => {
     setIsOpen(item.status === 'running')
   }, [item.status])
 
+  const summary = (
+    <>
+      <span className={`status-row__chevron${hasDetails ? '' : ' status-row__chevron--hidden'}`} aria-hidden="true" />
+      <span className="tool-row__dot" />
+      <span className="tool-row__name">{item.name}</span>
+      <span className="tool-row__status">{statusLabel[item.status]}</span>
+      {item.detail ? <span className="tool-row__detail">{item.detail}</span> : null}
+    </>
+  )
+
+  if (!hasDetails) {
+    return (
+      <div className={`tool-row tool-row--${item.status} tool-row--static`}>
+        <div className="status-row__summary status-row__summary--static">{summary}</div>
+      </div>
+    )
+  }
+
   return (
-    <details
-      className={`tool-row tool-row--${item.status}`}
-      open={isOpen}
-      onToggle={(event) => setIsOpen(event.currentTarget.open)}
-    >
-      <summary className="status-row__summary">
-        <span className="status-row__chevron" aria-hidden="true" />
-        <span className="tool-row__dot" />
-        <span className="tool-row__name">{item.name}</span>
-        <span className="tool-row__status">{statusLabel[item.status]}</span>
-        {item.detail ? <span className="tool-row__detail">{item.detail}</span> : null}
-      </summary>
-      {hasDetails ? (
-        <div className="status-row__body">
-          {item.inputPreview ? <code>{item.inputPreview}</code> : null}
-        </div>
-      ) : null}
+    <details className={`tool-row tool-row--${item.status}`} open={isOpen} onToggle={(event) => setIsOpen(event.currentTarget.open)}>
+      <summary className="status-row__summary">{summary}</summary>
+      <div className="status-row__body">{item.inputPreview ? <code>{item.inputPreview}</code> : null}</div>
     </details>
   )
 })
 
 const ThinkingRow = memo(function ThinkingRow({ item }: { item: ChatThinkingItem }) {
   const { t } = useI18n()
+  const hasDetails = Boolean(item.content.trim())
   const [isOpen, setIsOpen] = useState(item.status === 'running')
 
   useEffect(() => {
     setIsOpen(item.status === 'running')
   }, [item.status])
 
+  const summary = (
+    <>
+      <span className={`status-row__chevron${hasDetails ? '' : ' status-row__chevron--hidden'}`} aria-hidden="true" />
+      <span className="thinking-row__dot" />
+      <span className="thinking-row__title">{item.title}</span>
+      <span className="thinking-row__status">{item.status === 'running' ? t('chat.thinkingRunning') : t('chat.thinkingDone')}</span>
+    </>
+  )
+
+  if (!hasDetails) {
+    return (
+      <div className={`thinking-row thinking-row--${item.status} thinking-row--static`}>
+        <div className="thinking-row__header thinking-row__header--static">{summary}</div>
+      </div>
+    )
+  }
+
   return (
-    <details
-      className={`thinking-row thinking-row--${item.status}`}
-      open={isOpen}
-      onToggle={(event) => setIsOpen(event.currentTarget.open)}
-    >
-      <summary className="thinking-row__header">
-        <span className="status-row__chevron" aria-hidden="true" />
-        <span className="thinking-row__dot" />
-        <span className="thinking-row__title">{item.title}</span>
-        <span className="thinking-row__status">{item.status === 'running' ? t('chat.thinkingRunning') : t('chat.thinkingDone')}</span>
-      </summary>
+    <details className={`thinking-row thinking-row--${item.status}`} open={isOpen} onToggle={(event) => setIsOpen(event.currentTarget.open)}>
+      <summary className="thinking-row__header">{summary}</summary>
       {item.content ? <pre>{item.content}</pre> : null}
     </details>
   )
@@ -336,25 +536,34 @@ const ActivityRow = memo(function ActivityRow({ item }: { item: ChatActivityItem
     info: t('chat.activityInfo'),
     running: t('chat.activityRunning'),
   }
+  const hasDetails = Boolean(item.preview?.trim())
   const [isOpen, setIsOpen] = useState(item.status === 'running')
 
   useEffect(() => {
     setIsOpen(item.status === 'running')
   }, [item.status])
 
+  const summary = (
+    <>
+      <span className={`status-row__chevron${hasDetails ? '' : ' status-row__chevron--hidden'}`} aria-hidden="true" />
+      <span className="activity-row__dot" />
+      <span className="activity-row__title">{item.title}</span>
+      <span className="activity-row__status">{statusLabel[item.status]}</span>
+      {item.detail ? <span className="activity-row__detail">{item.detail}</span> : null}
+    </>
+  )
+
+  if (!hasDetails) {
+    return (
+      <div className={`activity-row activity-row--${item.status} activity-row--static`}>
+        <div className="activity-row__main activity-row__main--static">{summary}</div>
+      </div>
+    )
+  }
+
   return (
-    <details
-      className={`activity-row activity-row--${item.status}`}
-      open={isOpen}
-      onToggle={(event) => setIsOpen(event.currentTarget.open)}
-    >
-      <summary className="activity-row__main">
-        <span className="status-row__chevron" aria-hidden="true" />
-        <span className="activity-row__dot" />
-        <span className="activity-row__title">{item.title}</span>
-        <span className="activity-row__status">{statusLabel[item.status]}</span>
-        {item.detail ? <span className="activity-row__detail">{item.detail}</span> : null}
-      </summary>
+    <details className={`activity-row activity-row--${item.status}`} open={isOpen} onToggle={(event) => setIsOpen(event.currentTarget.open)}>
+      <summary className="activity-row__main">{summary}</summary>
       {item.preview ? <pre>{item.preview}</pre> : null}
     </details>
   )

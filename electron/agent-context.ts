@@ -831,7 +831,8 @@ function scoreFileSearchItem(item: ProjectFileSearchItem, query: string): number
   if (label.includes(query)) score += 40
   if (relativePath.startsWith(query)) score += 30
   if (relativePath.includes(query)) score += 16
-  if (item.type === 'file') score += 4
+  if (item.type === 'directory') score += 8
+  else score += 4
   score -= relativePath.length / 1000
   return score
 }

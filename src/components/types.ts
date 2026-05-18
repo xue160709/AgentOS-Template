@@ -61,6 +61,7 @@ export type ChatMessageAttachment = {
 export type ChatToolItem = {
   type: 'tool'
   id: string
+  requestId?: string
   toolUseId: string
   name: string
   inputPreview: string
@@ -72,6 +73,7 @@ export type ChatToolItem = {
 export type ChatThinkingItem = {
   type: 'thinking'
   id: string
+  requestId?: string
   thinkingId: string
   title: string
   content: string
@@ -82,6 +84,7 @@ export type ChatThinkingItem = {
 export type ChatActivityItem = {
   type: 'activity'
   id: string
+  requestId?: string
   title: string
   status: ActivityStatus
   detail?: string
@@ -128,6 +131,8 @@ export type WorkspaceSidebarPrefs = {
   collapsed: boolean
   /** 在侧栏内折叠对话列表的项目 id / Project ids whose thread lists are collapsed */
   collapsedProjectIds: string[]
+  /** 侧栏项目的手动顺序；为空时按置顶和添加时间降序 / Manual project order; empty falls back to pins + created time desc */
+  projectOrderIds: string[]
 }
 
 /** 工作区对话线程 / Workspace chat thread */
@@ -136,7 +141,9 @@ export type WorkspaceThread = {
   projectId: string
   title: string
   /** 特殊线程用途，例如项目首页插件定制 / Special thread purpose, such as project home customization */
-  purpose?: 'home-plugin-customization'
+  purpose?: 'home-plugin-customization' | 'home-plugin-card-customization' | 'task-run'
+  /** 关联的 Home Plugin 目录名；用于单卡片修改线程 / Bound Home Plugin slug for card customization threads */
+  homePluginSlug?: string
   createdAt: number
   updatedAt: number
   /** 置顶权重：越大越靠前（持久化）/ Pin rank: larger sorts higher (persisted) */

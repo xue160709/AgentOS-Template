@@ -82,10 +82,44 @@ export type AgentModeFilesResult =
 /** Home Plugin 运行状态 / Home Plugin run state */
 export type HomePluginRunStatus = 'empty' | 'ready' | 'unchanged'
 
+/** Home Plugin 卡片尺寸 / Home Plugin card display span */
+export type HomePluginCardSize = 'small' | 'medium' | 'large'
+
+/** Home Plugin manifest 元数据 / Home Plugin manifest metadata */
+export type HomePluginManifest = {
+  id: string
+  name: string
+  version: string
+  description: string
+  entry: string
+  outputFormat: string
+  kind: 'data' | 'task'
+  preferredSize: HomePluginCardSize
+  threadId?: string
+  createdAt?: string
+  updatedAt?: string
+  order?: number
+}
+
+/** 单个 Home Plugin 卡片运行结果 / Single Home Plugin card run item */
+export type HomePluginRunItem = {
+  slug: string
+  rootPath: string
+  pluginPath: string
+  manifest: HomePluginManifest
+  status: HomePluginRunStatus
+  outputHash?: string
+  messages?: unknown[]
+  variants?: Partial<Record<HomePluginCardSize, unknown[]>>
+  diagnostics?: string[]
+}
+
 /** Home Plugin 运行选项 / Home Plugin run options */
 export type HomePluginRunOptions = {
   /** 渲染层已持有的输出 hash；相同时主进程返回 unchanged / Renderer-held hash; returns unchanged when equal */
   knownOutputHash?: string
+  /** 多插件模式下按 slug 传入已知 hash / Per-plugin known hashes for multi-plugin mode */
+  knownOutputHashes?: Record<string, string>
 }
 
 /** 项目首页插件输出 / Project home plugin output */
@@ -93,10 +127,13 @@ export type HomePluginRunResult =
   | {
       ok: true
       rootPath: string
+      pluginRootPath?: string
       pluginPath?: string
       status: HomePluginRunStatus
       outputHash?: string
       messages?: unknown[]
+      plugins?: HomePluginRunItem[]
+      order?: string[]
       diagnostics?: string[]
     }
   | {
@@ -106,3 +143,206 @@ export type HomePluginRunResult =
       message: string
       diagnostics?: string[]
     }
+
+/** Home Plugin 排序保存结果 / Home Plugin order save result */
+export type HomePluginOrderSaveResult =
+  | {
+      ok: true
+      rootPath: string
+      pluginRootPath: string
+      order: string[]
+    }
+  | {
+      ok: false
+      rootPath: string
+      message: string
+    }
+
+/** Home Plugin 卡片布局项 / Home Plugin card layout item */
+export type HomePluginCardLayoutItem = {
+  slug: string
+  preferredSize: HomePluginCardSize
+}
+
+/** Home Plugin 布局保存结果 / Home Plugin layout save result */
+export type HomePluginLayoutSaveResult =
+  | {
+      ok: true
+      rootPath: string
+      pluginRootPath: string
+      order: string[]
+      cards: HomePluginCardLayoutItem[]
+    }
+  | {
+      ok: false
+      rootPath: string
+      message: string
+    }
+
+/** Home Plugin 任务运行模式 / Home Plugin task execution mode */
+export type HomePluginTaskMode = 'agent' | 'skills'
+
+/** Home Plugin 任务技能步骤 / A single skill step in a task sequence */
+export type HomePluginTaskSkillStep = {
+  id: string
+  command: string
+  path: string
+  title: string
+  description?: string
+  addedAt: string
+}
+
+/** Home Plugin 任务定时配置 / Home Plugin schedule configuration */
+export type HomePluginTaskSchedule = {
+  enabled: boolean
+  hour: number
+  minute: number
+  interval: 'off' | '1h' | '2h' | '3h' | '6h' | '12h' | '1d'
+}
+
+/** Home Plugin 任务卡配置 / Task card configuration persisted in task.json */
+export type HomePluginTaskConfig = {
+  version: 1
+  slug: string
+  title: string
+  mode: HomePluginTaskMode
+  skillSteps: HomePluginTaskSkillStep[]
+  todoEnabled: boolean
+  runCount: number
+  schedule: HomePluginTaskSchedule
+  enabled: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+/** Home Plugin 任务运行态 / Task runtime snapshot persisted in runtime.json */
+export type HomePluginTaskRuntimeStatus = 'idle' | 'queued' | 'running' | 'waiting' | 'done' | 'error' | 'cancelled'
+
+/** Home Plugin 任务运行态快照 / Task runtime snapshot */
+export type HomePluginTaskRuntime = {
+  version: 1
+  projectPath: string
+  slug: string
+  threadId?: string
+  threadTitle?: string
+  status: HomePluginTaskRuntimeStatus
+  requestId?: string
+  runIndex?: number
+  runTotal?: number
+  stepIndex?: number
+  stepTotal?: number
+  stepTitle?: string
+  lastRunAt?: string
+  lastCompletedAt?: string
+  lastResult?: string
+  lastError?: string
+  nextRunAt?: string
+  summary?: string
+  detail?: string
+  updatedAt: string
+}
+
+/** Home Plugin 任务持久化保存结果 / Task config save result */
+export type HomePluginTaskSaveResult =
+  | {
+      ok: true
+      rootPath: string
+      pluginRootPath: string
+      slug: string
+      manifestPath: string
+      taskPath: string
+      runtimePath: string
+      manifest: HomePluginManifest
+      task: HomePluginTaskConfig
+      runtime: HomePluginTaskRuntime
+    }
+  | {
+      ok: false
+      rootPath: string
+      message: string
+    }
+
+/** Home Plugin 任务运行结果 / Task run launch result */
+export type HomePluginTaskRunResult =
+  | {
+      ok: true
+      rootPath: string
+      slug: string
+      threadId: string
+      requestId: string
+      title: string
+    }
+  | {
+      ok: false
+      rootPath: string
+      slug: string
+      message: string
+    }
+
+/** Home Plugin 任务停止结果 / Task stop result */
+export type HomePluginTaskStopResult =
+  | {
+      ok: true
+      rootPath: string
+      slug: string
+      stopped: boolean
+    }
+  | {
+      ok: false
+      rootPath: string
+      slug: string
+      message: string
+    }
+
+/** Home Plugin 任务读取结果 / Task read result */
+export type HomePluginTaskReadResult =
+  | {
+      ok: true
+      rootPath: string
+      slug: string
+      task: HomePluginTaskConfig
+      runtime: HomePluginTaskRuntime
+      manifest: HomePluginManifest
+    }
+  | {
+      ok: false
+      rootPath: string
+      slug: string
+      message: string
+    }
+
+/** Home Plugin 任务列表结果 / Task list result */
+export type HomePluginTaskListResult =
+  | {
+      ok: true
+      rootPath: string
+      pluginRootPath: string
+      tasks: Array<{
+        slug: string
+        manifest: HomePluginManifest
+        task: HomePluginTaskConfig
+        runtime: HomePluginTaskRuntime
+      }>
+    }
+  | {
+      ok: false
+      rootPath: string
+      message: string
+    }
+
+/** Home Plugin 任务状态事件 / Task state event mirrored to the renderer */
+export type HomePluginTaskEvent = {
+  projectPath: string
+  slug: string
+  task: HomePluginTaskConfig
+  runtime: HomePluginTaskRuntime
+  thread?: {
+    id: string
+    projectId: string
+    title: string
+    purpose: 'task-run'
+    homePluginSlug: string
+    createdAt: number
+    updatedAt: number
+  }
+}

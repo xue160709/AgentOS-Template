@@ -12,7 +12,6 @@ import {
   persistChatWorkspaceState,
 } from '../chat-workspace-persistence'
 import {
-  HOME_PLUGINS_DIR_RELATIVE,
   SIDEBAR_HIDDEN_SKILLS_STORAGE_KEY,
   SIDEBAR_PROJECT_SKILLS_STORAGE_KEY,
   SIDEBAR_WIDTH_STORAGE_KEY,
@@ -23,6 +22,7 @@ import {
   viewFromLocation,
 } from './app-shell-constants.ts'
 import { defaultThreadTitleSet, getInitialLocale, translate, useI18n } from '../i18n/i18n'
+import type { HomePluginRunItem, HomePluginTaskEvent } from '../desktop-types'
 import type {
   AppViewId,
   ChatState,
@@ -37,6 +37,7 @@ import type {
 import { AppShellSidebar } from './AppShellSidebar'
 import { AppShellWorkspace } from './AppShellWorkspace'
 import { type ChatPageHandle } from './chat/ChatPage'
+import { projectIdsForSidebar } from './project-order'
 
 const CHAT_WORKSPACE_SAVE_DEBOUNCE_MS = 750
 
@@ -60,6 +61,7 @@ export function AppShell() {
   const [hiddenSkillPathsByProject, setHiddenSkillPathsByProject] = useState<Record<string, string[]>>(() =>
     readHiddenSkillPathsMap(),
   )
+  const [homeModeResetKey, setHomeModeResetKey] = useState(0)
 
   const chatRef = useRef<ChatPageHandle>(null)
   const workspaceSaveTimerRef = useRef<number | null>(null)
@@ -403,27 +405,51 @@ export function AppShell() {
     [goHome, updateChatWorkspace, t],
   )
 
-  const openHomePluginCustomizationThread = useCallback(
-    (projectId: string) => {
+  const createHomePluginCardThread = useCallback(
+    (projectId: string, initialPrompt: string) => {
+      setSelectedProjectSkill(null)
+      const threadId = createId('thread')
+      const now = Date.now()
+      updateChatWorkspace((prev) => {
+        if (!prev.projects.some((project) => project.id === projectId)) return prev
+        const nextThread: WorkspaceThread = {
+          id: threadId,
+          projectId,
+          title: deriveDataCardThreadTitle(initialPrompt, t),
+          purpose: 'home-plugin-card-customization',
+          createdAt: now,
+          updatedAt: now,
+          chatState: createEmptyChatState(),
+        }
+        return {
+          ...prev,
+          activeProjectId: projectId,
+          activeThreadId: threadId,
+          projects: touchProject(prev.projects, projectId, now),
+          threads: [nextThread, ...prev.threads],
+        }
+      })
+      goHome()
+      return threadId
+    },
+    [goHome, t, updateChatWorkspace],
+  )
+
+  const openHomePluginCardThread = useCallback(
+    (projectId: string, item: HomePluginRunItem) => {
       setSelectedProjectSkill(null)
       let threadId = ''
       let createdThread = false
-      let reusedExistingThread = false
       const now = Date.now()
-      const projectPath =
-        chatWorkspace?.projects.find((project) => project.id === projectId)?.path.trim() ?? ''
+      const boundThreadId = item.manifest.threadId?.trim()
 
       updateChatWorkspace((prev) => {
         if (!prev.projects.some((project) => project.id === projectId)) return prev
-        const existing = prev.threads.find(
-          (thread) =>
-            thread.projectId === projectId &&
-            thread.purpose === 'home-plugin-customization' &&
-            !thread.archivedAt,
-        )
+        const existing = boundThreadId
+          ? prev.threads.find((thread) => thread.id === boundThreadId && thread.projectId === projectId && !thread.archivedAt)
+          : undefined
         if (existing) {
           threadId = existing.id
-          reusedExistingThread = true
           return {
             ...prev,
             activeProjectId: projectId,
@@ -436,8 +462,9 @@ export function AppShell() {
         const nextThread: WorkspaceThread = {
           id: threadId,
           projectId,
-          title: t('thread.homePluginCustomizationTitle'),
-          purpose: 'home-plugin-customization',
+          title: t('thread.homePluginCardEditTitle', { name: item.manifest.name }),
+          purpose: 'home-plugin-card-customization',
+          homePluginSlug: item.slug,
           createdAt: now,
           updatedAt: now,
           chatState: createEmptyChatState(),
@@ -453,28 +480,14 @@ export function AppShell() {
       goHome()
 
       void (async () => {
-        let shouldAutoSubmit = false
-        if (!reusedExistingThread && createdThread && projectPath) {
-          const hasHomePluginsDir =
-            (await window.desktop?.pathExistsUnderProject?.(projectPath, HOME_PLUGINS_DIR_RELATIVE)) ?? true
-          shouldAutoSubmit = !hasHomePluginsDir
-        }
-
-        if (threadId && createdThread) {
-          await window.claudeChat?.newThread(threadId)
-        }
-
+        if (threadId && createdThread) await window.claudeChat?.newThread(threadId)
         requestAnimationFrame(() => {
-          if (!threadId || !shouldAutoSubmit) {
+          if (!threadId || !createdThread) {
             void chatRef.current?.focusComposer()
             return
           }
-          const submit = chatRef.current?.submitPromptInThread(
-            projectId,
-            threadId,
-            t('thread.homePluginCustomizationPrompt'),
-            'home-plugin-customization',
-          )
+          const prompt = buildEditHomePluginCardPrompt(item, threadId)
+          const submit = chatRef.current?.submitPromptInThread(projectId, threadId, prompt, 'home-plugin-card-customization')
           if (!submit) {
             void chatRef.current?.focusComposer()
             return
@@ -485,7 +498,7 @@ export function AppShell() {
         })
       })()
     },
-    [chatWorkspace?.projects, goHome, updateChatWorkspace, t],
+    [goHome, t, updateChatWorkspace],
   )
 
   const runProjectSkill = useCallback((projectId: string, prompt: string) => {
@@ -503,6 +516,7 @@ export function AppShell() {
   const selectProject = useCallback(
     (projectId: string) => {
       setSelectedProjectSkill(null)
+      setHomeModeResetKey((value) => value + 1)
       updateChatWorkspace((prev) => {
         if (!prev.projects.some((project) => project.id === projectId)) return prev
         return {
@@ -547,6 +561,10 @@ export function AppShell() {
         activeThreadId: '',
         projects: [project, ...prev.projects],
         threads: prev.threads,
+        sidebarPrefs: {
+          ...prev.sidebarPrefs,
+          projectOrderIds: [projectId, ...projectIdsForSidebar(prev.projects, prev.sidebarPrefs.projectOrderIds)],
+        },
       }))
       goHome()
       requestAnimationFrame(() => void chatRef.current?.focusComposer())
@@ -570,6 +588,63 @@ export function AppShell() {
       }
     })
   }, [chatWorkspace, createProject, createThreadInProject])
+
+  const ensureTaskRunThread = useCallback(
+    (event: HomePluginTaskEvent) => {
+      if (!event.thread) return
+      const seed = event.thread
+      updateChatWorkspace((prev) => {
+        const project =
+          prev.projects.find((item) => item.id === seed.projectId) ??
+          prev.projects.find((item) => sameProjectPath(item.path, event.projectPath))
+        if (!project) return prev
+
+        const now = Date.now()
+        const existing = prev.threads.find((thread) => thread.id === seed.id)
+        const title = seed.title || (event.task.mode === 'agent' ? '执行agent' : `执行${event.task.title}`)
+        if (existing) {
+          const nextThreads = prev.threads.map((thread) =>
+            thread.id === seed.id
+              ? {
+                  ...thread,
+                  projectId: project.id,
+                  title,
+                  purpose: 'task-run' as const,
+                  homePluginSlug: event.slug,
+                  updatedAt: Math.max(thread.updatedAt, seed.updatedAt || now),
+                }
+              : thread,
+          )
+          return { ...prev, threads: nextThreads }
+        }
+
+        const nextThread: WorkspaceThread = {
+          id: seed.id,
+          projectId: project.id,
+          title,
+          purpose: 'task-run',
+          homePluginSlug: event.slug,
+          createdAt: seed.createdAt || now,
+          updatedAt: seed.updatedAt || now,
+          chatState: createEmptyChatState(),
+        }
+        return {
+          ...prev,
+          projects: touchProject(prev.projects, project.id, now),
+          threads: [nextThread, ...prev.threads],
+        }
+      })
+    },
+    [updateChatWorkspace],
+  )
+
+  useEffect(() => {
+    const subscribe = window.desktop?.onHomePluginTaskEvent
+    if (!subscribe) return
+    return subscribe((event) => {
+      ensureTaskRunThread(event)
+    })
+  }, [ensureTaskRunThread])
 
   const archiveThread = useCallback(
     (threadId: string) => {
@@ -620,12 +695,53 @@ export function AppShell() {
 
   const toggleProjectPinned = useCallback((projectId: string) => {
     const now = Date.now()
-    updateChatWorkspace((prev) => ({
-      ...prev,
-      projects: prev.projects.map((project) =>
-        project.id === projectId ? { ...project, pinnedAt: project.pinnedAt ? undefined : now, updatedAt: now } : project,
-      ),
-    }))
+    updateChatWorkspace((prev) => {
+      const target = prev.projects.find((project) => project.id === projectId)
+      if (!target) return prev
+
+      const currentOrder = projectIdsForSidebar(prev.projects, prev.sidebarPrefs.projectOrderIds)
+      const nextOrder = target.pinnedAt
+        ? currentOrder
+        : [projectId, ...currentOrder.filter((id) => id !== projectId)]
+
+      return {
+        ...prev,
+        projects: prev.projects.map((project) =>
+          project.id === projectId
+            ? { ...project, pinnedAt: project.pinnedAt ? undefined : now, updatedAt: now }
+            : project,
+        ),
+        sidebarPrefs: {
+          ...prev.sidebarPrefs,
+          projectOrderIds: nextOrder,
+        },
+      }
+    })
+  }, [updateChatWorkspace])
+
+  const reorderProject = useCallback((projectId: string, targetProjectId: string, position: 'before' | 'after') => {
+    updateChatWorkspace((prev) => {
+      if (projectId === targetProjectId) return prev
+      const projectIds = new Set(prev.projects.map((project) => project.id))
+      if (!projectIds.has(projectId) || !projectIds.has(targetProjectId)) return prev
+
+      const currentOrder = projectIdsForSidebar(prev.projects, prev.sidebarPrefs.projectOrderIds)
+      const withoutDragged = currentOrder.filter((id) => id !== projectId)
+      const targetIndex = withoutDragged.indexOf(targetProjectId)
+      if (targetIndex === -1) return prev
+
+      const insertIndex = position === 'before' ? targetIndex : targetIndex + 1
+      const nextOrder = [...withoutDragged.slice(0, insertIndex), projectId, ...withoutDragged.slice(insertIndex)]
+      if (nextOrder.join('\n') === currentOrder.join('\n')) return prev
+
+      return {
+        ...prev,
+        sidebarPrefs: {
+          ...prev.sidebarPrefs,
+          projectOrderIds: nextOrder,
+        },
+      }
+    })
   }, [updateChatWorkspace])
 
   const toggleSidebarCollapsed = useCallback(() => {
@@ -675,6 +791,7 @@ export function AppShell() {
           sidebarPrefs: {
             ...prev.sidebarPrefs,
             collapsedProjectIds: prev.sidebarPrefs.collapsedProjectIds.filter((id) => id !== projectId),
+            projectOrderIds: prev.sidebarPrefs.projectOrderIds.filter((id) => id !== projectId),
           },
         }
       })
@@ -865,6 +982,7 @@ export function AppShell() {
           activeViewId={activeViewId}
           settingsCategory={settingsCategory}
           projects={chatWorkspace.projects}
+          projectOrderIds={chatWorkspace.sidebarPrefs.projectOrderIds}
           threads={chatWorkspace.threads}
           threadRunStates={threadRunStates}
           activeProjectId={chatWorkspace.activeProjectId}
@@ -884,6 +1002,7 @@ export function AppShell() {
           onToggleThreadPinned={toggleThreadPinned}
           onArchiveThread={archiveThread}
           onToggleProjectPinned={toggleProjectPinned}
+          onReorderProject={reorderProject}
           onToggleSidebarProjectCollapsed={toggleSidebarProjectCollapsed}
           onRemoveProject={removeProject}
           onRevealProjectInFileManager={revealProjectInFileManager}
@@ -909,7 +1028,9 @@ export function AppShell() {
           onThreadChatStateChange={updateThreadChatState}
           onThreadPromptSubmit={handleThreadPromptSubmit}
           onThreadRunStateChange={updateThreadRunState}
-          onCustomizeHomePlugin={openHomePluginCustomizationThread}
+          homeModeResetKey={homeModeResetKey}
+          onCreateHomePluginCardThread={createHomePluginCardThread}
+          onEditHomePluginCard={openHomePluginCardThread}
           showProjectSkillsInSidebar={showProjectSkillsInSidebar}
           onShowProjectSkillsInSidebarChange={updateShowProjectSkillsInSidebar}
         />
@@ -929,6 +1050,27 @@ function touchProject(projects: WorkspaceProject[], projectId: string, time = Da
   return projects.map((project) => (project.id === projectId ? { ...project, updatedAt: time } : project))
 }
 
+function deriveDataCardThreadTitle(prompt: string, t: (path: string, vars?: Record<string, string | number>) => string): string {
+  const normalized = prompt.replace(/\s+/g, ' ').trim()
+  if (!normalized) return t('thread.homePluginCardCreateTitle')
+  return normalized.length > 18 ? `${normalized.slice(0, 18)}...` : normalized
+}
+
+function buildEditHomePluginCardPrompt(item: HomePluginRunItem, threadId: string): string {
+  const pluginDir = `.agents/home-plugins/${item.slug}`
+  return [
+    `请修改数据卡片：${item.manifest.name}`,
+    `当前专用 threadId：${threadId}`,
+    `目标插件目录：${pluginDir}`,
+    '',
+    '开始前请先读取：',
+    `${pluginDir}/manifest.json`,
+    `${pluginDir}/extractor.js`,
+    '',
+    '要求：只修改这一张卡片，不要创建或改写其他 Home Plugin；修改后保持 small / medium / large 三种响应式展示契约。',
+  ].join('\n')
+}
+
 function titleFromPrompt(prompt: string, fallbackTitle: string): string {
   const firstLine = prompt.trim().split(/\n/)[0]?.trim() || fallbackTitle
   return firstLine.length > 34 ? `${firstLine.slice(0, 34)}...` : firstLine
@@ -937,6 +1079,14 @@ function titleFromPrompt(prompt: string, fallbackTitle: string): string {
 function pathBasename(path: string, fallback: string): string {
   const parts = path.replace(/[\\/]+$/, '').split(/[\\/]/).filter(Boolean)
   return parts[parts.length - 1] || path || fallback
+}
+
+function sameProjectPath(a: string, b: string): boolean {
+  return normalizeComparablePath(a) === normalizeComparablePath(b)
+}
+
+function normalizeComparablePath(value: string): string {
+  return value.replace(/\\/g, '/').replace(/\/+$/, '')
 }
 
 function readStoredBoolean(key: string, fallback: boolean): boolean {

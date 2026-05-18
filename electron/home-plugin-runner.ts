@@ -10,12 +10,24 @@ import path from 'node:path'
 import vm from 'node:vm'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import type { HomePluginRunOptions, HomePluginRunResult } from '../src/desktop-types'
+import type {
+  HomePluginCardSize,
+  HomePluginCardLayoutItem,
+  HomePluginManifest,
+  HomePluginLayoutSaveResult,
+  HomePluginOrderSaveResult,
+  HomePluginRunItem,
+  HomePluginRunOptions,
+  HomePluginRunResult,
+} from '../src/desktop-types'
 
-const HOME_PLUGIN_DIR = '.agents/home-plugins/project-home'
+const HOME_PLUGIN_ROOT_DIR = '.agents/home-plugins'
 const HOME_PLUGIN_ENTRY = 'extractor.js'
+const HOME_PLUGIN_MANIFEST = 'manifest.json'
+const HOME_PLUGIN_ORDER = 'order.json'
 const BASIC_CATALOG_ID = 'https://a2ui.org/specification/v0_9/basic_catalog.json'
 const HOME_SURFACE_ID = 'project-home'
+const CARD_SIZES: HomePluginCardSize[] = ['small', 'medium', 'large']
 const MAX_LIST_FILES = 1200
 const MAX_READ_BYTES = 256 * 1024
 const MAX_TOTAL_READ_BYTES = 2 * 1024 * 1024
@@ -61,69 +73,317 @@ type HomePluginOutput = {
   version?: unknown
   messages?: unknown
   a2uiMessages?: unknown
+  variants?: unknown
   diagnostics?: unknown
 }
 
 const outputHashCache = new Map<string, string>()
 const execFileAsync = promisify(execFile)
 
-/** 运行当前项目的默认首页插件 / Run the current project's default home plugin */
+/** 运行当前项目的 Home Plugin 卡片 / Run Home Plugin cards for the current project */
 export async function runProjectHomePlugin(rootPath: string, options: HomePluginRunOptions = {}): Promise<HomePluginRunResult> {
   const resolvedRootPath = resolveProjectPath(rootPath)
-  const pluginPath = path.join(resolvedRootPath, HOME_PLUGIN_DIR)
-  const entryPath = path.join(pluginPath, HOME_PLUGIN_ENTRY)
+  const pluginRootPath = path.join(resolvedRootPath, HOME_PLUGIN_ROOT_DIR)
 
   try {
     const rootStat = await fs.stat(resolvedRootPath)
     if (!rootStat.isDirectory()) {
-      return { ok: false, rootPath: resolvedRootPath, pluginPath, message: '当前项目路径不是文件夹' }
+      return { ok: false, rootPath: resolvedRootPath, pluginPath: pluginRootPath, message: '当前项目路径不是文件夹' }
     }
 
-    if (!(await exists(entryPath))) {
-      outputHashCache.delete(resolvedRootPath)
-      return { ok: true, rootPath: resolvedRootPath, pluginPath, status: 'empty' }
+    if (!(await exists(pluginRootPath))) {
+      clearPluginHashCache(resolvedRootPath)
+      return { ok: true, rootPath: resolvedRootPath, pluginRootPath, status: 'empty', plugins: [], order: [] }
     }
 
-    const code = await fs.readFile(entryPath, 'utf8')
-    const diagnostics: string[] = []
-    const output = await runExtractor(code, createHost(resolvedRootPath), diagnostics)
-    const messages = normalizeMessages(output.messages ?? output.a2uiMessages)
-    if (messages.length === 0) {
-      outputHashCache.delete(resolvedRootPath)
-      return { ok: true, rootPath: resolvedRootPath, pluginPath, status: 'empty', diagnostics: normalizeDiagnostics(output.diagnostics, diagnostics) }
+    const discovered = await discoverHomePlugins(resolvedRootPath, pluginRootPath)
+    if (discovered.length === 0) {
+      clearPluginHashCache(resolvedRootPath)
+      return { ok: true, rootPath: resolvedRootPath, pluginRootPath, status: 'empty', plugins: [], order: [] }
     }
 
-    const outputHash = stableHash(messages)
-    outputHashCache.set(resolvedRootPath, outputHash)
-    if (options.knownOutputHash && options.knownOutputHash === outputHash) {
-      return {
-        ok: true,
-        rootPath: resolvedRootPath,
-        pluginPath,
-        status: 'unchanged',
-        outputHash,
-        diagnostics: normalizeDiagnostics(output.diagnostics, diagnostics),
-      }
-    }
+    const order = await readHomePluginOrder(pluginRootPath)
+    const plugins = sortPlugins(discovered, order)
+    const runItems = await Promise.all(plugins.map((plugin) => runHomePluginCard(resolvedRootPath, plugin, options)))
+    const readyPlugins = runItems.filter((item) => item.status !== 'empty')
+    const status = readyPlugins.length === 0 ? 'empty' : readyPlugins.every((item) => item.status === 'unchanged') ? 'unchanged' : 'ready'
 
     return {
       ok: true,
       rootPath: resolvedRootPath,
-      pluginPath,
-      status: 'ready',
-      outputHash,
-      messages,
-      diagnostics: normalizeDiagnostics(output.diagnostics, diagnostics),
+      pluginRootPath,
+      status,
+      plugins: runItems,
+      order: plugins.map((plugin) => plugin.slug),
     }
   } catch (error) {
-    outputHashCache.delete(resolvedRootPath)
+    clearPluginHashCache(resolvedRootPath)
     return {
       ok: false,
       rootPath: resolvedRootPath,
-      pluginPath,
+      pluginPath: pluginRootPath,
       message: error instanceof Error ? error.message : String(error),
     }
   }
+}
+
+/** 保存 Home Plugin 卡片排序 / Persist Home Plugin card order */
+export async function saveProjectHomePluginOrder(rootPath: string, order: unknown): Promise<HomePluginOrderSaveResult> {
+  const result = await saveProjectHomePluginLayout(rootPath, order, [])
+  if (result.ok) {
+    return {
+      ok: true,
+      rootPath: result.rootPath,
+      pluginRootPath: result.pluginRootPath,
+      order: result.order,
+    }
+  }
+  return result
+}
+
+/** 保存 Home Plugin 卡片排序与尺寸 / Persist Home Plugin card order and sizes */
+export async function saveProjectHomePluginLayout(
+  rootPath: string,
+  order: unknown,
+  cards: unknown,
+): Promise<HomePluginLayoutSaveResult> {
+  const resolvedRootPath = resolveProjectPath(rootPath)
+  const pluginRootPath = path.join(resolvedRootPath, HOME_PLUGIN_ROOT_DIR)
+  try {
+    const rootStat = await fs.stat(resolvedRootPath)
+    if (!rootStat.isDirectory()) {
+      return { ok: false, rootPath: resolvedRootPath, message: '当前项目路径不是文件夹' }
+    }
+    const discovered = await discoverHomePlugins(resolvedRootPath, pluginRootPath)
+    const normalizedOrder = normalizeOrderPayload(order)
+    const normalizedCards = normalizeLayoutCardsPayload(cards)
+    const cardsBySlug = new Map(normalizedCards.map((item) => [item.slug, item.preferredSize]))
+    const discoveredBySlug = new Map(discovered.map((item) => [item.slug, item]))
+    const appendedOrder = discovered
+      .map((item) => item.slug)
+      .filter((slug) => !normalizedOrder.includes(slug))
+      .sort((a, b) => comparePluginOrder(discoveredBySlug.get(a)?.manifest, discoveredBySlug.get(b)?.manifest))
+    const finalOrder = [...normalizedOrder.filter((slug) => discoveredBySlug.has(slug)), ...appendedOrder]
+    const orderIndex = new Map(finalOrder.map((slug, index) => [slug, index]))
+    const updatedAt = new Date().toISOString()
+    const cardsToSave = finalOrder.map((slug) => ({
+      slug,
+      preferredSize: cardsBySlug.get(slug) ?? discoveredBySlug.get(slug)?.manifest.preferredSize ?? 'medium',
+    }))
+
+    await fs.mkdir(pluginRootPath, { recursive: true })
+    for (const plugin of discovered) {
+      const preferredSize = cardsBySlug.get(plugin.slug) ?? plugin.manifest.preferredSize
+      const nextManifest: HomePluginManifest = {
+        ...plugin.manifest,
+        preferredSize,
+        order: orderIndex.get(plugin.slug) ?? plugin.manifest.order,
+        updatedAt,
+      }
+      await fs.writeFile(
+        path.join(plugin.pluginPath, HOME_PLUGIN_MANIFEST),
+        `${JSON.stringify(nextManifest, null, 2)}\n`,
+        'utf8',
+      )
+    }
+    await fs.writeFile(path.join(pluginRootPath, HOME_PLUGIN_ORDER), `${JSON.stringify(finalOrder, null, 2)}\n`, 'utf8')
+    return { ok: true, rootPath: resolvedRootPath, pluginRootPath, order: finalOrder, cards: cardsToSave }
+  } catch (error) {
+    return {
+      ok: false,
+      rootPath: resolvedRootPath,
+      message: error instanceof Error ? error.message : String(error),
+    }
+  }
+}
+
+type DiscoveredHomePlugin = {
+  slug: string
+  pluginPath: string
+  entryPath: string
+  manifest: HomePluginManifest
+}
+
+async function discoverHomePlugins(projectRoot: string, pluginRootPath: string): Promise<DiscoveredHomePlugin[]> {
+  const entries = await fs.readdir(pluginRootPath, { withFileTypes: true }).catch(() => [])
+  const plugins: DiscoveredHomePlugin[] = []
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    const slug = normalizePluginSlug(entry.name)
+    if (!slug) continue
+    const pluginPath = path.join(pluginRootPath, entry.name)
+    const manifestPath = path.join(pluginPath, HOME_PLUGIN_MANIFEST)
+    const entryPath = path.join(pluginPath, HOME_PLUGIN_ENTRY)
+    if (!(await exists(manifestPath)) || !(await exists(entryPath))) continue
+    const manifest = normalizeManifest(slug, await readJsonFile(manifestPath), projectRoot, pluginPath)
+    plugins.push({ slug, pluginPath, entryPath, manifest })
+  }
+  return plugins
+}
+
+async function runHomePluginCard(
+  projectRoot: string,
+  plugin: DiscoveredHomePlugin,
+  options: HomePluginRunOptions,
+): Promise<HomePluginRunItem> {
+  const cacheKey = pluginCacheKey(projectRoot, plugin.slug)
+  try {
+    const code = await fs.readFile(plugin.entryPath, 'utf8')
+    const diagnostics: string[] = []
+    const output = await runExtractor(code, createHost(projectRoot), diagnostics)
+    const variants = normalizeVariantMessages(output)
+    const messages = variants[plugin.manifest.preferredSize] ?? variants.medium ?? variants.large ?? variants.small ?? []
+    const outputHash = stableHash({ manifest: plugin.manifest, variants })
+    outputHashCache.set(cacheKey, outputHash)
+    const knownHash = options.knownOutputHashes?.[plugin.slug] ?? (plugin.slug === 'project-home' ? options.knownOutputHash : undefined)
+    const status = knownHash && knownHash === outputHash ? 'unchanged' : messages.length > 0 ? 'ready' : 'empty'
+    return {
+      slug: plugin.slug,
+      rootPath: projectRoot,
+      pluginPath: plugin.pluginPath,
+      manifest: plugin.manifest,
+      status,
+      outputHash,
+      messages: status === 'unchanged' ? undefined : messages,
+      variants: status === 'unchanged' ? undefined : variants,
+      diagnostics: normalizeDiagnostics(output.diagnostics, diagnostics),
+    }
+  } catch (error) {
+    outputHashCache.delete(cacheKey)
+    return {
+      slug: plugin.slug,
+      rootPath: projectRoot,
+      pluginPath: plugin.pluginPath,
+      manifest: plugin.manifest,
+      status: 'empty',
+      diagnostics: [error instanceof Error ? error.message : String(error)],
+    }
+  }
+}
+
+function normalizeVariantMessages(output: HomePluginOutput): Partial<Record<HomePluginCardSize, unknown[]>> {
+  const rawVariants = isRecord(output.variants) ? output.variants : {}
+  const variants: Partial<Record<HomePluginCardSize, unknown[]>> = {}
+  for (const size of CARD_SIZES) {
+    const messages = normalizeMessages(rawVariants[size])
+    if (messages.length > 0) variants[size] = messages
+  }
+  const fallback = normalizeMessages(output.messages ?? output.a2uiMessages)
+  if (fallback.length > 0) {
+    for (const size of CARD_SIZES) {
+      if (!variants[size]) variants[size] = fallback
+    }
+  }
+  return variants
+}
+
+function normalizeManifest(slug: string, raw: unknown, projectRoot: string, pluginPath: string): HomePluginManifest {
+  const value = isRecord(raw) ? raw : {}
+  const modifiedAt = new Date().toISOString()
+  const relativePluginPath = normalizeRelativePath(path.relative(projectRoot, pluginPath))
+  const preferredSize = normalizeCardSize(value.preferredSize)
+  return {
+    id: stringOr(value.id, `agentos.${slug}`),
+    name: stringOr(value.name, titleFromSlug(slug)),
+    version: stringOr(value.version, '1.0.0'),
+    description: stringOr(value.description, `Home Plugin card from ${relativePluginPath}`),
+    entry: stringOr(value.entry, HOME_PLUGIN_ENTRY),
+    outputFormat: stringOr(value.outputFormat, 'a2ui.v0.9'),
+    kind: value.kind === 'task' ? 'task' : 'data',
+    preferredSize,
+    threadId: stringOr(value.threadId, undefined),
+    createdAt: stringOr(value.createdAt, undefined),
+    updatedAt: stringOr(value.updatedAt, modifiedAt),
+    order: typeof value.order === 'number' && Number.isFinite(value.order) ? value.order : undefined,
+  }
+}
+
+async function readJsonFile(filePath: string): Promise<unknown> {
+  return JSON.parse(await fs.readFile(filePath, 'utf8'))
+}
+
+async function readHomePluginOrder(pluginRootPath: string): Promise<string[]> {
+  try {
+    return normalizeOrderPayload(JSON.parse(await fs.readFile(path.join(pluginRootPath, HOME_PLUGIN_ORDER), 'utf8')))
+  } catch {
+    return []
+  }
+}
+
+function sortPlugins(plugins: DiscoveredHomePlugin[], order: string[]): DiscoveredHomePlugin[] {
+  const orderIndex = new Map(order.map((slug, index) => [slug, index]))
+  return [...plugins].sort((a, b) => {
+    const ao = orderIndex.get(a.slug)
+    const bo = orderIndex.get(b.slug)
+    if (ao !== undefined || bo !== undefined) return (ao ?? Number.MAX_SAFE_INTEGER) - (bo ?? Number.MAX_SAFE_INTEGER)
+    const explicit = (a.manifest.order ?? Number.MAX_SAFE_INTEGER) - (b.manifest.order ?? Number.MAX_SAFE_INTEGER)
+    if (explicit !== 0) return explicit
+    return (Date.parse(a.manifest.createdAt ?? '') || 0) - (Date.parse(b.manifest.createdAt ?? '') || 0) || a.slug.localeCompare(b.slug)
+  })
+}
+
+function normalizeOrderPayload(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  const output: string[] = []
+  for (const item of value) {
+    const slug = typeof item === 'string' ? normalizePluginSlug(item) : ''
+    if (!slug || seen.has(slug)) continue
+    seen.add(slug)
+    output.push(slug)
+  }
+  return output
+}
+
+function normalizeLayoutCardsPayload(value: unknown): HomePluginCardLayoutItem[] {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  const output: HomePluginCardLayoutItem[] = []
+  for (const item of value) {
+    if (!isRecord(item)) continue
+    const slug = typeof item.slug === 'string' ? normalizePluginSlug(item.slug) : ''
+    const preferredSize = normalizeCardSize(item.preferredSize)
+    if (!slug || seen.has(slug)) continue
+    seen.add(slug)
+    output.push({ slug, preferredSize })
+  }
+  return output
+}
+
+function comparePluginOrder(a?: HomePluginManifest, b?: HomePluginManifest): number {
+  const ao = a?.order ?? Number.MAX_SAFE_INTEGER
+  const bo = b?.order ?? Number.MAX_SAFE_INTEGER
+  if (ao !== bo) return ao - bo
+  const ac = Date.parse(a?.createdAt ?? '') || 0
+  const bc = Date.parse(b?.createdAt ?? '') || 0
+  if (ac !== bc) return ac - bc
+  return (a?.id ?? '').localeCompare(b?.id ?? '')
+}
+
+function normalizePluginSlug(value: string): string {
+  return value.trim().replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '')
+}
+
+function normalizeCardSize(value: unknown): HomePluginCardSize {
+  return value === 'small' || value === 'medium' || value === 'large' ? value : 'medium'
+}
+
+function pluginCacheKey(projectRoot: string, slug: string): string {
+  return `${projectRoot}::${slug}`
+}
+
+function clearPluginHashCache(projectRoot: string): void {
+  for (const key of outputHashCache.keys()) {
+    if (key === projectRoot || key.startsWith(`${projectRoot}::`)) outputHashCache.delete(key)
+  }
+}
+
+function titleFromSlug(slug: string): string {
+  return slug
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
+    .join(' ') || 'Data Card'
 }
 
 async function runExtractor(code: string, host: HomePluginHost, diagnostics: string[]): Promise<HomePluginOutput> {
@@ -534,7 +794,7 @@ function isA2uiMessage(value: unknown): boolean {
   return false
 }
 
-function stringOr(value: unknown, fallback: string): string {
+function stringOr<T extends string | undefined>(value: unknown, fallback: T): string | T {
   return typeof value === 'string' && value.trim() ? value : fallback
 }
 

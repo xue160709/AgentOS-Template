@@ -99,6 +99,8 @@
   --color-token-bg-primary: var(--color-token-side-bar-background);
   --color-token-bg-secondary: color-mix(in srgb, var(--color-token-bg-primary) 92%, transparent);
   --color-token-bg-tertiary: color-mix(in srgb, var(--color-token-bg-primary) 85%, transparent);
+  --color-token-background: var(--color-token-bg-primary);
+  --color-token-background-secondary: var(--color-token-bg-secondary);
   --color-token-bg-fog: color-mix(in oklab, var(--gray-900) 2.5%, transparent);
 
   --color-token-foreground: var(--gray-900);
@@ -167,6 +169,7 @@
 
   --shadow-xl: 0px 8px 16px -4px rgb(0 0 0 / 0.12);
   --shadow-2xl: 0px 16px 32px -8px rgb(0 0 0 / 0.19);
+  --shadow-xs: 0px 1px 2px rgb(0 0 0 / 0.08);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -178,6 +181,8 @@
     --color-token-bg-primary: var(--color-token-side-bar-background);
     --color-token-bg-secondary: color-mix(in srgb, var(--color-token-bg-primary) 92%, transparent);
     --color-token-bg-tertiary: color-mix(in srgb, var(--color-token-bg-primary) 85%, transparent);
+    --color-token-background: var(--color-token-bg-primary);
+    --color-token-background-secondary: var(--color-token-bg-secondary);
     --color-token-bg-fog: color-mix(in oklab, var(--gray-0) 2.5%, transparent);
 
     --color-token-foreground: var(--gray-0);
@@ -233,5 +238,6 @@
 
     --shadow-xl: 0px 8px 16px -4px rgb(0 0 0 / 0.28);
     --shadow-2xl: 0px 16px 32px -8px rgb(0 0 0 / 0.36);
+    --shadow-xs: 0px 1px 2px rgb(0 0 0 / 0.28);
   }
 }

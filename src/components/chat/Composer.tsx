@@ -182,7 +182,17 @@ export function Composer({
                     onMouseDown={(event) => event.preventDefault()}
                     onClick={() => onInsertComposerSuggestion(suggestion)}
                   >
-                    <IconInline name={suggestion.kind === 'file' ? 'file' : suggestion.kind === 'agent' ? 'branch' : 'chip'} />
+                    <IconInline
+                      name={
+                        suggestion.kind === 'file'
+                          ? suggestion.item.type === 'directory'
+                            ? 'folder'
+                            : 'file'
+                          : suggestion.kind === 'agent'
+                            ? 'branch'
+                            : 'chip'
+                      }
+                    />
                     <span className="composer-autocomplete-option__copy">
                       <span>{suggestion.title}</span>
                       <span>{suggestion.subtitle}</span>
