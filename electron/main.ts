@@ -14,7 +14,7 @@ import { ClaudeAgentSettingsStore } from './claude-agent-settings'
 import { ChatWorkspaceStore } from './chat-workspace-store'
 import { DesktopPreferencesStore } from './desktop-preferences-store'
 import { loadMainProcessEnv } from './env-loader'
-import { runProjectHomePlugin, saveProjectHomePluginOrder } from './home-plugin-runner'
+import { runProjectHomePlugin, saveProjectHomePluginLayout, saveProjectHomePluginOrder } from './home-plugin-runner'
 import { normalizeUiLocale } from './ui-locale'
 import type {
   ActiveChatPickPayload,
@@ -491,6 +491,9 @@ if (gotSingleInstanceLock) {
     })
     ipcMain.handle('desktop:save-home-plugin-order', (_event, rootPath: string, order: unknown) => {
       return saveProjectHomePluginOrder(rootPath, order)
+    })
+    ipcMain.handle('desktop:save-home-plugin-layout', (_event, rootPath: string, order: unknown, cards: unknown) => {
+      return saveProjectHomePluginLayout(rootPath, order, cards)
     })
     ipcMain.handle('desktop:get-agent-mode-status', (_event, rootPath: string, rawLocale?: unknown) => {
       return getAgentModeStatus(rootPath, getAgentModeSettingsStore(), resolveAgentModeIpcLocale(rawLocale))

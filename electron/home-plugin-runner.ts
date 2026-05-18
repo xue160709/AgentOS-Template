@@ -12,7 +12,9 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type {
   HomePluginCardSize,
+  HomePluginCardLayoutItem,
   HomePluginManifest,
+  HomePluginLayoutSaveResult,
   HomePluginOrderSaveResult,
   HomePluginRunItem,
   HomePluginRunOptions,
@@ -127,6 +129,24 @@ export async function runProjectHomePlugin(rootPath: string, options: HomePlugin
 
 /** 保存 Home Plugin 卡片排序 / Persist Home Plugin card order */
 export async function saveProjectHomePluginOrder(rootPath: string, order: unknown): Promise<HomePluginOrderSaveResult> {
+  const result = await saveProjectHomePluginLayout(rootPath, order, [])
+  if (result.ok) {
+    return {
+      ok: true,
+      rootPath: result.rootPath,
+      pluginRootPath: result.pluginRootPath,
+      order: result.order,
+    }
+  }
+  return result
+}
+
+/** 保存 Home Plugin 卡片排序与尺寸 / Persist Home Plugin card order and sizes */
+export async function saveProjectHomePluginLayout(
+  rootPath: string,
+  order: unknown,
+  cards: unknown,
+): Promise<HomePluginLayoutSaveResult> {
   const resolvedRootPath = resolveProjectPath(rootPath)
   const pluginRootPath = path.join(resolvedRootPath, HOME_PLUGIN_ROOT_DIR)
   try {
@@ -134,10 +154,40 @@ export async function saveProjectHomePluginOrder(rootPath: string, order: unknow
     if (!rootStat.isDirectory()) {
       return { ok: false, rootPath: resolvedRootPath, message: '当前项目路径不是文件夹' }
     }
+    const discovered = await discoverHomePlugins(resolvedRootPath, pluginRootPath)
     const normalizedOrder = normalizeOrderPayload(order)
+    const normalizedCards = normalizeLayoutCardsPayload(cards)
+    const cardsBySlug = new Map(normalizedCards.map((item) => [item.slug, item.preferredSize]))
+    const discoveredBySlug = new Map(discovered.map((item) => [item.slug, item]))
+    const appendedOrder = discovered
+      .map((item) => item.slug)
+      .filter((slug) => !normalizedOrder.includes(slug))
+      .sort((a, b) => comparePluginOrder(discoveredBySlug.get(a)?.manifest, discoveredBySlug.get(b)?.manifest))
+    const finalOrder = [...normalizedOrder.filter((slug) => discoveredBySlug.has(slug)), ...appendedOrder]
+    const orderIndex = new Map(finalOrder.map((slug, index) => [slug, index]))
+    const updatedAt = new Date().toISOString()
+    const cardsToSave = finalOrder.map((slug) => ({
+      slug,
+      preferredSize: cardsBySlug.get(slug) ?? discoveredBySlug.get(slug)?.manifest.preferredSize ?? 'medium',
+    }))
+
     await fs.mkdir(pluginRootPath, { recursive: true })
-    await fs.writeFile(path.join(pluginRootPath, HOME_PLUGIN_ORDER), `${JSON.stringify(normalizedOrder, null, 2)}\n`, 'utf8')
-    return { ok: true, rootPath: resolvedRootPath, pluginRootPath, order: normalizedOrder }
+    for (const plugin of discovered) {
+      const preferredSize = cardsBySlug.get(plugin.slug) ?? plugin.manifest.preferredSize
+      const nextManifest: HomePluginManifest = {
+        ...plugin.manifest,
+        preferredSize,
+        order: orderIndex.get(plugin.slug) ?? plugin.manifest.order,
+        updatedAt,
+      }
+      await fs.writeFile(
+        path.join(plugin.pluginPath, HOME_PLUGIN_MANIFEST),
+        `${JSON.stringify(nextManifest, null, 2)}\n`,
+        'utf8',
+      )
+    }
+    await fs.writeFile(path.join(pluginRootPath, HOME_PLUGIN_ORDER), `${JSON.stringify(finalOrder, null, 2)}\n`, 'utf8')
+    return { ok: true, rootPath: resolvedRootPath, pluginRootPath, order: finalOrder, cards: cardsToSave }
   } catch (error) {
     return {
       ok: false,
@@ -283,6 +333,31 @@ function normalizeOrderPayload(value: unknown): string[] {
     output.push(slug)
   }
   return output
+}
+
+function normalizeLayoutCardsPayload(value: unknown): HomePluginCardLayoutItem[] {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  const output: HomePluginCardLayoutItem[] = []
+  for (const item of value) {
+    if (!isRecord(item)) continue
+    const slug = typeof item.slug === 'string' ? normalizePluginSlug(item.slug) : ''
+    const preferredSize = normalizeCardSize(item.preferredSize)
+    if (!slug || seen.has(slug)) continue
+    seen.add(slug)
+    output.push({ slug, preferredSize })
+  }
+  return output
+}
+
+function comparePluginOrder(a?: HomePluginManifest, b?: HomePluginManifest): number {
+  const ao = a?.order ?? Number.MAX_SAFE_INTEGER
+  const bo = b?.order ?? Number.MAX_SAFE_INTEGER
+  if (ao !== bo) return ao - bo
+  const ac = Date.parse(a?.createdAt ?? '') || 0
+  const bc = Date.parse(b?.createdAt ?? '') || 0
+  if (ac !== bc) return ac - bc
+  return (a?.id ?? '').localeCompare(b?.id ?? '')
 }
 
 function normalizePluginSlug(value: string): string {

@@ -49,6 +49,9 @@ contextBridge.exposeInMainWorld('desktop', {
   saveHomePluginOrder(rootPath: string, order: unknown) {
     return ipcRenderer.invoke('desktop:save-home-plugin-order', rootPath, order)
   },
+  saveHomePluginLayout(rootPath: string, order: unknown, cards: unknown) {
+    return ipcRenderer.invoke('desktop:save-home-plugin-layout', rootPath, order, cards)
+  },
   getAgentModeStatus(rootPath: string, locale?: 'zh' | 'en') {
     return ipcRenderer.invoke('desktop:get-agent-mode-status', rootPath, locale)
   },

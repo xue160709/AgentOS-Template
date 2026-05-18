@@ -40,6 +40,7 @@ export function ProjectHomeSurface({
   const [taskDialogOpen, setTaskDialogOpen] = useState(false)
   const [sortDialogOpen, setSortDialogOpen] = useState(false)
   const [draftOrder, setDraftOrder] = useState<string[]>([])
+  const [draftSizes, setDraftSizes] = useState<Record<string, HomePluginCardSize>>({})
   const addMenuRef = useRef<HTMLDivElement>(null)
 
   const loadHomePlugins = useCallback(async () => {
@@ -107,15 +108,21 @@ export function ProjectHomeSurface({
   }, [addMenuOpen])
 
   useEffect(() => {
-    if (sortDialogOpen) setDraftOrder(plugins.map((item) => item.slug))
+    if (!sortDialogOpen) return
+    setDraftOrder(plugins.map((item) => item.slug))
+    setDraftSizes(Object.fromEntries(plugins.map((item) => [item.slug, item.manifest.preferredSize])))
   }, [plugins, sortDialogOpen])
 
   const visiblePlugins = plugins.filter((item) => item.status !== 'empty' && hasRenderableMessages(item))
 
   const saveSortOrder = async () => {
-    const saveHomePluginOrder = window.desktop?.saveHomePluginOrder
-    if (!saveHomePluginOrder) return
-    const result = await saveHomePluginOrder(project.path, draftOrder)
+    const layoutCards = Object.entries(draftSizes).map(([slug, preferredSize]) => ({ slug, preferredSize }))
+    const result = window.desktop?.saveHomePluginLayout
+      ? await window.desktop.saveHomePluginLayout(project.path, draftOrder, layoutCards)
+      : window.desktop?.saveHomePluginOrder
+        ? await window.desktop.saveHomePluginOrder(project.path, draftOrder)
+        : null
+    if (!result) return
     if (result.ok) {
       setSortDialogOpen(false)
       outputHashesRef.current = {}
@@ -212,7 +219,9 @@ export function ProjectHomeSurface({
         <SortCardsDialog
           plugins={visiblePlugins}
           draftOrder={draftOrder}
+          draftSizes={draftSizes}
           onDraftOrderChange={setDraftOrder}
+          onDraftSizeChange={(slug, preferredSize) => setDraftSizes((prev) => ({ ...prev, [slug]: preferredSize }))}
           onClose={() => setSortDialogOpen(false)}
           onSave={() => void saveSortOrder()}
         />
@@ -271,9 +280,13 @@ function HomePluginCard({
           </div>
         ) : null}
       </div>
-      <MarkdownContext.Provider value={(text) => Promise.resolve(renderMarkdown(text))}>
-        <A2uiCardSurface messages={messages} projectPath={projectPath} onEdit={onEdit} />
-      </MarkdownContext.Provider>
+      <div className="project-home-card__measure">
+        <div className="project-home-card__surface">
+          <MarkdownContext.Provider value={(text) => Promise.resolve(renderMarkdown(text))}>
+            <A2uiCardSurface messages={messages} projectPath={projectPath} onEdit={onEdit} />
+          </MarkdownContext.Provider>
+        </div>
+      </div>
     </div>
   )
 }
@@ -406,13 +419,17 @@ function TaskCardDialog({
 function SortCardsDialog({
   plugins,
   draftOrder,
+  draftSizes,
   onDraftOrderChange,
+  onDraftSizeChange,
   onClose,
   onSave,
 }: {
   plugins: HomePluginRunItem[]
   draftOrder: string[]
+  draftSizes: Record<string, HomePluginCardSize>
   onDraftOrderChange: (order: string[]) => void
+  onDraftSizeChange: (slug: string, preferredSize: HomePluginCardSize) => void
   onClose: () => void
   onSave: () => void
 }) {
@@ -473,7 +490,19 @@ function SortCardsDialog({
                 <span>{item.manifest.name}</span>
                 <span>{item.slug}</span>
               </span>
-              <span className="project-home-size-badge">{t(`workspace.cardSize.${item.manifest.preferredSize}`)}</span>
+              <div className="project-home-size-switch" role="group" aria-label={t('workspace.sortAgentCards')}>
+                {(['small', 'medium', 'large'] as const).map((size) => (
+                  <button
+                    key={size}
+                    type="button"
+                    className={`project-home-size-switch__button${(draftSizes[item.slug] ?? item.manifest.preferredSize) === size ? ' is-active' : ''}`}
+                    aria-pressed={(draftSizes[item.slug] ?? item.manifest.preferredSize) === size}
+                    onClick={() => onDraftSizeChange(item.slug, size)}
+                  >
+                    {t(`workspace.cardSize.${size}`)}
+                  </button>
+                ))}
+              </div>
               <span className="project-home-kind-badge">{item.manifest.kind === 'task' ? t('workspace.addTaskCard') : t('workspace.addDataCard')}</span>
               <button type="button" className="project-home-icon-button" disabled={index === 0} onClick={() => move(item.slug, -1)} aria-label={t('workspace.moveCardUp')}>
                 <IconInline name="arrowUp" />
@@ -501,10 +530,15 @@ function useMasonrySpan(ref: RefObject<HTMLElement | null>, deps: unknown[]) {
   useEffect(() => {
     const element = ref.current
     if (!element) return
+    const content = element.querySelector('.project-home-card__measure') as HTMLElement | null
+    if (!content) return
     const sync = () => {
-      const rowHeight = 8
-      const gap = 12
-      const span = Math.max(1, Math.ceil((element.getBoundingClientRect().height + gap) / rowHeight))
+      const grid = element.parentElement
+      const gridStyle = grid ? window.getComputedStyle(grid) : null
+      const rowHeight = Number.parseFloat(gridStyle?.gridAutoRows || '') || 8
+      const rowGap = Number.parseFloat(gridStyle?.rowGap || '') || Number.parseFloat(gridStyle?.gap || '') || 24
+      const contentHeight = content.scrollHeight || content.getBoundingClientRect().height
+      const span = Math.max(1, Math.ceil((contentHeight + rowGap) / (rowHeight + rowGap)))
       element.style.gridRowEnd = `span ${span}`
     }
     sync()

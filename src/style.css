@@ -2669,8 +2669,8 @@ button.app-file-tree-row {
 }
 
 .project-home-area {
-  width: 100%;
-  margin-top: calc(var(--spacing) * 2);
+  width: min(1040px, calc(100% - var(--spacing) * 6));
+  margin: calc(var(--spacing) * 3) auto 0;
 }
 
 .project-home-toolbar {
@@ -2808,6 +2808,7 @@ button.app-file-tree-row {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   grid-auto-rows: 8px;
   grid-auto-flow: row;
+  align-items: start;
   gap: calc(var(--spacing) * 3);
   width: 100%;
   margin-top: calc(var(--spacing) * 3);
@@ -2820,6 +2821,7 @@ button.app-file-tree-row {
   border: 1px solid var(--color-token-border-light);
   border-radius: var(--radius-md);
   background: color-mix(in oklab, var(--color-token-main-surface-primary) 98%, var(--color-token-foreground));
+  overflow: visible;
 }
 
 .project-home-card__menu {
@@ -2842,6 +2844,49 @@ button.app-file-tree-row {
   opacity: 0;
   cursor: pointer;
   transition: opacity var(--transition-duration-basic) var(--transition-ease-basic);
+}
+
+.project-home-card__measure {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+.project-home-card__surface {
+  width: 100%;
+  padding: calc(var(--spacing) * 2);
+}
+
+.project-home-size-switch {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  border: 1px solid var(--color-token-border-light);
+  border-radius: calc(var(--radius-md) - 2px);
+  background: var(--color-token-main-surface-primary);
+  white-space: nowrap;
+}
+
+.project-home-size-switch__button {
+  min-height: 30px;
+  padding: 0 calc(var(--spacing) * 1.2);
+  border: 0;
+  border-radius: calc(var(--radius-sm) - 1px);
+  color: var(--color-token-text-secondary);
+  background: transparent;
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.project-home-size-switch__button.is-active {
+  color: var(--color-token-text-primary);
+  background: var(--color-token-list-active-selection-background);
+}
+
+.project-home-size-switch__button:hover:not(:disabled) {
+  color: var(--color-token-text-primary);
+  background: var(--color-token-list-hover-background);
 }
 
 .project-home-card:hover .project-home-card__menu-button,
@@ -2916,6 +2961,14 @@ button.app-file-tree-row {
 }
 
 .project-home-surface > div {
+  width: 100%;
+}
+
+.project-home-card .project-home-surface {
+  margin-top: 0;
+}
+
+.project-home-card .project-home-surface > div {
   width: 100%;
 }
 
@@ -4851,6 +4904,11 @@ button.app-file-tree-row {
     flex-direction: column;
   }
 
+  .project-home-area {
+    width: 100%;
+    margin-inline: 0;
+  }
+
   .project-home-card-grid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -4860,7 +4918,7 @@ button.app-file-tree-row {
   }
 
   .project-home-sort-row {
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-columns: auto minmax(0, 1fr) auto auto auto;
   }
 
   .project-home-kind-badge {

@@ -157,3 +157,24 @@ export type HomePluginOrderSaveResult =
       rootPath: string
       message: string
     }
+
+/** Home Plugin 卡片布局项 / Home Plugin card layout item */
+export type HomePluginCardLayoutItem = {
+  slug: string
+  preferredSize: HomePluginCardSize
+}
+
+/** Home Plugin 布局保存结果 / Home Plugin layout save result */
+export type HomePluginLayoutSaveResult =
+  | {
+      ok: true
+      rootPath: string
+      pluginRootPath: string
+      order: string[]
+      cards: HomePluginCardLayoutItem[]
+    }
+  | {
+      ok: false
+      rootPath: string
+      message: string
+    }

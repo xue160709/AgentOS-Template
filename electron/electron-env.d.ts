@@ -19,6 +19,7 @@ import type {
   AppUiLocale,
   DesktopPreferences,
   HomePluginOrderSaveResult,
+  HomePluginLayoutSaveResult,
   HomePluginRunOptions,
   HomePluginRunResult,
   TrayMenuAction,
@@ -66,6 +67,11 @@ declare global {
       pathExistsUnderProject?: (rootPath: string, relativePath: string) => Promise<boolean>
       runHomePlugin?: (rootPath: string, options?: HomePluginRunOptions) => Promise<HomePluginRunResult>
       saveHomePluginOrder?: (rootPath: string, order: string[]) => Promise<HomePluginOrderSaveResult>
+      saveHomePluginLayout?: (
+        rootPath: string,
+        order: string[],
+        cards: Array<{ slug: string; preferredSize: import('../src/desktop-types').HomePluginCardSize }>,
+      ) => Promise<HomePluginLayoutSaveResult>
       getAgentModeStatus?: (rootPath: string, locale?: AppUiLocale) => Promise<AgentModeStatusResult>
       ensureAgentModeFiles?: (rootPath: string, locale?: AppUiLocale) => Promise<AgentModeFilesResult>
       setAgentModeState?: (
