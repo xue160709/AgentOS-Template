@@ -257,15 +257,16 @@ function validateOutput(output, projectRoot, errors, warnings) {
 
   const dataMessages = messages.filter((message) => message?.version === 'v0.9' && isRecord(message.updateDataModel))
   if (dataMessages.length === 0) errors.push('messages must include updateDataModel')
+  const dataValues = dataMessages.map((message) => message.updateDataModel.value)
 
   const components = componentMessages.flatMap((message) => {
     const raw = message.updateComponents.components
     return Array.isArray(raw) ? raw : []
   })
-  validateComponents(components, projectRoot, errors, warnings)
+  validateComponents(components, projectRoot, errors, warnings, dataValues)
 }
 
-function validateComponents(components, projectRoot, errors, warnings) {
+function validateComponents(components, projectRoot, errors, warnings, dataValues = []) {
   const ids = new Set()
   let openFileActions = 0
   let fileLikeTextCount = 0
@@ -291,8 +292,12 @@ function validateComponents(components, projectRoot, errors, warnings) {
     }
     if (isOpenFileAction(component.action)) {
       openFileActions += 1
-      const rawPath = component.action.event.context?.path
-      const relativePath = isRecord(rawPath) ? undefined : rawPath
+      const context = component.action.event.context
+      const rawPath = context?.filePath ?? context?.path
+      const pathKind = openFilePathKind(rawPath)
+      if (pathKind === 'missing') errors.push(`open_file action ${component.id} is missing context.filePath`)
+      if (pathKind === 'invalid') errors.push(`open_file action ${component.id} has invalid context.filePath; use a string or one-level {path:"/data/path"} binding`)
+      const relativePath = typeof rawPath === 'string' ? rawPath : undefined
       if (typeof relativePath === 'string' && !isSafeRelativePath(relativePath)) errors.push(`open_file action has unsafe path: ${relativePath}`)
       if (typeof relativePath === 'string') {
         const target = path.resolve(projectRoot, relativePath)
@@ -306,7 +311,16 @@ function validateComponents(components, projectRoot, errors, warnings) {
     validateReferences(component, ids, errors)
   }
   if (fileLikeTextCount > 0 && openFileActions === 0) warnings.push('file paths are shown but no open_file action was found')
-  if (visualTextCount === 0) warnings.push('no text-bar visualization detected; add data visualization when repeated records exist')
+  if (visualTextCount === 0 && !dataValues.some(hasTextBarVisualization)) {
+    warnings.push('no text-bar visualization detected; add data visualization when repeated records exist')
+  }
+}
+
+function hasTextBarVisualization(value) {
+  if (typeof value === 'string') return /[█▇▆▅▄▃▂▁#=]{3,}/.test(value)
+  if (Array.isArray(value)) return value.some(hasTextBarVisualization)
+  if (isRecord(value)) return Object.values(value).some(hasTextBarVisualization)
+  return false
 }
 
 function validateReferences(component, ids, errors) {
@@ -332,6 +346,13 @@ function hasInlineChildren(component) {
 
 function isOpenFileAction(action) {
   return isRecord(action) && isRecord(action.event) && action.event.name === 'open_file'
+}
+
+function openFilePathKind(value) {
+  if (value === undefined || value === null || value === '') return 'missing'
+  if (typeof value === 'string') return 'static'
+  if (isRecord(value) && typeof value.path === 'string') return 'dynamic'
+  return 'invalid'
 }
 
 function reportAndExit(errors, warnings) {

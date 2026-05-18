@@ -22,6 +22,7 @@ export function ProjectHomeSurface({ project, onCustomizeHome }: ProjectHomeSurf
   const projectPathRef = useRef(project.path)
   const onCustomizeHomeRef = useRef(onCustomizeHome)
   const [surfaces, setSurfaces] = useState<SurfaceModel<ReactComponentImplementation>[]>([])
+  const [surfaceRevision, setSurfaceRevision] = useState(0)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -44,8 +45,8 @@ export function ProjectHomeSurface({ project, onCustomizeHome }: ProjectHomeSurf
         return
       }
       if (action.name === 'open_file') {
-        const rawPath = action.context?.path
-        if (typeof rawPath === 'string' && rawPath.trim()) {
+        const rawPath = resolveActionPath(action.context?.filePath ?? action.context?.path)
+        if (rawPath) {
           const safePath = normalizeProjectRelativePath(rawPath)
           if (safePath) {
             const targetPath = `${projectPathRef.current}/${safePath}`
@@ -69,12 +70,14 @@ export function ProjectHomeSurface({ project, onCustomizeHome }: ProjectHomeSurf
     const next = Array.from(processor.model.surfacesMap.values())
     surfacesRef.current = next
     setSurfaces(next)
+    setSurfaceRevision((revision) => revision + 1)
     return next
   }, [processor])
 
   const clearProcessorSurfaces = useCallback(() => {
     surfacesRef.current = []
     setSurfaces([])
+    setSurfaceRevision((revision) => revision + 1)
     Array.from(processor.model.surfacesMap.keys()).forEach((id) => processor.model.deleteSurface(id))
   }, [processor])
 
@@ -83,12 +86,13 @@ export function ProjectHomeSurface({ project, onCustomizeHome }: ProjectHomeSurf
       try {
         clearProcessorSurfaces()
         processor.processMessages(messages)
+        syncSurfacesFromProcessor()
       } catch (error) {
         setError(error instanceof Error ? error.message : String(error))
         console.error(error)
       }
     },
-    [clearProcessorSurfaces, processor],
+    [clearProcessorSurfaces, processor, syncSurfacesFromProcessor],
   )
 
   useEffect(() => {
@@ -98,6 +102,7 @@ export function ProjectHomeSurface({ project, onCustomizeHome }: ProjectHomeSurf
         surfacesRef.current = next
         return next
       })
+      setSurfaceRevision((revision) => revision + 1)
     })
     const onDeleted = processor.onSurfaceDeleted((id) => {
       setSurfaces((prev) => {
@@ -105,6 +110,7 @@ export function ProjectHomeSurface({ project, onCustomizeHome }: ProjectHomeSurf
         surfacesRef.current = next
         return next
       })
+      setSurfaceRevision((revision) => revision + 1)
     })
     return () => {
       onCreated.unsubscribe()
@@ -116,33 +122,39 @@ export function ProjectHomeSurface({ project, onCustomizeHome }: ProjectHomeSurf
   const loadHomePlugin = useCallback(async () => {
     const runHomePlugin = window.desktop?.runHomePlugin
     if (!runHomePlugin) return
-    const result = await runHomePlugin(project.path, { knownOutputHash: outputHashRef.current || undefined })
-    if (!result.ok) {
-      setError(result.message)
-      return
-    }
-    setError('')
-    if (result.status === 'empty') {
-      outputHashRef.current = ''
-      messageCache.delete(project.path)
-      clearProcessorSurfaces()
-      return
-    }
-    if (result.status === 'unchanged') {
-      if (surfacesRef.current.length === 0) {
-        const existing = syncSurfacesFromProcessor()
-        if (existing.length > 0) return
-        const cached = messageCache.get(project.path)
-        if (cached) processMessages(cached.messages)
+    try {
+      const result = await runHomePlugin(project.path, { knownOutputHash: outputHashRef.current || undefined })
+      if (!result.ok) {
+        setError(result.message)
+        return
       }
-      return
-    }
-    if (!result.messages) return
+      setError('')
+      if (result.status === 'empty') {
+        outputHashRef.current = ''
+        messageCache.delete(project.path)
+        clearProcessorSurfaces()
+        return
+      }
+      if (result.status === 'unchanged') {
+        if (surfacesRef.current.length === 0) {
+          const existing = syncSurfacesFromProcessor()
+          if (existing.length > 0) return
+          const cached = messageCache.get(project.path)
+          if (cached) processMessages(cached.messages)
+        }
+        return
+      }
+      if (!result.messages) return
 
-    outputHashRef.current = result.outputHash ?? ''
-    const messages = result.messages as A2uiMessage[]
-    messageCache.set(project.path, { outputHash: outputHashRef.current, messages })
-    processMessages(messages)
+      outputHashRef.current = result.outputHash ?? ''
+      const messages = result.messages as A2uiMessage[]
+      messageCache.set(project.path, { outputHash: outputHashRef.current, messages })
+      processMessages(messages)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setError(message)
+      console.error(error)
+    }
   }, [clearProcessorSurfaces, processMessages, project.path, syncSurfacesFromProcessor])
 
   useEffect(() => {
@@ -168,15 +180,25 @@ export function ProjectHomeSurface({ project, onCustomizeHome }: ProjectHomeSurf
     <MarkdownContext.Provider value={(text) => Promise.resolve(renderMarkdown(text))}>
       <div className="project-home-surface">
         {surfaces.map((surface) => (
-          <A2uiSurface key={surface.id} surface={surface} />
+          <A2uiSurface key={`${surface.id}:${surfaceRevision}`} surface={surface} />
         ))}
       </div>
     </MarkdownContext.Provider>
   )
 }
 
+function resolveActionPath(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (!isRecord(value)) return ''
+  return resolveActionPath(value.path)
+}
+
 function normalizeProjectRelativePath(value: string): string {
   const normalized = value.replace(/\\/g, '/').replace(/^\/+/, '').trim()
   if (!normalized || normalized.split('/').some((segment) => segment === '..')) return ''
   return normalized
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
 }

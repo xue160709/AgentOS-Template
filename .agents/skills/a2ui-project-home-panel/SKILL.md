@@ -47,7 +47,7 @@ Read only what is needed:
    - Never dump an entire file, report, README, database table, or JSON blob into one Text component.
 
 3. Interaction rules:
-   - Any card based on a file should include an `open_file` action with `context.path` set to the relative project path.
+   - Any card based on a file should include an `open_file` action with `context.filePath` set to the relative project path.
    - If a dashboard shows a latest report, daily note, paper, task file, or data source, make the path or an adjacent button open it.
    - Use `refresh_home` for refresh controls and `customize_home` only for editing the panel itself.
 

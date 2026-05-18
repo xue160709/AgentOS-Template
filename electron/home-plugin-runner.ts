@@ -301,7 +301,14 @@ function normalizeMessages(value: unknown): unknown[] {
 }
 
 function normalizeA2uiMessage(value: unknown): unknown[] {
-  if (isA2uiMessage(value)) return [value]
+  if (isA2uiMessage(value)) {
+    const message = value as Record<string, unknown>
+    if (isRecord(message.updateComponents)) return normalizeWrappedUpdateComponents(message.updateComponents)
+    if (isRecord(message.updateDataModel)) return normalizeWrappedUpdateDataModel(message.updateDataModel)
+    if (isRecord(message.createSurface)) return [normalizeWrappedMessage('createSurface', message.createSurface)]
+    if (isRecord(message.deleteSurface)) return [normalizeWrappedMessage('deleteSurface', message.deleteSurface)]
+    return [value]
+  }
   if (!isRecord(value)) return []
 
   if (isRecord(value.createSurface)) {
@@ -395,7 +402,10 @@ function normalizeWrappedUpdateDataModel(payload: Record<string, unknown>): unkn
 
 function flattenComponents(values: unknown[]): Record<string, unknown>[] {
   const state = createFlattenState()
-  return values.flatMap((value, index) => flattenComponentNode(value, index === 0 ? 'root' : undefined, state))
+  return values.flatMap((value, index) => {
+    if (isFlatComponentNode(value)) return [normalizeFlatComponentNode(value)]
+    return flattenComponentNode(value, index === 0 ? 'root' : undefined, state)
+  })
 }
 
 function flattenComponentTree(value: unknown, preferredId?: string): Record<string, unknown>[] {
@@ -411,6 +421,15 @@ function flattenComponentNode(value: unknown, preferredId: string | undefined, s
   const output: Record<string, unknown> = { id, component }
   const childGroups: Record<string, unknown>[][] = []
   const childIds: string[] = []
+  if (typeof value.child === 'string') {
+    childIds.push(value.child)
+  } else if (isRecord(value.child)) {
+    const flattened = flattenComponentNode(value.child, undefined, state)
+    if (flattened.length > 0) {
+      childGroups.push(flattened)
+      if (typeof flattened[0].id === 'string') childIds.push(flattened[0].id)
+    }
+  }
   if (Array.isArray(value.children)) {
     for (const child of value.children) {
       if (typeof child === 'string') {
@@ -429,10 +448,19 @@ function flattenComponentNode(value: unknown, preferredId: string | undefined, s
     if (['id', 'component', 'type', 'children', 'child', 'content', 'binding', 'style', 'itemsId'].includes(key)) continue
     output[key] = raw
   }
+  const normalizedAction = normalizeActionPayload(output.action)
+  if (normalizedAction === undefined) delete output.action
+  else output.action = normalizedAction
 
   if (component === 'Text') {
     const bindingPath = dataBindingPath(value.binding)
-    output.text = bindingPath ? { path: bindingPath } : stringOr(value.text, stringOr(value.content, ''))
+    if (bindingPath) {
+      output.text = { path: bindingPath }
+    } else if ('text' in value) {
+      output.text = value.text
+    } else {
+      output.text = stringOr(value.content, '')
+    }
     const variant = textVariantFromStyle(value.style)
     if (variant && !output.variant) output.variant = variant
   } else if (component === 'Card') {
@@ -443,11 +471,29 @@ function flattenComponentNode(value: unknown, preferredId: string | undefined, s
       childComponents.push({ id: wrapperId, component: 'Column', children: childIds })
       output.child = wrapperId
     }
+  } else if (component === 'Button' && childIds.length > 0) {
+    output.child = childIds[0]
   } else if (childIds.length > 0) {
     output.children = childIds
   }
 
   return [output, ...childComponents]
+}
+
+function isFlatComponentNode(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value) || typeof value.id !== 'string' || typeof value.component !== 'string') return false
+  if (isRecord(value.child)) return false
+  if (Array.isArray(value.children) && value.children.some(isRecord)) return false
+  if (Array.isArray(value.tabs) && value.tabs.some((tab) => isRecord(tab) && isRecord(tab.child))) return false
+  return true
+}
+
+function normalizeFlatComponentNode(value: Record<string, unknown>): Record<string, unknown> {
+  const output = { ...value }
+  const normalizedAction = normalizeActionPayload(output.action)
+  if (normalizedAction === undefined) delete output.action
+  else output.action = normalizedAction
+  return output
 }
 
 function createFlattenState(): { count: number; usedIds: Set<string> } {
@@ -509,6 +555,43 @@ function dataBindingPath(value: unknown): string | undefined {
   if (!isRecord(value)) return undefined
   const rawPath = typeof value.$data === 'string' ? value.$data : value.path
   return toJsonPointer(rawPath)
+}
+
+function normalizeActionPayload(value: unknown): unknown {
+  if (!isRecord(value) || !isRecord(value.event)) return value
+  const event = value.event
+  let context: unknown = event.context
+  if (isRecord(event.context)) {
+    const normalizedContext = Object.fromEntries(
+      Object.entries(event.context).map(([key, raw]) => [key, normalizeActionContextValue(raw)]),
+    )
+    if (event.name === 'open_file' && 'path' in normalizedContext) {
+      if (!('filePath' in normalizedContext)) normalizedContext.filePath = normalizedContext.path
+      delete normalizedContext.path
+    }
+    context = normalizedContext
+  }
+  return {
+    ...value,
+    event: {
+      ...event,
+      ...(context ? { context } : {}),
+    },
+  }
+}
+
+function normalizeActionContextValue(value: unknown): unknown {
+  if (!isRecord(value)) return value
+  if (typeof value.$data === 'string') return { path: toJsonPointer(value.$data) }
+  if (!('path' in value)) return value
+
+  const rawPath = value.path
+  if (typeof rawPath === 'string') return { ...value, path: toJsonPointer(rawPath) }
+  if (isRecord(rawPath)) {
+    const nestedPath = typeof rawPath.path === 'string' ? rawPath.path : typeof rawPath.$data === 'string' ? rawPath.$data : ''
+    if (nestedPath) return { ...value, path: toJsonPointer(nestedPath) }
+  }
+  return value
 }
 
 function textVariantFromStyle(value: unknown): string | undefined {

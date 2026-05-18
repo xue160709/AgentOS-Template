@@ -38,7 +38,7 @@ Component pattern:
   { "id": "latest-report-body", "component": "Column", "children": ["latest-report-title", "latest-report-summary", "latest-report-open"] },
   { "id": "latest-report-title", "component": "Text", "variant": "h3", "text": { "path": "/latestReport/title" } },
   { "id": "latest-report-summary", "component": "Text", "text": { "path": "/latestReport/summary" } },
-  { "id": "latest-report-open", "component": "Button", "child": "latest-report-open-label", "variant": "borderless", "action": { "event": { "name": "open_file", "context": { "path": { "path": "/latestReport/path" } } } } },
+  { "id": "latest-report-open", "component": "Button", "child": "latest-report-open-label", "variant": "borderless", "action": { "event": { "name": "open_file", "context": { "filePath": { "path": "/latestReport/path" } } } } },
   { "id": "latest-report-open-label", "component": "Text", "text": { "path": "/latestReport/path" } }
 ]
 ```

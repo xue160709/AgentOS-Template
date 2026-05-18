@@ -321,6 +321,11 @@ function applyLoginItemSettingsFromPrefs(prefs: DesktopPreferences) {
   })
 }
 
+function applyLoginItemSettingsOnStartup(prefs: DesktopPreferences) {
+  if (!prefs.openAtLogin) return
+  applyLoginItemSettingsFromPrefs(prefs)
+}
+
 if (gotSingleInstanceLock) {
   app.on('second-instance', () => {
     if (win && !win.isDestroyed()) {
@@ -362,7 +367,7 @@ if (gotSingleInstanceLock) {
     claudeAgentSettingsStore = new ClaudeAgentSettingsStore(userDataPath)
     agentModeSettingsStore = new AgentModeSettingsStore(userDataPath)
     chatWorkspaceStore = new ChatWorkspaceStore(userDataPath)
-    applyLoginItemSettingsFromPrefs(getDesktopPreferencesStore().read())
+    applyLoginItemSettingsOnStartup(getDesktopPreferencesStore().read())
     currentTrayLocale = normalizeUiLocale(getDesktopPreferencesStore().read().locale)
 
     // --- IPC handlers / IPC 注册 ---
@@ -372,7 +377,9 @@ if (gotSingleInstanceLock) {
     })
     ipcMain.handle('desktop-preferences:set', (_event, partial: Partial<DesktopPreferences>) => {
       const next = getDesktopPreferencesStore().save(partial)
-      applyLoginItemSettingsFromPrefs(next)
+      if (Object.prototype.hasOwnProperty.call(partial, 'openAtLogin')) {
+        applyLoginItemSettingsFromPrefs(next)
+      }
       ensureTray()
       return next
     })

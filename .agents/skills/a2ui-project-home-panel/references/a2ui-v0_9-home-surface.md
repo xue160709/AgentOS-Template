@@ -45,6 +45,7 @@ Core rules:
 - `Text` uses `text`, never `content`.
 - Dynamic text uses JSON Pointer bindings such as `{ "path": "/metrics/paperCount" }`.
 - `Button.action` should use `{ "event": { "name": "...", "context": { ... } } }`.
+- Action context values are single A2UI DynamicValues only. For `open_file`, use `context.filePath`, not `context.path`, because A2UI treats any object with a `path` key as a DynamicValue while resolving actions. Use `"filePath": "reports/2026-05-17.md"` for a static file path or `"filePath": { "path": "/latestReport/path" }` for one dynamic binding. Never nest dynamic bindings like `{ "filePath": { "path": { "path": "/latestReport/path" } } }`.
 
 Basic Catalog components available in this host:
 
@@ -54,7 +55,7 @@ Basic Catalog components available in this host:
 
 Known host actions:
 
-- `open_file`: open a project-relative file path. Use `context.path`.
+- `open_file`: open a project-relative file path. Use `context.filePath`.
 - `refresh_home`: refresh the home plugin output.
 - `customize_home`: open the customization thread.
 
@@ -70,7 +71,7 @@ Example action:
     "event": {
       "name": "open_file",
       "context": {
-        "path": { "path": "/latestReport/path" }
+        "filePath": { "path": "/latestReport/path" }
       }
     }
   }
