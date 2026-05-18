@@ -318,6 +318,7 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
 }
 
 .app-project-group {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -339,6 +340,30 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
 
 .app-project-row:hover {
   background: var(--color-token-list-hover-background);
+}
+
+.app-project-group.is-dragging {
+  opacity: 0.48;
+}
+
+.app-project-group.is-drop-before::before,
+.app-project-group.is-drop-after::after {
+  content: '';
+  position: absolute;
+  left: calc(var(--spacing) * 1);
+  right: calc(var(--spacing) * 1);
+  height: 2px;
+  border-radius: var(--radius-full);
+  background: var(--color-token-link);
+  pointer-events: none;
+}
+
+.app-project-group.is-drop-before::before {
+  top: -2px;
+}
+
+.app-project-group.is-drop-after::after {
+  bottom: -2px;
 }
 
 .app-project-select,
@@ -3219,6 +3244,30 @@ button.app-file-tree-row {
   height: 14px;
 }
 
+.chat-process-group {
+  width: min(760px, 100%);
+  color: var(--color-token-text-secondary);
+}
+
+.chat-process-group__summary {
+  margin: 0;
+}
+
+.chat-process-group__summary .icon-xs {
+  transition: transform 0.16s ease;
+}
+
+.chat-process-group__summary[aria-expanded='true'] .icon-xs {
+  transform: rotate(180deg);
+}
+
+.chat-process-group__body {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--spacing) * 3);
+  margin: calc(var(--spacing) * 2) 0 calc(var(--spacing) * 2);
+}
+
 .chat-message-actions {
   display: inline-flex;
   align-items: center;
@@ -3495,12 +3544,8 @@ button.app-file-tree-row {
   min-width: 0;
   border: 1px solid color-mix(in oklab, var(--color-token-border) 72%, transparent);
   border-radius: calc(var(--radius-xl) + 2px);
-  background:
-    linear-gradient(
-      135deg,
-      color-mix(in oklab, var(--color-token-main-surface-primary) 94%, var(--blue-400) 6%),
-      color-mix(in oklab, var(--color-token-main-surface-primary) 96%, var(--color-token-foreground) 4%)
-    );
+  background: #fff;
+  color: #111827;
   box-shadow: 0 16px 32px -28px color-mix(in oklab, var(--color-token-foreground) 42%, transparent);
   overflow: hidden;
   isolation: isolate;
@@ -3510,8 +3555,8 @@ button.app-file-tree-row {
   width: 100%;
   min-height: 80px;
   border: 0;
-  background: transparent;
-  color-scheme: auto;
+  background: #fff;
+  color-scheme: light;
   overflow: hidden;
   transition: height 0.24s ease-out;
 }
@@ -3568,8 +3613,8 @@ button.app-file-tree-row {
   padding: 0 calc(var(--spacing) * 2);
   border: 1px solid color-mix(in oklab, var(--color-token-border) 74%, transparent);
   border-radius: var(--radius-md);
-  background: color-mix(in oklab, var(--color-token-main-surface-primary) 82%, transparent);
-  color: var(--color-token-text-secondary);
+  background: rgb(255 255 255 / 0.92);
+  color: #475569;
   font: inherit;
   font-size: var(--text-xs);
   font-weight: 600;
@@ -3580,8 +3625,13 @@ button.app-file-tree-row {
 
 .generative-widget__toolbar button:hover,
 .generative-widget__toolbar button:focus-visible {
-  color: var(--color-token-text-primary);
-  background: var(--color-token-list-hover-background);
+  color: #111827;
+  background: #f8fafc;
+}
+
+.generative-widget__toolbar button:disabled {
+  cursor: wait;
+  opacity: 0.72;
 }
 
 .generative-widget__toolbar button:focus-visible {

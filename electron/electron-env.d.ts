@@ -83,6 +83,10 @@ declare global {
       showItemInFolder?: (targetPath: string) => Promise<void>
       /** 使用系统默认应用打开路径 / Open path with the system default app */
       openPath?: (targetPath: string) => Promise<void>
+      /** 可选的桌面端 PNG 剪贴板桥；不存在时渲染层回退浏览器 Clipboard API / Optional PNG clipboard bridge; renderer falls back when absent */
+      copyPngToClipboard?: (dataUrl: string) => Promise<boolean>
+      /** 桌面端 SVG 渲染到图片剪贴板 / Render SVG through Electron and write it as an image clipboard item */
+      copySvgToClipboard?: (svg: string) => Promise<boolean>
       getDesktopPreferences?: () => Promise<DesktopPreferences>
       setDesktopPreferences?: (partial: Partial<DesktopPreferences>) => Promise<DesktopPreferences>
       syncTrayLocale?: (locale: 'zh' | 'en') => Promise<void>

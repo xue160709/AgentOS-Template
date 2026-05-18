@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, shell, Tray } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, shell, Tray } from 'electron'
 import { fileURLToPath } from 'node:url'
 import fs from 'node:fs/promises'
 import os from 'node:os'
@@ -78,6 +78,9 @@ const FILE_TREE_MAX_ENTRIES = 1200
 const FILE_TREE_MAX_CHILDREN_PER_DIRECTORY = 200
 const CHAT_ATTACHMENT_MAX_FILES = 8
 const CHAT_TEXT_ATTACHMENT_MAX_BYTES = 512 * 1024
+const CLIPBOARD_PNG_MAX_DATA_URL_LENGTH = 25_000_000
+const CLIPBOARD_SVG_MAX_CHARS = 4_000_000
+const CLIPBOARD_SVG_MAX_DIMENSION = 4096
 const CHAT_IMAGE_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024
 const CHAT_TEXT_EXTENSIONS = new Set(['.md', '.markdown', '.txt'])
 const CHAT_IMAGE_MEDIA_TYPES = new Map<string, 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'>([
@@ -389,6 +392,25 @@ if (gotSingleInstanceLock) {
         ensureTray()
       }
     })
+    ipcMain.handle('desktop:copy-png-to-clipboard', (_event, dataUrl: unknown) => {
+      if (
+        typeof dataUrl !== 'string' ||
+        !/^data:image\/png;base64,/i.test(dataUrl) ||
+        dataUrl.length > CLIPBOARD_PNG_MAX_DATA_URL_LENGTH
+      ) {
+        return false
+      }
+      const image = nativeImage.createFromDataURL(dataUrl)
+      if (image.isEmpty()) return false
+      clipboard.writeImage(image)
+      return true
+    })
+    ipcMain.handle('desktop:copy-svg-to-clipboard', async (_event, svg: unknown) => {
+      if (typeof svg !== 'string' || !svg.trim().startsWith('<svg') || svg.length > CLIPBOARD_SVG_MAX_CHARS) {
+        return false
+      }
+      return copySvgToClipboard(svg)
+    })
     ipcMain.handle('claude-chat:submit', (_event, payload: ClaudeChatSubmitPayload) => {
       return getClaudeAgentRunner().submit(payload)
     })
@@ -614,6 +636,125 @@ function firstPreviewLine(value: string): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
+}
+
+async function copySvgToClipboard(svg: string): Promise<boolean> {
+  const size = readSvgClipboardSize(svg)
+  const svgDataUrl = `data:image/svg+xml;base64,${Buffer.from(svg, 'utf8').toString('base64')}`
+  const renderWindow = new BrowserWindow({
+    show: false,
+    width: size.width,
+    height: size.height,
+    useContentSize: true,
+    frame: false,
+    resizable: false,
+    backgroundColor: '#ffffff',
+    paintWhenInitiallyHidden: true,
+    webPreferences: {
+      backgroundThrottling: false,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  })
+
+  try {
+    await renderWindow.loadURL(
+      `data:text/html;charset=utf-8,${encodeURIComponent(buildSvgClipboardHtml(svgDataUrl, size.width, size.height))}`,
+    )
+    const ready = await waitForSvgClipboardRender(renderWindow)
+    if (!ready) return false
+
+    await delay(80)
+    const image = await renderWindow.webContents.capturePage({ x: 0, y: 0, width: size.width, height: size.height })
+    if (image.isEmpty()) return false
+    clipboard.writeImage(image)
+    return true
+  } catch {
+    return false
+  } finally {
+    if (!renderWindow.isDestroyed()) renderWindow.destroy()
+  }
+}
+
+function buildSvgClipboardHtml(svgDataUrl: string, width: number, height: number): string {
+  return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
+<style>
+html,body{width:${width}px;height:${height}px;margin:0;overflow:hidden;background:#fff;}
+img{display:block;width:${width}px;height:${height}px;object-fit:contain;background:#fff;}
+</style>
+</head>
+<body>
+<img id="svg-source" src="${svgDataUrl}" alt="">
+<script>
+const img = document.getElementById('svg-source');
+window.__svgClipboardReady = img.complete && img.naturalWidth > 0;
+window.__svgClipboardFailed = false;
+img.onload = () => { window.__svgClipboardReady = true; };
+img.onerror = () => { window.__svgClipboardFailed = true; };
+</script>
+</body>
+</html>`
+}
+
+async function waitForSvgClipboardRender(renderWindow: BrowserWindow): Promise<boolean> {
+  const startedAt = Date.now()
+  while (Date.now() - startedAt < 2500) {
+    const status = (await renderWindow.webContents.executeJavaScript(
+      `({
+        ready: Boolean(window.__svgClipboardReady),
+        failed: Boolean(window.__svgClipboardFailed),
+        naturalWidth: document.getElementById('svg-source')?.naturalWidth || 0
+      })`,
+      true,
+    )) as { ready?: boolean; failed?: boolean; naturalWidth?: number }
+    if (status.ready && (status.naturalWidth ?? 0) > 0) return true
+    if (status.failed) return false
+    await delay(50)
+  }
+  return false
+}
+
+function readSvgClipboardSize(svg: string): { width: number; height: number } {
+  const svgTag = svg.match(/<svg\b[^>]*>/i)?.[0] ?? ''
+  const width = parseSvgClipboardDimension(readSvgAttribute(svgTag, 'width'))
+  const height = parseSvgClipboardDimension(readSvgAttribute(svgTag, 'height'))
+  const viewBox = readSvgAttribute(svgTag, 'viewBox')
+    ?.trim()
+    .split(/[\s,]+/)
+    .map(Number)
+
+  return {
+    width: clampSvgClipboardDimension(width || (Number.isFinite(viewBox?.[2]) ? viewBox?.[2] : 920)),
+    height: clampSvgClipboardDimension(height || (Number.isFinite(viewBox?.[3]) ? viewBox?.[3] : 320)),
+  }
+}
+
+function readSvgAttribute(tag: string, name: string): string {
+  const match = tag.match(new RegExp(`${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i'))
+  return match?.[1] ?? match?.[2] ?? match?.[3] ?? ''
+}
+
+function parseSvgClipboardDimension(value: string): number {
+  const trimmed = value.trim()
+  if (!trimmed || trimmed.endsWith('%')) return 0
+  const parsed = Number.parseFloat(trimmed)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}
+
+function clampSvgClipboardDimension(value: number | undefined): number {
+  const normalized = Number.isFinite(value) && value && value > 0 ? value : 1
+  return Math.min(Math.max(1, Math.ceil(normalized)), CLIPBOARD_SVG_MAX_DIMENSION)
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
 }
 
 async function readProjectFileTree(rootPath: string): Promise<FileTreeResult> {

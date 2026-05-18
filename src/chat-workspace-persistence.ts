@@ -38,7 +38,7 @@ export function createId(prefix: string): string {
 
 /** 新建侧栏偏好默认值 / Default sidebar prefs */
 export function createDefaultSidebarPrefs(): WorkspaceSidebarPrefs {
-  return { collapsed: false, collapsedProjectIds: [] }
+  return { collapsed: false, collapsedProjectIds: [], projectOrderIds: [] }
 }
 
 /** 某项目下最新未归档线程 / Latest non-archived thread for project */
@@ -153,7 +153,17 @@ function normalizeSidebarPrefs(value: unknown, projectIds: Set<string>): Workspa
     )
   }
 
-  return { collapsed, collapsedProjectIds }
+  let projectOrderIds = defaults.projectOrderIds
+  if (Array.isArray(raw.projectOrderIds)) {
+    const seen = new Set<string>()
+    projectOrderIds = raw.projectOrderIds.filter((id): id is string => {
+      if (typeof id !== 'string' || !projectIds.has(id) || seen.has(id)) return false
+      seen.add(id)
+      return true
+    })
+  }
+
+  return { collapsed, collapsedProjectIds, projectOrderIds }
 }
 
 // --- Normalization / 状态规范化 ---

@@ -85,6 +85,12 @@ contextBridge.exposeInMainWorld('desktop', {
   syncTrayLocale(locale: 'zh' | 'en') {
     return ipcRenderer.invoke('desktop:sync-tray-locale', locale) as Promise<void>
   },
+  copyPngToClipboard(dataUrl: string) {
+    return ipcRenderer.invoke('desktop:copy-png-to-clipboard', dataUrl) as Promise<boolean>
+  },
+  copySvgToClipboard(svg: string) {
+    return ipcRenderer.invoke('desktop:copy-svg-to-clipboard', svg) as Promise<boolean>
+  },
   onTrayMenuAction(handler: (action: TrayMenuAction) => void) {
     const listener = (_event: IpcRendererEvent, raw: unknown) => {
       if (raw === 'new-thread') handler('new-thread')

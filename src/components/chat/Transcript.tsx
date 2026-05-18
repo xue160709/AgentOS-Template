@@ -3,7 +3,7 @@
  * Timeline renderer for messages, tool chips, thinking, and agent activity rows.
  */
 
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { IconInline } from '../../icon-inline'
 import { useI18n } from '../../i18n/i18n'
 import type {
@@ -23,6 +23,19 @@ import { GenerativeWidget } from './GenerativeWidget'
 import { containsGenerativeWidget, parseGenerativeUiSegments } from './generative-ui'
 import { escapeHtml, renderMarkdown } from './markdown'
 
+type ProcessTranscriptItem = ChatToolItem | ChatThinkingItem | ChatActivityItem | ChatFileDiffItem
+
+type TranscriptRenderEntry =
+  | {
+      kind: 'item'
+      item: TranscriptItem
+    }
+  | {
+      kind: 'assistant-turn'
+      message: ChatMessageItem
+      processItems: ProcessTranscriptItem[]
+    }
+
 /** Memoized transcript map / Memoized transcript list renderer */
 export const Transcript = memo(function Transcript({
   items,
@@ -41,46 +54,138 @@ export const Transcript = memo(function Transcript({
   onReviewFileChanges?: (changeSetId: string) => void
   onRewindFileChanges?: (item: ChatFileDiffItem) => void
 }) {
+  const entries = useMemo(() => groupTranscriptForRendering(items), [items])
+  const renderItem = (item: TranscriptItem): ReactNode => {
+    if (item.type === 'tool') return <ToolRow key={item.id} item={item} />
+    if (item.type === 'thinking') return <ThinkingRow key={item.id} item={item} />
+    if (item.type === 'activity') return <ActivityRow key={item.id} item={item} />
+    if (item.type === 'file_diff') {
+      return (
+        <FileDiffRow
+          key={item.id}
+          item={item}
+          onReviewFileChanges={onReviewFileChanges}
+          onRewindFileChanges={onRewindFileChanges}
+        />
+      )
+    }
+    return (
+      <ChatMessage
+        key={item.id}
+        item={item}
+        canEdit={!isRunning}
+        onCopyMessage={onCopyMessage}
+        onEditUserMessage={onEditUserMessage}
+        onUserMessageEditDismissed={onUserMessageEditDismissed}
+      />
+    )
+  }
+
   return (
     <>
-      {items.map((item) => {
-        if (item.type === 'tool') return <ToolRow key={item.id} item={item} />
-        if (item.type === 'thinking') return <ThinkingRow key={item.id} item={item} />
-        if (item.type === 'activity') return <ActivityRow key={item.id} item={item} />
-        if (item.type === 'file_diff') {
-          return (
-            <FileDiffRow
-              key={item.id}
-              item={item}
-              onReviewFileChanges={onReviewFileChanges}
-              onRewindFileChanges={onRewindFileChanges}
+      {entries.map((entry) =>
+        entry.kind === 'assistant-turn' ? (
+          <Fragment key={`assistant-turn-${entry.message.id}`}>
+            <ProcessTraceBlock
+              durationMs={entry.message.durationMs}
+              processItems={entry.processItems}
+              renderItem={renderItem}
             />
-          )
-        }
-        return (
-          <ChatMessage
-            key={item.id}
-            item={item}
-            canEdit={!isRunning}
-            onCopyMessage={onCopyMessage}
-            onEditUserMessage={onEditUserMessage}
-            onUserMessageEditDismissed={onUserMessageEditDismissed}
-          />
-        )
-      })}
+            <ChatMessage
+              item={entry.message}
+              canEdit={!isRunning}
+              showDurationLabel={false}
+              onCopyMessage={onCopyMessage}
+              onEditUserMessage={onEditUserMessage}
+              onUserMessageEditDismissed={onUserMessageEditDismissed}
+            />
+          </Fragment>
+        ) : (
+          renderItem(entry.item)
+        ),
+      )}
     </>
   )
 })
 
+function groupTranscriptForRendering(items: TranscriptItem[]): TranscriptRenderEntry[] {
+  const entries: TranscriptRenderEntry[] = []
+  let pendingProcessItems: ProcessTranscriptItem[] = []
+
+  const flushProcessItems = () => {
+    for (const item of pendingProcessItems) entries.push({ kind: 'item', item })
+    pendingProcessItems = []
+  }
+
+  for (const item of items) {
+    if (isProcessTranscriptItem(item)) {
+      pendingProcessItems.push(item)
+      continue
+    }
+
+    if (item.type === 'message' && item.role === 'assistant' && item.durationMs && pendingProcessItems.length > 0) {
+      entries.push({ kind: 'assistant-turn', message: item, processItems: pendingProcessItems })
+      pendingProcessItems = []
+      continue
+    }
+
+    flushProcessItems()
+    entries.push({ kind: 'item', item })
+  }
+
+  flushProcessItems()
+  return entries
+}
+
+function isProcessTranscriptItem(item: TranscriptItem): item is ProcessTranscriptItem {
+  return item.type === 'tool' || item.type === 'thinking' || item.type === 'activity' || item.type === 'file_diff'
+}
+
+function ProcessTraceBlock({
+  durationMs,
+  processItems,
+  renderItem,
+}: {
+  durationMs?: number
+  processItems: ProcessTranscriptItem[]
+  renderItem: (item: TranscriptItem) => ReactNode
+}) {
+  const { t } = useI18n()
+  const [isOpen, setIsOpen] = useState(false)
+  const durationLabel = durationMs ? formatDuration(durationMs) : ''
+
+  if (!durationLabel || processItems.length === 0) return null
+
+  return (
+    <section className="chat-process-group">
+      <button
+        type="button"
+        className="chat-message__duration chat-message__duration--toggle chat-process-group__summary"
+        title={t('chat.responseDurationTitle')}
+        aria-label={t('chat.responseDurationTitle')}
+        aria-expanded={isOpen}
+        onClick={() => setIsOpen((value) => !value)}
+      >
+        <span>{t('chat.responseProcessed')}</span>
+        <span>{durationLabel}</span>
+        <IconInline name="chevron" />
+      </button>
+      {isOpen ? <div className="chat-process-group__body">{processItems.map((item) => renderItem(item))}</div> : null}
+    </section>
+  )
+}
+
 const ChatMessage = memo(function ChatMessage({
   item,
   canEdit,
+  showDurationLabel = true,
   onCopyMessage,
   onEditUserMessage,
   onUserMessageEditDismissed,
 }: {
   item: ChatMessageItem
   canEdit: boolean
+  showDurationLabel?: boolean
   onCopyMessage?: (text: string) => void
   onEditUserMessage?: (messageId: string, text: string) => void
   onUserMessageEditDismissed?: () => void
@@ -89,7 +194,6 @@ const ChatMessage = memo(function ChatMessage({
   const [isEditing, setIsEditing] = useState(false)
   const [draft, setDraft] = useState(item.content)
   const editTextareaRef = useRef<HTMLTextAreaElement>(null)
-  const [isProcessedOpen, setIsProcessedOpen] = useState(true)
 
   useEffect(() => {
     if (!isEditing) setDraft(item.content)
@@ -110,15 +214,10 @@ const ChatMessage = memo(function ChatMessage({
   const attachments = item.attachments ?? []
   const hasBody =
     item.role === 'assistant' ? item.content.trim().length > 0 || attachments.length > 0 : item.content.trim().length > 0
-  const durationLabel = item.role === 'assistant' && item.durationMs ? formatDuration(item.durationMs) : ''
+  const durationLabel = showDurationLabel && item.role === 'assistant' && item.durationMs ? formatDuration(item.durationMs) : ''
   const canCopy = item.content.trim().length > 0
   const canSaveEdit = draft.trim().length > 0 && draft.trim() !== item.content.trim()
   const shouldRenderBubble = isEditing || hasBody
-  const canToggleProcessed =
-    item.role === 'assistant' &&
-    item.status === 'done' &&
-    Boolean(durationLabel) &&
-    (item.content.trim().length > 0 || attachments.length > 0)
 
   const saveEdit = () => {
     const next = draft.trim()
@@ -181,30 +280,14 @@ const ChatMessage = memo(function ChatMessage({
   return (
     <article className={`chat-message chat-message--${item.role} chat-message--${item.status}`}>
       <div className="chat-message__stack">
-        {durationLabel ? canToggleProcessed ? (
-          <button
-            type="button"
-            className="chat-message__duration chat-message__duration--toggle"
-            title={t('chat.responseDurationTitle')}
-            aria-label={t('chat.responseDurationTitle')}
-            aria-expanded={isProcessedOpen}
-            onClick={() => setIsProcessedOpen((value) => !value)}
-          >
-            <span>{t('chat.responseProcessed')}</span>
-            <span>{durationLabel}</span>
-            <IconInline name="chevron" />
-          </button>
-        ) : (
+        {durationLabel ? (
           <span className="chat-message__duration" title={t('chat.responseDurationTitle')} aria-label={t('chat.responseDurationTitle')}>
             <span>{t('chat.responseProcessed')}</span>
             <span>{durationLabel}</span>
-            <IconInline name="chevron" />
           </span>
         ) : null}
-        {shouldRenderBubble && (!canToggleProcessed || isProcessedOpen) ? (
-          <div className="chat-message__bubble markdown-body">{contentNode}</div>
-        ) : null}
-        {!isEditing && shouldRenderBubble && (!canToggleProcessed || isProcessedOpen) ? (
+        {shouldRenderBubble ? <div className="chat-message__bubble markdown-body">{contentNode}</div> : null}
+        {!isEditing && shouldRenderBubble ? (
           <div className="chat-message-actions" aria-label={t('chat.messageActionsAria')}>
             <button
               type="button"

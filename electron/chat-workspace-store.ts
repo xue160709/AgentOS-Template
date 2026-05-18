@@ -97,7 +97,7 @@ export class ChatWorkspaceStore {
           'id, name, path,',
           'created_at AS createdAt, updated_at AS updatedAt, pinned_at AS pinnedAt',
           'FROM projects',
-          'ORDER BY pinned_at DESC NULLS LAST, updated_at DESC, created_at DESC',
+          'ORDER BY pinned_at DESC NULLS LAST, created_at DESC',
         ].join(' '),
       )
       if (projects.length === 0) return null

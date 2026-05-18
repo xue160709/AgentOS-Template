@@ -41,14 +41,14 @@ export const GenerativeWidget = memo(function GenerativeWidget({
   const [ready, setReady] = useState(false)
   const [showCode, setShowCode] = useState(false)
   const [finalized, setFinalized] = useState(false)
+  const [copyPngState, setCopyPngState] = useState<'idle' | 'copying' | 'copied' | 'failed'>('idle')
   const [height, setHeight] = useState(() => widgetHeightCache.get(cacheKey(widgetCode)) ?? 96)
   const hasReceivedHeightRef = useRef(widgetHeightCache.has(cacheKey(widgetCode)))
   const hasExternalScript = useMemo(() => EXTERNAL_SCRIPT_RE.test(widgetCode), [widgetCode])
 
   const srcdoc = useMemo(() => {
     const vars = readWidgetThemeVars()
-    const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
-    return buildWidgetSrcdoc(buildWidgetStyleBlock(vars), prefersDark)
+    return buildWidgetSrcdoc(buildWidgetStyleBlock(vars), false)
   }, [])
 
   useEffect(() => {
@@ -113,6 +113,23 @@ export const GenerativeWidget = memo(function GenerativeWidget({
       if (event.data.type === 'generative-ui:download-svg') {
         const svg = String(event.data.svg || '')
         if (svg.trim()) downloadSvgFile(svg, title || 'generative-widget')
+        return
+      }
+
+      if (event.data.type === 'generative-ui:captured-svg') {
+        const svg = String(event.data.svg || '')
+        const action = String(event.data.action || '')
+        if (action === 'copy-png') {
+          if (!svg.trim()) {
+            setTimedCopyPngState('failed', setCopyPngState)
+            return
+          }
+          void copySvgAsPng(svg).then((ok) => {
+            setTimedCopyPngState(ok ? 'copied' : 'failed', setCopyPngState)
+          })
+          return
+        }
+        if (svg.trim()) downloadSvgFile(svg, title || 'generative-widget')
       }
     }
 
@@ -129,7 +146,7 @@ export const GenerativeWidget = memo(function GenerativeWidget({
         {
           type: 'generative-ui:theme',
           vars: readWidgetThemeVars(),
-          prefersDark: window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false,
+          prefersDark: false,
         },
         '*',
       )
@@ -177,8 +194,26 @@ export const GenerativeWidget = memo(function GenerativeWidget({
   const requestSvgDownload = () => {
     postWidgetMessage(iframeRef.current, {
       type: 'generative-ui:capture-svg',
+      action: 'download-svg',
     })
   }
+  const requestPngCopy = () => {
+    setCopyPngState('copying')
+    const sent = postWidgetMessage(iframeRef.current, {
+      type: 'generative-ui:capture-svg',
+      action: 'copy-png',
+    })
+    if (!sent) setTimedCopyPngState('failed', setCopyPngState)
+  }
+
+  const copyPngLabel =
+    copyPngState === 'copying'
+      ? t('chat.generativeUiCopyingPng')
+      : copyPngState === 'copied'
+        ? t('chat.generativeUiCopiedPng')
+        : copyPngState === 'failed'
+          ? t('chat.copyFailed')
+          : t('chat.generativeUiCopyPng')
 
   return (
     <section className="generative-widget" aria-label={title || t('chat.generativeUiAria')}>
@@ -208,6 +243,9 @@ export const GenerativeWidget = memo(function GenerativeWidget({
         <button type="button" onClick={requestSvgDownload}>
           {t('chat.generativeUiDownloadSvg')}
         </button>
+        <button type="button" onClick={requestPngCopy} disabled={copyPngState === 'copying'}>
+          {copyPngLabel}
+        </button>
       </div>
     </section>
   )
@@ -217,10 +255,11 @@ function cacheKey(code: string): string {
   return code.slice(0, 220)
 }
 
-function postWidgetMessage(iframe: HTMLIFrameElement | null, message: Record<string, unknown>) {
+function postWidgetMessage(iframe: HTMLIFrameElement | null, message: Record<string, unknown>): boolean {
   const target = iframe?.contentWindow
-  if (!target) return
+  if (!target) return false
   target.postMessage(message, '*')
+  return true
 }
 
 function downloadSvgFile(svg: string, title: string) {
@@ -242,4 +281,110 @@ function safeFileName(value: string): string {
     .replace(/\s+/g, '-')
     .replace(/^-+|-+$/g, '')
   return next || 'generative-widget'
+}
+
+function setTimedCopyPngState(
+  state: 'copied' | 'failed',
+  setState: (value: 'idle' | 'copying' | 'copied' | 'failed') => void,
+) {
+  setState(state)
+  window.setTimeout(() => setState('idle'), 1800)
+}
+
+async function copySvgAsPng(svg: string): Promise<boolean> {
+  if (window.desktop?.copySvgToClipboard) {
+    try {
+      const copied = await window.desktop.copySvgToClipboard(svg)
+      if (copied) return true
+    } catch {
+      /* fall through to renderer fallback */
+    }
+  }
+
+  if (navigator.clipboard?.write && typeof ClipboardItem !== 'undefined') {
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': renderSvgToPngBlob(svg) })])
+      return true
+    } catch {
+      /* fall through to desktop PNG bridge fallback */
+    }
+  }
+
+  try {
+    const pngBlob = await renderSvgToPngBlob(svg)
+    if (window.desktop?.copyPngToClipboard) {
+      return window.desktop.copyPngToClipboard(await blobToDataUrl(pngBlob))
+    }
+    return false
+  } catch {
+    return false
+  }
+}
+
+async function renderSvgToPngBlob(svg: string): Promise<Blob> {
+  const size = readSvgSize(svg)
+  const scale = Math.min(Math.max(window.devicePixelRatio || 1, 1), 2)
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.round(size.width * scale))
+  canvas.height = Math.max(1, Math.round(size.height * scale))
+  const context = canvas.getContext('2d')
+  if (!context) throw new Error('Canvas unavailable')
+
+  context.scale(scale, scale)
+  context.fillStyle = '#ffffff'
+  context.fillRect(0, 0, size.width, size.height)
+
+  const image = await loadSvgImage(svg)
+  context.drawImage(image, 0, 0, size.width, size.height)
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob)
+      else reject(new Error('PNG export failed'))
+    }, 'image/png')
+  })
+}
+
+function readSvgSize(svg: string): { width: number; height: number } {
+  const doc = new DOMParser().parseFromString(svg, 'image/svg+xml')
+  const svgNode = doc.documentElement
+  const width = readSvgLength(svgNode.getAttribute('width'))
+  const height = readSvgLength(svgNode.getAttribute('height'))
+  const viewBox = svgNode.getAttribute('viewBox')?.trim().split(/\s+/).map(Number) ?? []
+  return {
+    width: width || (Number.isFinite(viewBox[2]) ? viewBox[2] : 920),
+    height: height || (Number.isFinite(viewBox[3]) ? viewBox[3] : 320),
+  }
+}
+
+function readSvgLength(value: string | null): number {
+  if (!value) return 0
+  const parsed = Number.parseFloat(value)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}
+
+function loadSvgImage(svg: string): Promise<HTMLImageElement> {
+  const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => {
+      URL.revokeObjectURL(url)
+      resolve(image)
+    }
+    image.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('SVG image load failed'))
+    }
+    image.src = url
+  })
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(reader.error ?? new Error('Blob read failed'))
+    reader.readAsDataURL(blob)
+  })
 }

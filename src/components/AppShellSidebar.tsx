@@ -9,6 +9,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
@@ -26,6 +27,7 @@ import type {
   WorkspaceThread,
 } from './types'
 import { SETTINGS_SIDEBAR_NAV } from './app-shell-constants.ts'
+import { sortProjectsForSidebar } from './project-order'
 
 /** 侧栏单区块预览条数（超过则显示「展开显示」）/ Max items before "show more" in sidebar sections */
 const SIDEBAR_SECTION_PREVIEW_LIMIT = 5
@@ -48,6 +50,7 @@ type AppShellSidebarProps = {
   activeViewId: AppViewId
   settingsCategory: SettingsCategoryId
   projects: WorkspaceProject[]
+  projectOrderIds: readonly string[]
   threads: WorkspaceThread[]
   threadRunStates: Record<string, ThreadRunState>
   activeProjectId: string
@@ -67,6 +70,7 @@ type AppShellSidebarProps = {
   onToggleThreadPinned: (threadId: string) => void
   onArchiveThread: (threadId: string) => void
   onToggleProjectPinned: (projectId: string) => void
+  onReorderProject: (projectId: string, targetProjectId: string, position: 'before' | 'after') => void
   onToggleSidebarProjectCollapsed: (projectId: string) => void
   onRemoveProject: (projectId: string) => void
   onRevealProjectInFileManager: (projectPath: string) => void
@@ -82,6 +86,7 @@ export function AppShellSidebar({
   activeViewId,
   settingsCategory,
   projects,
+  projectOrderIds,
   threads,
   threadRunStates,
   activeProjectId,
@@ -101,6 +106,7 @@ export function AppShellSidebar({
   onToggleThreadPinned,
   onArchiveThread,
   onToggleProjectPinned,
+  onReorderProject,
   onToggleSidebarProjectCollapsed,
   onRemoveProject,
   onRevealProjectInFileManager,
@@ -122,18 +128,68 @@ export function AppShellSidebar({
   } | null>(null)
   const [expandedSkillListByProject, setExpandedSkillListByProject] = useState<Record<string, boolean>>({})
   const [expandedThreadListByProject, setExpandedThreadListByProject] = useState<Record<string, boolean>>({})
+  const [draggingProjectId, setDraggingProjectId] = useState<string | null>(null)
+  const [projectDropTarget, setProjectDropTarget] = useState<{
+    projectId: string
+    position: 'before' | 'after'
+  } | null>(null)
   const menuPanelRef = useRef<HTMLDivElement>(null)
   const skillTipPanelRef = useRef<HTMLDivElement>(null)
   const isDarwin = typeof window !== 'undefined' && window.desktop?.platform === 'darwin'
 
   const sortedProjects = useMemo(() => {
-    return [...projects].sort((a, b) => {
-      const pinDiff = (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0)
-      return pinDiff || b.updatedAt - a.updatedAt
-    })
-  }, [projects])
+    return sortProjectsForSidebar(projects, projectOrderIds)
+  }, [projectOrderIds, projects])
 
   const closeContextMenu = () => setContextMenu(null)
+
+  const clearProjectDragState = () => {
+    setDraggingProjectId(null)
+    setProjectDropTarget(null)
+  }
+
+  const startProjectDrag = (event: ReactDragEvent, projectId: string) => {
+    closeContextMenu()
+    setSkillTip(null)
+    setConfirmingArchiveThreadId(null)
+    setDraggingProjectId(projectId)
+    setProjectDropTarget(null)
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('application/x-codex-project-id', projectId)
+    event.dataTransfer.setData('text/plain', projectId)
+  }
+
+  const updateProjectDropTarget = (event: ReactDragEvent, targetProjectId: string) => {
+    const sourceProjectId = draggingProjectId || event.dataTransfer.getData('application/x-codex-project-id')
+    if (!sourceProjectId || sourceProjectId === targetProjectId) {
+      setProjectDropTarget(null)
+      return
+    }
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+    const rect = event.currentTarget.getBoundingClientRect()
+    const position = event.clientY < rect.top + rect.height / 2 ? 'before' : 'after'
+    setProjectDropTarget((current) =>
+      current?.projectId === targetProjectId && current.position === position
+        ? current
+        : { projectId: targetProjectId, position },
+    )
+  }
+
+  const dropProject = (event: ReactDragEvent, targetProjectId: string) => {
+    event.preventDefault()
+    const sourceProjectId = draggingProjectId || event.dataTransfer.getData('application/x-codex-project-id')
+    const position =
+      projectDropTarget?.projectId === targetProjectId
+        ? projectDropTarget.position
+        : event.currentTarget.getBoundingClientRect().top + event.currentTarget.getBoundingClientRect().height / 2 > event.clientY
+          ? 'before'
+          : 'after'
+    if (sourceProjectId && sourceProjectId !== targetProjectId) {
+      onReorderProject(sourceProjectId, targetProjectId, position)
+    }
+    clearProjectDragState()
+  }
 
   useEffect(() => {
     if (contextMenu) setSkillTip(null)
@@ -440,11 +496,26 @@ export function AppShellSidebar({
                       threadsListOverflow && !threadsListFullyExpanded
                         ? projectThreads.slice(0, SIDEBAR_SECTION_PREVIEW_LIMIT)
                         : projectThreads
+                    const projectDropPosition =
+                      projectDropTarget?.projectId === project.id ? projectDropTarget.position : null
                     return (
-                      <section key={project.id} className={`app-project-group${projectActive ? ' is-active' : ''}${project.pinnedAt ? ' is-pinned' : ''}`}>
+                      <section
+                        key={project.id}
+                        className={`app-project-group${projectActive ? ' is-active' : ''}${project.pinnedAt ? ' is-pinned' : ''}${draggingProjectId === project.id ? ' is-dragging' : ''}${projectDropPosition ? ` is-drop-${projectDropPosition}` : ''}`}
+                      >
                         <div
                           className="app-project-row"
+                          draggable
                           onContextMenu={(event) => openProjectMenu(event, project)}
+                          onDragStart={(event) => startProjectDrag(event, project.id)}
+                          onDragOver={(event) => updateProjectDropTarget(event, project.id)}
+                          onDragLeave={(event) => {
+                            const related = event.relatedTarget
+                            if (related instanceof Node && event.currentTarget.contains(related)) return
+                            setProjectDropTarget((current) => (current?.projectId === project.id ? null : current))
+                          }}
+                          onDrop={(event) => dropProject(event, project.id)}
+                          onDragEnd={clearProjectDragState}
                         >
                           <button
                             type="button"

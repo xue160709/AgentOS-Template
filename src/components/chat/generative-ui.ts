@@ -222,18 +222,26 @@ function captureSvg() {
     svg.setAttribute('width', String(width));
     svg.setAttribute('height', String(height));
     if (!svg.getAttribute('viewBox')) svg.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
-    svg.setAttribute('style', varText + (svg.getAttribute('style') || ''));
+    svg.setAttribute('style', varText + 'background:#fff;' + (svg.getAttribute('style') || ''));
     if (styleText.trim()) {
       const styleNode = document.createElementNS(svgNs, 'style');
       styleNode.textContent = styleText;
       svg.insertBefore(styleNode, svg.firstChild);
     }
+    const backgroundNode = document.createElementNS(svgNs, 'rect');
+    backgroundNode.setAttribute('x', '0');
+    backgroundNode.setAttribute('y', '0');
+    backgroundNode.setAttribute('width', '100%');
+    backgroundNode.setAttribute('height', '100%');
+    backgroundNode.setAttribute('fill', '#fff');
+    const insertBefore = styleText.trim() ? styleNodeNextSibling(svg) : svg.firstChild;
+    svg.insertBefore(backgroundNode, insertBefore);
     return serializer.serializeToString(svg);
   }
 
   const wrapper = document.createElement('div');
   wrapper.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
-  wrapper.setAttribute('style', varText + 'width:' + width + 'px;min-height:' + height + 'px;margin:0;background:transparent;color:var(--color-text-primary);font-family:var(--font-sans);');
+  wrapper.setAttribute('style', varText + 'width:' + width + 'px;min-height:' + height + 'px;margin:0;background:#fff;color:var(--color-text-primary);font-family:var(--font-sans);');
   if (styleText.trim()) {
     const styleNode = document.createElement('style');
     styleNode.textContent = styleText;
@@ -242,7 +250,12 @@ function captureSvg() {
   const rootClone = root.cloneNode(true);
   rootClone.querySelectorAll('script').forEach((node) => node.remove());
   wrapper.appendChild(rootClone);
-  return '<svg xmlns="' + svgNs + '" width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + ' ' + height + '"><foreignObject width="100%" height="100%">' + serializer.serializeToString(wrapper) + '</foreignObject></svg>';
+  return '<svg xmlns="' + svgNs + '" width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + ' ' + height + '" style="background:#fff"><rect width="100%" height="100%" fill="#fff"/><foreignObject width="100%" height="100%">' + serializer.serializeToString(wrapper) + '</foreignObject></svg>';
+}
+
+function styleNodeNextSibling(svg) {
+  const first = svg.firstChild;
+  return first && first.nodeName.toLowerCase() === 'style' ? first.nextSibling : first;
 }
 
 function collectCssVars(styleText) {
@@ -281,14 +294,14 @@ window.addEventListener('message', (event) => {
   if (event.data.type === 'generative-ui:update') applyHtml(String(event.data.html || ''));
   if (event.data.type === 'generative-ui:finalize') finalizeHtml(String(event.data.html || ''));
   if (event.data.type === 'generative-ui:capture-svg') {
-    parent.postMessage({ type: 'generative-ui:download-svg', svg: captureSvg() }, '*');
+    parent.postMessage({ type: 'generative-ui:captured-svg', action: event.data.action || 'download-svg', svg: captureSvg() }, '*');
   }
   if (event.data.type === 'generative-ui:theme') {
     const vars = event.data.vars || {};
     for (const [name, value] of Object.entries(vars)) {
       document.documentElement.style.setProperty(name, String(value));
     }
-    document.documentElement.dataset.theme = event.data.prefersDark ? 'dark' : 'light';
+    document.documentElement.dataset.theme = 'light';
     reportHeight();
   }
 });
@@ -335,15 +348,15 @@ export function readWidgetThemeVars(): Record<string, string> {
   return {
     '--font-sans': get('--font-sans', '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'),
     '--font-mono': get('--font-mono', 'ui-monospace, SFMono-Regular, Menlo, monospace'),
-    '--color-background-primary': get('--color-token-main-surface-primary', '#ffffff'),
-    '--color-background-secondary': get('--color-token-bg-secondary', '#f8fafc'),
-    '--color-background-tertiary': get('--color-token-list-hover-background', '#f1f5f9'),
-    '--color-text-primary': get('--color-token-text-primary', '#181818'),
-    '--color-text-secondary': get('--color-token-text-secondary', '#64748b'),
-    '--color-text-tertiary': get('--color-token-text-tertiary', '#94a3b8'),
-    '--color-border-primary': get('--color-token-border-heavy', '#d8dee4'),
-    '--color-border-secondary': get('--color-token-border', '#e5e7eb'),
-    '--color-border-tertiary': get('--color-token-border-light', '#eef2f7'),
+    '--color-background-primary': '#ffffff',
+    '--color-background-secondary': '#f8fafc',
+    '--color-background-tertiary': '#f1f5f9',
+    '--color-text-primary': '#111827',
+    '--color-text-secondary': '#475569',
+    '--color-text-tertiary': '#64748b',
+    '--color-border-primary': '#cbd5e1',
+    '--color-border-secondary': '#e2e8f0',
+    '--color-border-tertiary': '#eef2f7',
     '--color-accent-primary': get('--blue-400', '#0285ff'),
     '--border-radius-md': get('--radius-md', '8px'),
     '--border-radius-lg': get('--radius-lg', '12px'),
@@ -358,11 +371,11 @@ export function buildWidgetStyleBlock(vars: Record<string, string>): string {
 
   return `
 :root{${customProps}color-scheme:light;}
-:root[data-theme="dark"]{color-scheme:dark;}
+:root[data-theme="dark"]{color-scheme:light;}
 *{box-sizing:border-box;}
-html,body{margin:0;padding:0;background:transparent;color:var(--color-text-primary);font-family:var(--font-sans);font-size:14px;line-height:1.5;}
+html,body{margin:0;padding:0;background:#fff;color:var(--color-text-primary);font-family:var(--font-sans);font-size:14px;line-height:1.5;}
 body{overflow:hidden;}
-#widget-root{height:fit-content;min-height:1px;}
+#widget-root{height:fit-content;min-height:1px;background:#fff;}
 #widget-root > :not(style):not(script){max-width:100% !important;}
 #widget-root > div:not([data-keep-width]),
 #widget-root > section:not([data-keep-width]),

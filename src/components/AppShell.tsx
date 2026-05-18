@@ -37,6 +37,7 @@ import type {
 import { AppShellSidebar } from './AppShellSidebar'
 import { AppShellWorkspace } from './AppShellWorkspace'
 import { type ChatPageHandle } from './chat/ChatPage'
+import { projectIdsForSidebar } from './project-order'
 
 const CHAT_WORKSPACE_SAVE_DEBOUNCE_MS = 750
 
@@ -547,6 +548,10 @@ export function AppShell() {
         activeThreadId: '',
         projects: [project, ...prev.projects],
         threads: prev.threads,
+        sidebarPrefs: {
+          ...prev.sidebarPrefs,
+          projectOrderIds: [projectId, ...projectIdsForSidebar(prev.projects, prev.sidebarPrefs.projectOrderIds)],
+        },
       }))
       goHome()
       requestAnimationFrame(() => void chatRef.current?.focusComposer())
@@ -620,12 +625,53 @@ export function AppShell() {
 
   const toggleProjectPinned = useCallback((projectId: string) => {
     const now = Date.now()
-    updateChatWorkspace((prev) => ({
-      ...prev,
-      projects: prev.projects.map((project) =>
-        project.id === projectId ? { ...project, pinnedAt: project.pinnedAt ? undefined : now, updatedAt: now } : project,
-      ),
-    }))
+    updateChatWorkspace((prev) => {
+      const target = prev.projects.find((project) => project.id === projectId)
+      if (!target) return prev
+
+      const currentOrder = projectIdsForSidebar(prev.projects, prev.sidebarPrefs.projectOrderIds)
+      const nextOrder = target.pinnedAt
+        ? currentOrder
+        : [projectId, ...currentOrder.filter((id) => id !== projectId)]
+
+      return {
+        ...prev,
+        projects: prev.projects.map((project) =>
+          project.id === projectId
+            ? { ...project, pinnedAt: project.pinnedAt ? undefined : now, updatedAt: now }
+            : project,
+        ),
+        sidebarPrefs: {
+          ...prev.sidebarPrefs,
+          projectOrderIds: nextOrder,
+        },
+      }
+    })
+  }, [updateChatWorkspace])
+
+  const reorderProject = useCallback((projectId: string, targetProjectId: string, position: 'before' | 'after') => {
+    updateChatWorkspace((prev) => {
+      if (projectId === targetProjectId) return prev
+      const projectIds = new Set(prev.projects.map((project) => project.id))
+      if (!projectIds.has(projectId) || !projectIds.has(targetProjectId)) return prev
+
+      const currentOrder = projectIdsForSidebar(prev.projects, prev.sidebarPrefs.projectOrderIds)
+      const withoutDragged = currentOrder.filter((id) => id !== projectId)
+      const targetIndex = withoutDragged.indexOf(targetProjectId)
+      if (targetIndex === -1) return prev
+
+      const insertIndex = position === 'before' ? targetIndex : targetIndex + 1
+      const nextOrder = [...withoutDragged.slice(0, insertIndex), projectId, ...withoutDragged.slice(insertIndex)]
+      if (nextOrder.join('\n') === currentOrder.join('\n')) return prev
+
+      return {
+        ...prev,
+        sidebarPrefs: {
+          ...prev.sidebarPrefs,
+          projectOrderIds: nextOrder,
+        },
+      }
+    })
   }, [updateChatWorkspace])
 
   const toggleSidebarCollapsed = useCallback(() => {
@@ -675,6 +721,7 @@ export function AppShell() {
           sidebarPrefs: {
             ...prev.sidebarPrefs,
             collapsedProjectIds: prev.sidebarPrefs.collapsedProjectIds.filter((id) => id !== projectId),
+            projectOrderIds: prev.sidebarPrefs.projectOrderIds.filter((id) => id !== projectId),
           },
         }
       })
@@ -865,6 +912,7 @@ export function AppShell() {
           activeViewId={activeViewId}
           settingsCategory={settingsCategory}
           projects={chatWorkspace.projects}
+          projectOrderIds={chatWorkspace.sidebarPrefs.projectOrderIds}
           threads={chatWorkspace.threads}
           threadRunStates={threadRunStates}
           activeProjectId={chatWorkspace.activeProjectId}
@@ -884,6 +932,7 @@ export function AppShell() {
           onToggleThreadPinned={toggleThreadPinned}
           onArchiveThread={archiveThread}
           onToggleProjectPinned={toggleProjectPinned}
+          onReorderProject={reorderProject}
           onToggleSidebarProjectCollapsed={toggleSidebarProjectCollapsed}
           onRemoveProject={removeProject}
           onRevealProjectInFileManager={revealProjectInFileManager}
