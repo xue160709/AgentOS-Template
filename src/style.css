@@ -3659,6 +3659,12 @@ button.app-file-tree-row {
   list-style: none;
 }
 
+.status-row__summary--static,
+.activity-row__main--static,
+.thinking-row__header--static {
+  cursor: default;
+}
+
 .status-row__summary::-webkit-details-marker,
 .activity-row__main::-webkit-details-marker,
 .thinking-row__header::-webkit-details-marker {
@@ -3682,6 +3688,10 @@ button.app-file-tree-row {
   transition: transform 0.16s ease;
 }
 
+.status-row__chevron--hidden {
+  visibility: hidden;
+}
+
 .tool-row[open] .status-row__chevron,
 .activity-row[open] .status-row__chevron,
 .thinking-row[open] .status-row__chevron {
@@ -3697,7 +3707,8 @@ button.app-file-tree-row {
 }
 
 .tool-row--running .tool-row__dot {
-  animation: tool-pulse 1.1s ease-in-out infinite;
+  animation: none;
+  background: color-mix(in oklab, var(--color-token-text-secondary) 54%, transparent);
 }
 
 .tool-row--done .tool-row__dot {
@@ -3772,7 +3783,8 @@ button.app-file-tree-row {
 
 .activity-row--running .activity-row__dot,
 .thinking-row--running .thinking-row__dot {
-  animation: tool-pulse 1.1s ease-in-out infinite;
+  animation: none;
+  background: color-mix(in oklab, var(--color-token-text-secondary) 54%, transparent);
 }
 
 .activity-row--done .activity-row__dot,
@@ -3785,7 +3797,7 @@ button.app-file-tree-row {
 }
 
 .activity-row--info .activity-row__dot {
-  background: var(--color-token-link);
+  background: color-mix(in oklab, var(--color-token-text-secondary) 58%, transparent);
 }
 
 .activity-row__title,
@@ -3820,6 +3832,28 @@ button.app-file-tree-row {
   border-left: 1px solid var(--color-token-border);
   color: var(--color-token-text-secondary);
   background: color-mix(in oklab, var(--color-token-foreground) 4%, transparent);
+}
+
+.chat-message__duration--toggle {
+  appearance: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chat-message__duration--toggle:hover,
+.chat-message__duration--toggle:focus-visible {
+  color: var(--color-token-text-primary);
+}
+
+.chat-message__duration--toggle:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--color-token-focus-border) 70%, transparent);
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
 }
 
 .file-diff-row {

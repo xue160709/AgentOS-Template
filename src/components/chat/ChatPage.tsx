@@ -1677,9 +1677,9 @@ function buildMentionSuggestions(
   const files: ComposerSuggestion[] = fileResults.map((file) => ({
     id: `file-${file.path}`,
     kind: 'file',
-    title: file.relativePath,
+    title: file.type === 'directory' ? `${file.relativePath}/` : file.relativePath,
     subtitle: file.type === 'directory' ? t('chat.mentionFileTypeDir') : t('chat.mentionFileTypeFile'),
-    insertText: `${formatFileMention(file.relativePath)} `,
+    insertText: `${formatFileMention(file.relativePath, file.type)} `,
     item: file,
   }))
 
@@ -1709,9 +1709,10 @@ function normalizeSuggestionQuery(value: string): string {
   return value.trim().toLowerCase()
 }
 
-function formatFileMention(relativePath: string): string {
-  if (!/[\s"']/u.test(relativePath)) return `@${relativePath}`
-  return `@"${relativePath.replace(/"/g, '\\"')}"`
+function formatFileMention(relativePath: string, type: ProjectFileSearchItem['type']): string {
+  const mentionPath = type === 'directory' ? `${relativePath.replace(/\/+$/u, '')}/` : relativePath
+  if (!/[\s"']/u.test(mentionPath)) return `@${mentionPath}`
+  return `@"${mentionPath.replace(/"/g, '\\"')}"`
 }
 
 function toChatMessageAttachment(attachment: ClaudeChatAttachment): ChatMessageAttachment {

@@ -89,6 +89,7 @@ const ChatMessage = memo(function ChatMessage({
   const [isEditing, setIsEditing] = useState(false)
   const [draft, setDraft] = useState(item.content)
   const editTextareaRef = useRef<HTMLTextAreaElement>(null)
+  const [isProcessedOpen, setIsProcessedOpen] = useState(true)
 
   useEffect(() => {
     if (!isEditing) setDraft(item.content)
@@ -106,11 +107,18 @@ const ChatMessage = memo(function ChatMessage({
 
   if (item.role === 'assistant' && !item.content.trim() && item.status === 'streaming') return null
 
-  const hasBody = item.content.trim().length > 0 || item.role === 'assistant'
   const attachments = item.attachments ?? []
+  const hasBody =
+    item.role === 'assistant' ? item.content.trim().length > 0 || attachments.length > 0 : item.content.trim().length > 0
   const durationLabel = item.role === 'assistant' && item.durationMs ? formatDuration(item.durationMs) : ''
   const canCopy = item.content.trim().length > 0
   const canSaveEdit = draft.trim().length > 0 && draft.trim() !== item.content.trim()
+  const shouldRenderBubble = isEditing || hasBody
+  const canToggleProcessed =
+    item.role === 'assistant' &&
+    item.status === 'done' &&
+    Boolean(durationLabel) &&
+    (item.content.trim().length > 0 || attachments.length > 0)
 
   const saveEdit = () => {
     const next = draft.trim()
@@ -119,65 +127,84 @@ const ChatMessage = memo(function ChatMessage({
     onEditUserMessage?.(item.id, next)
   }
 
+  const contentNode = (
+    <>
+      {attachments.length > 0 ? <ChatAttachmentList attachments={attachments} /> : null}
+      {isEditing ? (
+        <div className="chat-message-edit">
+          <textarea
+            ref={editTextareaRef}
+            value={draft}
+            aria-label={t('chat.editMessageAria')}
+            onChange={(event) => setDraft(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                event.preventDefault()
+                if (canSaveEdit) saveEdit()
+              }
+              if (event.key === 'Escape') {
+                event.preventDefault()
+                onUserMessageEditDismissed?.()
+                setIsEditing(false)
+                setDraft(item.content)
+              }
+            }}
+          />
+          <div className="chat-message-edit__actions">
+            <button
+              type="button"
+              className="chat-message-edit__btn chat-message-edit__btn--cancel"
+              onClick={() => {
+                onUserMessageEditDismissed?.()
+                setIsEditing(false)
+              }}
+            >
+              <IconInline name="x" />
+              <span>{t('chat.editCancel')}</span>
+            </button>
+            <button type="button" className="chat-message-edit__btn chat-message-edit__btn--submit" disabled={!canSaveEdit} onClick={saveEdit}>
+              <IconInline name="check" />
+              <span>{t('chat.editSubmit')}</span>
+            </button>
+          </div>
+        </div>
+      ) : hasBody ? (
+        item.role === 'assistant' ? (
+          <AssistantMessageContent content={item.content} status={item.status} />
+        ) : (
+          <div dangerouslySetInnerHTML={{ __html: bodyHtml }} />
+        )
+      ) : null}
+    </>
+  )
+
   return (
     <article className={`chat-message chat-message--${item.role} chat-message--${item.status}`}>
       <div className="chat-message__stack">
-        {durationLabel ? (
+        {durationLabel ? canToggleProcessed ? (
+          <button
+            type="button"
+            className="chat-message__duration chat-message__duration--toggle"
+            title={t('chat.responseDurationTitle')}
+            aria-label={t('chat.responseDurationTitle')}
+            aria-expanded={isProcessedOpen}
+            onClick={() => setIsProcessedOpen((value) => !value)}
+          >
+            <span>{t('chat.responseProcessed')}</span>
+            <span>{durationLabel}</span>
+            <IconInline name="chevron" />
+          </button>
+        ) : (
           <span className="chat-message__duration" title={t('chat.responseDurationTitle')} aria-label={t('chat.responseDurationTitle')}>
             <span>{t('chat.responseProcessed')}</span>
             <span>{durationLabel}</span>
             <IconInline name="chevron" />
           </span>
         ) : null}
-        <div className="chat-message__bubble markdown-body">
-          {attachments.length > 0 ? <ChatAttachmentList attachments={attachments} /> : null}
-          {isEditing ? (
-            <div className="chat-message-edit">
-              <textarea
-                ref={editTextareaRef}
-                value={draft}
-                aria-label={t('chat.editMessageAria')}
-                onChange={(event) => setDraft(event.currentTarget.value)}
-                onKeyDown={(event) => {
-                  if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-                    event.preventDefault()
-                    if (canSaveEdit) saveEdit()
-                  }
-                  if (event.key === 'Escape') {
-                    event.preventDefault()
-                    onUserMessageEditDismissed?.()
-                    setIsEditing(false)
-                    setDraft(item.content)
-                  }
-                }}
-              />
-              <div className="chat-message-edit__actions">
-                <button
-                  type="button"
-                  className="chat-message-edit__btn chat-message-edit__btn--cancel"
-                  onClick={() => {
-                    onUserMessageEditDismissed?.()
-                    setIsEditing(false)
-                  }}
-                >
-                  <IconInline name="x" />
-                  <span>{t('chat.editCancel')}</span>
-                </button>
-                <button type="button" className="chat-message-edit__btn chat-message-edit__btn--submit" disabled={!canSaveEdit} onClick={saveEdit}>
-                  <IconInline name="check" />
-                  <span>{t('chat.editSubmit')}</span>
-                </button>
-              </div>
-            </div>
-          ) : hasBody ? (
-            item.role === 'assistant' ? (
-              <AssistantMessageContent content={item.content} status={item.status} />
-            ) : (
-              <div dangerouslySetInnerHTML={{ __html: bodyHtml }} />
-            )
-          ) : null}
-        </div>
-        {!isEditing ? (
+        {shouldRenderBubble && (!canToggleProcessed || isProcessedOpen) ? (
+          <div className="chat-message__bubble markdown-body">{contentNode}</div>
+        ) : null}
+        {!isEditing && shouldRenderBubble && (!canToggleProcessed || isProcessedOpen) ? (
           <div className="chat-message-actions" aria-label={t('chat.messageActionsAria')}>
             <button
               type="button"
@@ -274,55 +301,68 @@ const ToolRow = memo(function ToolRow({ item }: { item: ChatToolItem }) {
     error: t('chat.toolError'),
     running: t('chat.toolRunning'),
   }
-  const hasDetails = Boolean(item.detail || item.inputPreview)
+  const hasDetails = Boolean(item.inputPreview?.trim())
   const [isOpen, setIsOpen] = useState(item.status === 'running')
 
   useEffect(() => {
     setIsOpen(item.status === 'running')
   }, [item.status])
 
+  const summary = (
+    <>
+      <span className={`status-row__chevron${hasDetails ? '' : ' status-row__chevron--hidden'}`} aria-hidden="true" />
+      <span className="tool-row__dot" />
+      <span className="tool-row__name">{item.name}</span>
+      <span className="tool-row__status">{statusLabel[item.status]}</span>
+      {item.detail ? <span className="tool-row__detail">{item.detail}</span> : null}
+    </>
+  )
+
+  if (!hasDetails) {
+    return (
+      <div className={`tool-row tool-row--${item.status} tool-row--static`}>
+        <div className="status-row__summary status-row__summary--static">{summary}</div>
+      </div>
+    )
+  }
+
   return (
-    <details
-      className={`tool-row tool-row--${item.status}`}
-      open={isOpen}
-      onToggle={(event) => setIsOpen(event.currentTarget.open)}
-    >
-      <summary className="status-row__summary">
-        <span className="status-row__chevron" aria-hidden="true" />
-        <span className="tool-row__dot" />
-        <span className="tool-row__name">{item.name}</span>
-        <span className="tool-row__status">{statusLabel[item.status]}</span>
-        {item.detail ? <span className="tool-row__detail">{item.detail}</span> : null}
-      </summary>
-      {hasDetails ? (
-        <div className="status-row__body">
-          {item.inputPreview ? <code>{item.inputPreview}</code> : null}
-        </div>
-      ) : null}
+    <details className={`tool-row tool-row--${item.status}`} open={isOpen} onToggle={(event) => setIsOpen(event.currentTarget.open)}>
+      <summary className="status-row__summary">{summary}</summary>
+      <div className="status-row__body">{item.inputPreview ? <code>{item.inputPreview}</code> : null}</div>
     </details>
   )
 })
 
 const ThinkingRow = memo(function ThinkingRow({ item }: { item: ChatThinkingItem }) {
   const { t } = useI18n()
+  const hasDetails = Boolean(item.content.trim())
   const [isOpen, setIsOpen] = useState(item.status === 'running')
 
   useEffect(() => {
     setIsOpen(item.status === 'running')
   }, [item.status])
 
+  const summary = (
+    <>
+      <span className={`status-row__chevron${hasDetails ? '' : ' status-row__chevron--hidden'}`} aria-hidden="true" />
+      <span className="thinking-row__dot" />
+      <span className="thinking-row__title">{item.title}</span>
+      <span className="thinking-row__status">{item.status === 'running' ? t('chat.thinkingRunning') : t('chat.thinkingDone')}</span>
+    </>
+  )
+
+  if (!hasDetails) {
+    return (
+      <div className={`thinking-row thinking-row--${item.status} thinking-row--static`}>
+        <div className="thinking-row__header thinking-row__header--static">{summary}</div>
+      </div>
+    )
+  }
+
   return (
-    <details
-      className={`thinking-row thinking-row--${item.status}`}
-      open={isOpen}
-      onToggle={(event) => setIsOpen(event.currentTarget.open)}
-    >
-      <summary className="thinking-row__header">
-        <span className="status-row__chevron" aria-hidden="true" />
-        <span className="thinking-row__dot" />
-        <span className="thinking-row__title">{item.title}</span>
-        <span className="thinking-row__status">{item.status === 'running' ? t('chat.thinkingRunning') : t('chat.thinkingDone')}</span>
-      </summary>
+    <details className={`thinking-row thinking-row--${item.status}`} open={isOpen} onToggle={(event) => setIsOpen(event.currentTarget.open)}>
+      <summary className="thinking-row__header">{summary}</summary>
       {item.content ? <pre>{item.content}</pre> : null}
     </details>
   )
@@ -336,25 +376,34 @@ const ActivityRow = memo(function ActivityRow({ item }: { item: ChatActivityItem
     info: t('chat.activityInfo'),
     running: t('chat.activityRunning'),
   }
+  const hasDetails = Boolean(item.preview?.trim())
   const [isOpen, setIsOpen] = useState(item.status === 'running')
 
   useEffect(() => {
     setIsOpen(item.status === 'running')
   }, [item.status])
 
+  const summary = (
+    <>
+      <span className={`status-row__chevron${hasDetails ? '' : ' status-row__chevron--hidden'}`} aria-hidden="true" />
+      <span className="activity-row__dot" />
+      <span className="activity-row__title">{item.title}</span>
+      <span className="activity-row__status">{statusLabel[item.status]}</span>
+      {item.detail ? <span className="activity-row__detail">{item.detail}</span> : null}
+    </>
+  )
+
+  if (!hasDetails) {
+    return (
+      <div className={`activity-row activity-row--${item.status} activity-row--static`}>
+        <div className="activity-row__main activity-row__main--static">{summary}</div>
+      </div>
+    )
+  }
+
   return (
-    <details
-      className={`activity-row activity-row--${item.status}`}
-      open={isOpen}
-      onToggle={(event) => setIsOpen(event.currentTarget.open)}
-    >
-      <summary className="activity-row__main">
-        <span className="status-row__chevron" aria-hidden="true" />
-        <span className="activity-row__dot" />
-        <span className="activity-row__title">{item.title}</span>
-        <span className="activity-row__status">{statusLabel[item.status]}</span>
-        {item.detail ? <span className="activity-row__detail">{item.detail}</span> : null}
-      </summary>
+    <details className={`activity-row activity-row--${item.status}`} open={isOpen} onToggle={(event) => setIsOpen(event.currentTarget.open)}>
+      <summary className="activity-row__main">{summary}</summary>
       {item.preview ? <pre>{item.preview}</pre> : null}
     </details>
   )
