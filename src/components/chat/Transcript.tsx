@@ -23,7 +23,7 @@ import { GenerativeWidget } from './GenerativeWidget'
 import { containsGenerativeWidget, parseGenerativeUiSegments } from './generative-ui'
 import { escapeHtml, renderMarkdown } from './markdown'
 
-type ProcessTranscriptItem = ChatToolItem | ChatThinkingItem | ChatActivityItem | ChatFileDiffItem
+type ProcessTranscriptItem = ChatToolItem | ChatThinkingItem | ChatActivityItem
 
 type TranscriptRenderEntry =
   | {
@@ -176,7 +176,7 @@ function groupTranscriptForRendering(items: TranscriptItem[]): TranscriptRenderE
 }
 
 function isProcessTranscriptItem(item: TranscriptItem): item is ProcessTranscriptItem {
-  return item.type === 'tool' || item.type === 'thinking' || item.type === 'activity' || item.type === 'file_diff'
+  return item.type === 'tool' || item.type === 'thinking' || item.type === 'activity'
 }
 
 function getAssistantRequestId(item: ChatMessageItem): string | undefined {
@@ -185,7 +185,7 @@ function getAssistantRequestId(item: ChatMessageItem): string | undefined {
 
 function getProcessRequestId(item: ProcessTranscriptItem): string | undefined {
   if ('requestId' in item && item.requestId) return item.requestId
-  const id = item.type === 'activity' ? item.id : item.type === 'thinking' ? item.thinkingId : item.type === 'file_diff' ? item.requestId : ''
+  const id = item.type === 'activity' ? item.id : item.type === 'thinking' ? item.thinkingId : ''
   const match = id.match(/^(?:activity|thinking)-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-/i)
   return match?.[1]
 }
@@ -205,8 +205,7 @@ function uniqueProcessItems(items: ProcessTranscriptItem[]): ProcessTranscriptIt
 function getProcessItemKey(item: ProcessTranscriptItem): string {
   if (item.type === 'tool') return `tool:${item.toolUseId}`
   if (item.type === 'thinking') return `thinking:${item.thinkingId}`
-  if (item.type === 'activity') return `activity:${item.id}`
-  return `file_diff:${item.changeSetId}`
+  return `activity:${item.id}`
 }
 
 function ProcessTraceBlock({
