@@ -80,6 +80,15 @@ export function AppShellWorkspace({
   const filePaneRef = useRef<AppFileTreePaneHandle>(null)
   const agentMode = useWorkspaceAgentMode(activeProject)
 
+  /** 与 ChatPage.showThreadView 一致：有消息或插件定制线程时视为对话流，否则为项目首页 / Mirrors ChatPage.showThreadView */
+  const chatItems = activeThread?.chatState.items ?? []
+  const hasThreadMessages = chatItems.length > 0
+  const showConversationFlow =
+    hasThreadMessages ||
+    activeThread?.purpose === 'home-plugin-customization' ||
+    activeThread?.purpose === 'home-plugin-card-customization'
+  const showAgentModeToolbar = activeViewId === 'home' && !showConversationFlow
+
   useEffect(() => {
     if (activeViewId === 'settings') setSidePanel((prev) => ({ ...prev, open: false }))
   }, [activeViewId])
@@ -106,9 +115,7 @@ export function AppShellWorkspace({
           </span>
           <div className="app-workspace-drag-gap draggable" aria-hidden="true" />
           <div className="app-workspace-actions no-drag">
-            <AgentModeMenu
-              agent={agentMode}
-            />
+            {showAgentModeToolbar ? <AgentModeMenu agent={agentMode} /> : null}
             <button
               type="button"
               className={`btn btn-toolbar${folderToolbarActive ? ' is-active' : ''}`}

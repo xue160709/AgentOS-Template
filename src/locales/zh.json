@@ -278,7 +278,7 @@
   "chat": {
     "ariaPage": "Claude Agent 聊天",
     "emptyHeading": "你需要我做什么？",
-    "dataCardDraftHeading": "我们需要构建什么产品卡片？",
+    "dataCardDraftHeading": "我们需要构建什么数据卡片？",
     "scrollBottomTitle": "滚动到底部",
     "scrollBottomAria": "滚动到底部",
     "composerPlaceholder": "要求后续变更",
