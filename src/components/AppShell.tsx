@@ -12,6 +12,7 @@ import {
   persistChatWorkspaceState,
 } from '../chat-workspace-persistence'
 import {
+  HOME_PLUGINS_DIR_RELATIVE,
   SIDEBAR_HIDDEN_SKILLS_STORAGE_KEY,
   SIDEBAR_PROJECT_SKILLS_STORAGE_KEY,
   SIDEBAR_WIDTH_STORAGE_KEY,
@@ -407,8 +408,11 @@ export function AppShell() {
       setSelectedProjectSkill(null)
       let threadId = ''
       let createdThread = false
-      let shouldAutoSubmit = false
+      let reusedExistingThread = false
       const now = Date.now()
+      const projectPath =
+        chatWorkspace?.projects.find((project) => project.id === projectId)?.path.trim() ?? ''
+
       updateChatWorkspace((prev) => {
         if (!prev.projects.some((project) => project.id === projectId)) return prev
         const existing = prev.threads.find(
@@ -419,7 +423,7 @@ export function AppShell() {
         )
         if (existing) {
           threadId = existing.id
-          shouldAutoSubmit = existing.chatState.items.length === 0 && !threadRunStates[existing.id]
+          reusedExistingThread = true
           return {
             ...prev,
             activeProjectId: projectId,
@@ -429,7 +433,6 @@ export function AppShell() {
 
         threadId = createId('thread')
         createdThread = true
-        shouldAutoSubmit = true
         const nextThread: WorkspaceThread = {
           id: threadId,
           projectId,
@@ -447,29 +450,42 @@ export function AppShell() {
           threads: [nextThread, ...prev.threads],
         }
       })
-      if (threadId && createdThread) void window.claudeChat?.newThread(threadId)
       goHome()
-      requestAnimationFrame(() => {
-        if (!threadId || !shouldAutoSubmit) {
-          void chatRef.current?.focusComposer()
-          return
+
+      void (async () => {
+        let shouldAutoSubmit = false
+        if (!reusedExistingThread && createdThread && projectPath) {
+          const hasHomePluginsDir =
+            (await window.desktop?.pathExistsUnderProject?.(projectPath, HOME_PLUGINS_DIR_RELATIVE)) ?? true
+          shouldAutoSubmit = !hasHomePluginsDir
         }
-        const submit = chatRef.current?.submitPromptInThread(
-          projectId,
-          threadId,
-          t('thread.homePluginCustomizationPrompt'),
-          'home-plugin-customization',
-        )
-        if (!submit) {
-          void chatRef.current?.focusComposer()
-          return
+
+        if (threadId && createdThread) {
+          await window.claudeChat?.newThread(threadId)
         }
-        void submit.then((submitted) => {
-          if (!submitted) void chatRef.current?.focusComposer()
+
+        requestAnimationFrame(() => {
+          if (!threadId || !shouldAutoSubmit) {
+            void chatRef.current?.focusComposer()
+            return
+          }
+          const submit = chatRef.current?.submitPromptInThread(
+            projectId,
+            threadId,
+            t('thread.homePluginCustomizationPrompt'),
+            'home-plugin-customization',
+          )
+          if (!submit) {
+            void chatRef.current?.focusComposer()
+            return
+          }
+          void submit.then((submitted) => {
+            if (!submitted) void chatRef.current?.focusComposer()
+          })
         })
-      })
+      })()
     },
-    [goHome, threadRunStates, updateChatWorkspace, t],
+    [chatWorkspace?.projects, goHome, updateChatWorkspace, t],
   )
 
   const runProjectSkill = useCallback((projectId: string, prompt: string) => {

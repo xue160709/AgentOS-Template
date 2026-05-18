@@ -18,6 +18,12 @@ export const SIDEBAR_HIDDEN_SKILLS_STORAGE_KEY = 'CodeX-UI-Template-sidebar-hidd
 /** 侧栏最大宽度占视口比例 / Max sidebar width as viewport ratio */
 export const SIDEBAR_MAX_RATIO = 0.3
 
+/**
+ * 项目内 Home Plugins 根目录（相对项目根）。
+ * Used to decide whether opening the customization thread should auto-submit the bootstrap prompt.
+ */
+export const HOME_PLUGINS_DIR_RELATIVE = '.agents/home-plugins'
+
 /** 默认设置分类 / Default settings category */
 export const DEFAULT_SETTINGS_CATEGORY: SettingsCategoryId = 'general'
 

@@ -40,6 +40,9 @@ contextBridge.exposeInMainWorld('desktop', {
   listAgentContext(rootPath: string) {
     return ipcRenderer.invoke('desktop:list-agent-context', rootPath)
   },
+  pathExistsUnderProject(rootPath: string, relativePath: string) {
+    return ipcRenderer.invoke('desktop:path-exists-under-project', rootPath, relativePath) as Promise<boolean>
+  },
   runHomePlugin(rootPath: string, options?: unknown) {
     return ipcRenderer.invoke('desktop:run-home-plugin', rootPath, options)
   },
