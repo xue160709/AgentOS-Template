@@ -83,34 +83,57 @@ export const Transcript = memo(function Transcript({
 
   return (
     <>
-      {entries.map((entry) =>
-        entry.kind === 'assistant-turn' ? (
+      {entries.map((entry) => {
+        if (entry.kind !== 'assistant-turn') return renderItem(entry.item)
+        const hasProcessTrace = Boolean(entry.message.durationMs && entry.processItems.length > 0)
+        return (
           <Fragment key={`assistant-turn-${entry.message.id}`}>
-            <ProcessTraceBlock
-              durationMs={entry.message.durationMs}
-              processItems={entry.processItems}
-              renderItem={renderItem}
-            />
+            {hasProcessTrace ? (
+              <ProcessTraceBlock
+                durationMs={entry.message.durationMs}
+                processItems={entry.processItems}
+                renderItem={renderItem}
+              />
+            ) : (
+              entry.processItems.map((item) => renderItem(item))
+            )}
             <ChatMessage
               item={entry.message}
               canEdit={!isRunning}
-              showDurationLabel={false}
+              showDurationLabel={!hasProcessTrace}
               onCopyMessage={onCopyMessage}
               onEditUserMessage={onEditUserMessage}
               onUserMessageEditDismissed={onUserMessageEditDismissed}
             />
           </Fragment>
-        ) : (
-          renderItem(entry.item)
-        ),
-      )}
+        )
+      })}
     </>
   )
 })
 
 function groupTranscriptForRendering(items: TranscriptItem[]): TranscriptRenderEntry[] {
+  const assistantRequestIds = new Set<string>()
+  for (const item of items) {
+    if (item.type === 'message' && item.role === 'assistant') {
+      const requestId = getAssistantRequestId(item)
+      if (requestId) assistantRequestIds.add(requestId)
+    }
+  }
+
+  const processItemsByRequestId = new Map<string, ProcessTranscriptItem[]>()
+  for (const item of items) {
+    if (!isProcessTranscriptItem(item)) continue
+    const requestId = getProcessRequestId(item)
+    if (!requestId || !assistantRequestIds.has(requestId)) continue
+    const current = processItemsByRequestId.get(requestId) ?? []
+    current.push(item)
+    processItemsByRequestId.set(requestId, current)
+  }
+
   const entries: TranscriptRenderEntry[] = []
   let pendingProcessItems: ProcessTranscriptItem[] = []
+  let lastAssistantEntry: Extract<TranscriptRenderEntry, { kind: 'assistant-turn' }> | null = null
 
   const flushProcessItems = () => {
     for (const item of pendingProcessItems) entries.push({ kind: 'item', item })
@@ -119,18 +142,33 @@ function groupTranscriptForRendering(items: TranscriptItem[]): TranscriptRenderE
 
   for (const item of items) {
     if (isProcessTranscriptItem(item)) {
+      const requestId = getProcessRequestId(item)
+      if (requestId && assistantRequestIds.has(requestId)) continue
+      if (lastAssistantEntry) {
+        lastAssistantEntry.processItems = uniqueProcessItems([...lastAssistantEntry.processItems, item])
+        continue
+      }
       pendingProcessItems.push(item)
       continue
     }
 
-    if (item.type === 'message' && item.role === 'assistant' && item.durationMs && pendingProcessItems.length > 0) {
-      entries.push({ kind: 'assistant-turn', message: item, processItems: pendingProcessItems })
+    if (item.type === 'message' && item.role === 'assistant') {
+      const requestId = getAssistantRequestId(item)
+      const requestProcessItems = requestId ? processItemsByRequestId.get(requestId) ?? [] : []
+      const entry: Extract<TranscriptRenderEntry, { kind: 'assistant-turn' }> = {
+        kind: 'assistant-turn',
+        message: item,
+        processItems: uniqueProcessItems([...pendingProcessItems, ...requestProcessItems]),
+      }
+      entries.push(entry)
       pendingProcessItems = []
+      lastAssistantEntry = entry
       continue
     }
 
     flushProcessItems()
     entries.push({ kind: 'item', item })
+    if (item.type === 'message' && item.role === 'user') lastAssistantEntry = null
   }
 
   flushProcessItems()
@@ -139,6 +177,36 @@ function groupTranscriptForRendering(items: TranscriptItem[]): TranscriptRenderE
 
 function isProcessTranscriptItem(item: TranscriptItem): item is ProcessTranscriptItem {
   return item.type === 'tool' || item.type === 'thinking' || item.type === 'activity' || item.type === 'file_diff'
+}
+
+function getAssistantRequestId(item: ChatMessageItem): string | undefined {
+  return item.id.startsWith('assistant-') ? item.id.slice('assistant-'.length) : undefined
+}
+
+function getProcessRequestId(item: ProcessTranscriptItem): string | undefined {
+  if ('requestId' in item && item.requestId) return item.requestId
+  const id = item.type === 'activity' ? item.id : item.type === 'thinking' ? item.thinkingId : item.type === 'file_diff' ? item.requestId : ''
+  const match = id.match(/^(?:activity|thinking)-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-/i)
+  return match?.[1]
+}
+
+function uniqueProcessItems(items: ProcessTranscriptItem[]): ProcessTranscriptItem[] {
+  const seen = new Set<string>()
+  const unique: ProcessTranscriptItem[] = []
+  for (const item of items) {
+    const key = getProcessItemKey(item)
+    if (seen.has(key)) continue
+    seen.add(key)
+    unique.push(item)
+  }
+  return unique
+}
+
+function getProcessItemKey(item: ProcessTranscriptItem): string {
+  if (item.type === 'tool') return `tool:${item.toolUseId}`
+  if (item.type === 'thinking') return `thinking:${item.thinkingId}`
+  if (item.type === 'activity') return `activity:${item.id}`
+  return `file_diff:${item.changeSetId}`
 }
 
 function ProcessTraceBlock({
@@ -164,7 +232,17 @@ function ProcessTraceBlock({
         title={t('chat.responseDurationTitle')}
         aria-label={t('chat.responseDurationTitle')}
         aria-expanded={isOpen}
-        onClick={() => setIsOpen((value) => !value)}
+        onClick={(event) => {
+          const scrollRegion = event.currentTarget.closest('.chat-scroll-region') as HTMLElement | null
+          const scrollTop = scrollRegion?.scrollTop
+          window.dispatchEvent(new CustomEvent('chat-process-trace:toggle'))
+          setIsOpen((value) => !value)
+          if (scrollRegion && scrollTop !== undefined) {
+            window.requestAnimationFrame(() => {
+              scrollRegion.scrollTop = Math.min(scrollTop, Math.max(0, scrollRegion.scrollHeight - scrollRegion.clientHeight))
+            })
+          }
+        }}
       >
         <span>{t('chat.responseProcessed')}</span>
         <span>{durationLabel}</span>

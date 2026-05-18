@@ -49,6 +49,7 @@ import { Composer } from './Composer'
 import type { BuiltInSlashCommand, ChatModelMenuRow, ComposerSuggestion, ComposerTrigger, PermissionModeRow } from './local-types'
 
 const SETTINGS_CHANGED_EVENT = 'claude-agent-settings:changed'
+const PROCESS_TRACE_TOGGLE_EVENT = 'chat-process-trace:toggle'
 const MAX_COMPOSER_SUGGESTIONS = 64
 const MAX_COMPOSER_ATTACHMENTS = 8
 
@@ -196,6 +197,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   const scrollIntentRef = useRef<'none' | 'force-bottom'>('none')
   /** 取消 / Esc 关闭编辑时抑制贴底，避免 ResizeObserver 误判 isNearBottom 把视口滚到底 */
   const suppressTranscriptResizeStickRef = useRef(false)
+  const suppressTranscriptResizeStickTimerRef = useRef<number | null>(null)
   const isFirstTranscriptLayoutRef = useRef(true)
   const isRunningRef = useRef(false)
   const globalDisplayModelRef = useRef(globalDisplayModel)
@@ -529,11 +531,33 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     setShowScrollButton((prev) => shouldShowScrollToBottom(sr, prev))
   }, [])
 
-  const notifyUserMessageEditDismissed = useCallback(() => {
+  const suppressTranscriptResizeStick = useCallback((durationMs = 320) => {
     suppressTranscriptResizeStickRef.current = true
-    window.setTimeout(() => {
+    if (suppressTranscriptResizeStickTimerRef.current !== null) {
+      window.clearTimeout(suppressTranscriptResizeStickTimerRef.current)
+    }
+    suppressTranscriptResizeStickTimerRef.current = window.setTimeout(() => {
       suppressTranscriptResizeStickRef.current = false
-    }, 280)
+      suppressTranscriptResizeStickTimerRef.current = null
+    }, durationMs)
+  }, [])
+
+  const notifyUserMessageEditDismissed = useCallback(() => {
+    suppressTranscriptResizeStick(280)
+  }, [suppressTranscriptResizeStick])
+
+  useEffect(() => {
+    const onProcessTraceToggle = () => suppressTranscriptResizeStick(360)
+    window.addEventListener(PROCESS_TRACE_TOGGLE_EVENT, onProcessTraceToggle)
+    return () => window.removeEventListener(PROCESS_TRACE_TOGGLE_EVENT, onProcessTraceToggle)
+  }, [suppressTranscriptResizeStick])
+
+  useEffect(() => {
+    return () => {
+      if (suppressTranscriptResizeStickTimerRef.current !== null) {
+        window.clearTimeout(suppressTranscriptResizeStickTimerRef.current)
+      }
+    }
   }, [])
 
   useLayoutEffect(() => {
@@ -761,12 +785,13 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
           if (idx >= 0) {
             const next = [...prev.items]
             const it = next[idx] as ChatThinkingItem
-            next[idx] = { ...it, status: 'running' }
+            next[idx] = { ...it, requestId: it.requestId ?? event.requestId, status: 'running' }
             return { ...prev, items: next }
           }
           const row: ChatThinkingItem = {
             type: 'thinking',
             id: event.thinkingId,
+            requestId: event.requestId,
             thinkingId: event.thinkingId,
             title: event.title,
             content: '',
@@ -784,12 +809,13 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
           if (idx >= 0) {
             const next = [...prev.items]
             const it = next[idx] as ChatThinkingItem
-            next[idx] = { ...it, content: it.content + event.text, status: 'running' }
+            next[idx] = { ...it, requestId: it.requestId ?? event.requestId, content: it.content + event.text, status: 'running' }
             return { ...prev, items: next }
           }
           const row: ChatThinkingItem = {
             type: 'thinking',
             id: event.thinkingId,
+            requestId: event.requestId,
             thinkingId: event.thinkingId,
             title: 'Think',
             content: event.text,
@@ -806,7 +832,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
           if (idx < 0) return prev
           const next = [...prev.items]
           const it = next[idx] as ChatThinkingItem
-          next[idx] = { ...it, status: 'done' }
+          next[idx] = { ...it, requestId: it.requestId ?? event.requestId, status: 'done' }
           return { ...prev, items: next }
         })
         return
@@ -819,12 +845,13 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
           if (existingIdx >= 0) {
             const next = [...prev.items]
             const it = next[existingIdx] as ChatToolItem
-            next[existingIdx] = { ...it, inputPreview: event.inputPreview || it.inputPreview, status: 'running' }
+            next[existingIdx] = { ...it, requestId: it.requestId ?? event.requestId, inputPreview: event.inputPreview || it.inputPreview, status: 'running' }
             return { ...prev, items: next }
           }
           const row: ChatToolItem = {
             type: 'tool',
             id: `tool-${event.toolUseId}`,
+            requestId: event.requestId,
             toolUseId: event.toolUseId,
             name: event.name,
             inputPreview: event.inputPreview,
@@ -843,6 +870,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
           const it = next[idx] as ChatToolItem
           next[idx] = {
             ...it,
+            requestId: it.requestId ?? event.requestId,
             inputPreview: event.inputPreview ?? it.inputPreview,
             detail: event.detail ?? it.detail,
           }
@@ -857,7 +885,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
           if (idx < 0) return prev
           const next = [...prev.items]
           const it = next[idx] as ChatToolItem
-          next[idx] = { ...it, status: event.status, detail: event.detail ?? it.detail }
+          next[idx] = { ...it, requestId: it.requestId ?? event.requestId, status: event.status, detail: event.detail ?? it.detail }
           return { ...prev, items: next }
         })
         return
@@ -883,6 +911,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
             const it = next[idx] as ChatActivityItem
             next[idx] = {
               ...it,
+              requestId: it.requestId ?? event.requestId,
               title: event.title,
               status: event.status,
               detail: event.detail,
@@ -893,6 +922,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
           const row: ChatActivityItem = {
             type: 'activity',
             id: event.activityId,
+            requestId: event.requestId,
             title: event.title,
             status: event.status,
             detail: event.detail,
