@@ -1106,7 +1106,7 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
 .app-workspace-actions {
   display: flex;
   align-items: center;
-  gap: calc(var(--spacing) * 2);
+  gap: var(--spacing);
 }
 
 .agent-mode-menu {
@@ -1116,11 +1116,12 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
 }
 
 .agent-mode-toolbar-switch {
-  --agent-switch-width: 74px;
-  --agent-switch-height: 36px;
+  --agent-switch-width: 44px;
+  --agent-switch-height: 32px;
   position: relative;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   width: var(--agent-switch-width);
   height: var(--agent-switch-height);
   cursor: pointer;
@@ -1136,11 +1137,11 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
 .agent-mode-toolbar-switch__track {
   position: relative;
   display: block;
-  width: 100%;
-  height: 100%;
+  width: 42px;
+  height: 24px;
   border: 1px solid var(--color-token-border-light);
   border-radius: 999px;
-  background: color-mix(in oklab, var(--color-token-main-surface-primary) 92%, var(--color-token-foreground));
+  background: var(--color-token-bg-secondary);
   transition:
     background var(--transition-duration-basic) var(--transition-ease-basic),
     border-color var(--transition-duration-basic) var(--transition-ease-basic);
@@ -1148,35 +1149,40 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
 
 .agent-mode-toolbar-switch__thumb {
   position: absolute;
-  top: 3px;
-  left: 3px;
+  top: 2px;
+  left: 2px;
   display: inline-flex;
-  width: 28px;
-  height: 28px;
+  width: 18px;
+  height: 18px;
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  color: var(--color-token-text-secondary);
+  color: var(--color-token-text-tertiary);
   background: var(--color-token-main-surface-primary);
-  box-shadow: 0 2px 8px color-mix(in oklab, var(--color-token-foreground) 14%, transparent);
+  box-shadow: var(--shadow-xs);
   transition:
     transform var(--transition-duration-basic) var(--transition-ease-basic),
     color var(--transition-duration-basic) var(--transition-ease-basic);
 }
 
+.agent-mode-toolbar-switch__thumb .icon-xs {
+  width: 12px;
+  height: 12px;
+}
+
 .agent-mode-toolbar-switch.is-on .agent-mode-toolbar-switch__track {
-  border-color: color-mix(in oklab, var(--color-token-button-background) 58%, var(--color-token-border));
-  background: color-mix(in oklab, var(--color-token-button-background) 24%, var(--color-token-main-surface-primary));
+  border-color: var(--color-token-button-background);
+  background: var(--color-token-button-background);
 }
 
 .agent-mode-toolbar-switch.is-on .agent-mode-toolbar-switch__thumb {
-  color: var(--color-token-button-foreground);
-  background: var(--color-token-button-background);
-  transform: translateX(38px);
+  color: var(--color-token-text-primary);
+  background: var(--color-token-button-foreground);
+  transform: translateX(18px);
 }
 
 .agent-mode-toolbar-switch:focus-within .agent-mode-toolbar-switch__track {
-  outline: 2px solid color-mix(in oklab, var(--color-token-button-background) 38%, transparent);
+  outline: 2px solid var(--color-focus-border);
   outline-offset: 2px;
 }
 
@@ -1705,14 +1711,16 @@ button.app-file-tree-row {
 
 .btn-toolbar {
   height: var(--size-chrome-control);
+  width: var(--size-chrome-control);
   min-width: var(--size-chrome-control);
-  padding: 0 calc(var(--spacing) * 2);
-  color: var(--color-token-text-primary);
+  padding: 0;
+  color: var(--color-token-text-secondary);
   background: transparent;
   border-color: transparent;
   border-radius: var(--radius-sm);
 }
 .btn-toolbar:hover:not(:disabled) {
+  color: var(--color-token-text-primary);
   background: var(--color-token-list-hover-background);
 }
 .btn-toolbar:disabled {
@@ -1721,8 +1729,9 @@ button.app-file-tree-row {
 }
 
 .btn-toolbar.is-active {
-  background: var(--color-token-list-hover-background);
-  outline: 1px solid var(--color-token-border);
+  color: var(--color-token-text-primary);
+  background: var(--color-token-list-active-selection-background);
+  outline: 0;
 }
 
 .btn-primary {
@@ -2628,7 +2637,7 @@ button.app-file-tree-row {
 
 .chat-start-view__below-composer {
   width: min(920px, calc(100% - var(--spacing) * 10));
-  margin: calc(var(--spacing) * 2.5) auto 0;
+  margin: calc(var(--spacing) * 3) auto 0;
   text-align: left;
 }
 
@@ -2668,13 +2677,18 @@ button.app-file-tree-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: calc(var(--spacing) * 3);
+  min-height: var(--size-chrome-control);
+  gap: calc(var(--spacing) * 2);
+}
+
+.project-home-toolbar .chat-start-view__project {
+  margin-left: 0;
 }
 
 .project-home-toolbar__actions {
   display: inline-flex;
   align-items: center;
-  gap: calc(var(--spacing) * 1.5);
+  gap: var(--spacing);
   flex-shrink: 0;
 }
 
@@ -2687,20 +2701,30 @@ button.app-file-tree-row {
 
 .project-home-icon-button {
   display: inline-flex;
-  width: 34px;
-  height: 34px;
+  width: var(--size-chrome-control);
+  height: var(--size-chrome-control);
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--color-token-border-light);
-  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   color: var(--color-token-text-secondary);
-  background: var(--color-token-main-surface-primary);
+  background: transparent;
   cursor: pointer;
+  transition:
+    background var(--transition-duration-basic) var(--transition-ease-basic),
+    color var(--transition-duration-basic) var(--transition-ease-basic),
+    opacity var(--transition-duration-basic) var(--transition-ease-basic);
 }
 
 .project-home-icon-button:hover:not(:disabled) {
   color: var(--color-token-text-primary);
   background: var(--color-token-list-hover-background);
+}
+
+.project-home-icon-button:focus-visible,
+.project-home-add-button:focus-visible {
+  outline: 2px solid var(--color-focus-border);
+  outline-offset: 1px;
 }
 
 .project-home-icon-button:disabled {
@@ -2714,19 +2738,29 @@ button.app-file-tree-row {
 
 .project-home-add-button {
   display: inline-flex;
-  min-height: 34px;
+  min-height: var(--size-chrome-control);
   align-items: center;
   gap: calc(var(--spacing) * 1);
-  padding: 0 calc(var(--spacing) * 2.5);
-  border: 1px solid var(--color-token-border-light);
-  border-radius: var(--radius-md);
-  color: var(--color-token-text-primary);
-  background: var(--color-token-main-surface-primary);
+  padding: 0 calc(var(--spacing) * 2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--color-token-text-secondary);
+  background: transparent;
   cursor: pointer;
+  transition:
+    background var(--transition-duration-basic) var(--transition-ease-basic),
+    color var(--transition-duration-basic) var(--transition-ease-basic),
+    opacity var(--transition-duration-basic) var(--transition-ease-basic);
 }
 
 .project-home-add-button:hover:not(:disabled) {
+  color: var(--color-token-text-primary);
   background: var(--color-token-list-hover-background);
+}
+
+.project-home-add-button[aria-expanded='true'] {
+  color: var(--color-token-text-primary);
+  background: var(--color-token-list-active-selection-background);
 }
 
 .project-home-add-menu,
@@ -2785,7 +2819,7 @@ button.app-file-tree-row {
   min-width: 0;
   border: 1px solid var(--color-token-border-light);
   border-radius: var(--radius-md);
-  background: color-mix(in oklab, var(--color-token-main-surface-primary) 96%, var(--color-token-foreground));
+  background: color-mix(in oklab, var(--color-token-main-surface-primary) 98%, var(--color-token-foreground));
 }
 
 .project-home-card__menu {
@@ -2823,15 +2857,16 @@ button.app-file-tree-row {
 
 .project-home-empty {
   display: flex;
-  min-height: 150px;
+  min-height: 156px;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: calc(var(--spacing) * 1);
   margin-top: calc(var(--spacing) * 3);
-  border: 1px dashed var(--color-token-border);
+  border: 1px dashed var(--color-token-border-light);
   border-radius: var(--radius-md);
   color: var(--color-token-text-tertiary);
+  background: color-mix(in oklab, var(--color-token-main-surface-primary) 98%, var(--color-token-foreground));
   text-align: center;
 }
 
@@ -3072,13 +3107,23 @@ button.app-file-tree-row {
   display: flex;
   flex-direction: column;
   min-height: 104px;
-  border: 1px solid var(--color-token-input-border);
-  border-radius: calc(var(--radius-2xl) + var(--spacing));
-  background: color-mix(in oklab, var(--color-token-input-background) 96%, transparent);
+  border: 1px solid var(--color-token-border-light);
+  border-radius: var(--radius-2xl);
+  background: var(--color-token-input-background);
   box-shadow:
     0 1px 2px rgb(0 0 0 / 0.05),
-    0 12px 34px -24px rgb(0 0 0 / 0.38);
+    0 10px 28px -24px color-mix(in oklab, var(--color-token-foreground) 42%, transparent);
   overflow: hidden;
+  transition:
+    border-color var(--transition-duration-basic) var(--transition-ease-basic),
+    box-shadow var(--transition-duration-basic) var(--transition-ease-basic);
+}
+
+.chat-composer:focus-within {
+  border-color: var(--color-token-border-heavy);
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.05),
+    0 12px 32px -26px color-mix(in oklab, var(--color-token-foreground) 44%, transparent);
 }
 
 .chat-input {
@@ -3118,7 +3163,7 @@ button.app-file-tree-row {
   padding: calc(var(--spacing) * 1);
   border: 1px solid var(--color-token-border-light);
   border-radius: var(--radius-lg);
-  background: color-mix(in oklab, var(--color-token-background-secondary) 72%, transparent);
+  background: color-mix(in oklab, var(--color-token-bg-secondary) 72%, transparent);
 }
 
 .composer-attachment__copy,
@@ -3190,7 +3235,7 @@ button.app-file-tree-row {
   align-items: center;
   justify-content: space-between;
   gap: calc(var(--spacing) * 3);
-  padding: calc(var(--spacing) * 2) calc(var(--spacing) * 2.5) calc(var(--spacing) * 2.5);
+  padding: calc(var(--spacing) * 1.75) calc(var(--spacing) * 2) calc(var(--spacing) * 2);
 }
 
 .composer-actions {
@@ -3213,7 +3258,7 @@ button.app-file-tree-row {
   align-items: center;
   justify-content: center;
   gap: calc(var(--spacing) * 1);
-  height: 32px;
+  height: var(--size-chrome-control);
   border: 0;
   font: inherit;
   font-size: var(--text-sm);
@@ -3224,15 +3269,15 @@ button.app-file-tree-row {
 }
 
 .composer-icon-button {
-  width: 32px;
-  border-radius: var(--radius-full);
+  width: var(--size-chrome-control);
+  border-radius: var(--radius-sm);
 }
 
 .composer-mode-button,
 .composer-model-button {
   max-width: 190px;
   padding: 0 calc(var(--spacing) * 2);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   white-space: nowrap;
 }
 
@@ -3501,8 +3546,8 @@ button.app-file-tree-row {
 }
 
 .composer-send-button {
-  width: 34px;
-  height: 34px;
+  width: var(--size-chrome-control);
+  height: var(--size-chrome-control);
   padding: 0;
   line-height: 0;
   color: var(--color-token-button-foreground);

@@ -278,7 +278,7 @@
   "chat": {
     "ariaPage": "Claude Agent chat",
     "emptyHeading": "What do you need help with?",
-    "dataCardDraftHeading": "What product card should we build?",
+    "dataCardDraftHeading": "What data card should we build?",
     "scrollBottomTitle": "Scroll to bottom",
     "scrollBottomAria": "Scroll to bottom",
     "composerPlaceholder": "Describe the next change",
