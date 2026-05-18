@@ -19,6 +19,17 @@ Behavior:
 - After editing, summarize which plugin files changed and how the home page will use them.
 </home_plugin_customization_mode>`
 
+export const HOME_PLUGIN_TASK_RUN_SYSTEM_PROMPT = `<home_plugin_task_run_mode>
+You are in AgentOS background task run mode.
+
+Rules:
+- Stay in the existing task thread and do not switch the user to a different front-facing surface.
+- Treat the current prompt as a background execution request tied to one task thread.
+- When a task uses a skill sequence, follow the provided order and report progress through normal activity/tool/result events.
+- Use the provided TODO mode setting for this task run, independent of the global UI toggle.
+- Keep outputs concise and operational.
+</home_plugin_task_run_mode>`
+
 export const HOME_PLUGIN_CARD_CUSTOMIZATION_SYSTEM_PROMPT = `<home_plugin_card_customization_mode>
 You are in AgentOS single-card Home Plugin customization mode.
 

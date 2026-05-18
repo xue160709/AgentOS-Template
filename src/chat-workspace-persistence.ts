@@ -438,7 +438,9 @@ function toOptionalFiniteNumber(value: unknown): number | undefined {
 }
 
 function normalizeThreadPurpose(value: unknown): WorkspaceThread['purpose'] {
-  return value === 'home-plugin-customization' || value === 'home-plugin-card-customization' ? value : undefined
+  return value === 'home-plugin-customization' || value === 'home-plugin-card-customization' || value === 'task-run'
+    ? value
+    : undefined
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

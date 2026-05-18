@@ -85,7 +85,6 @@ type ChatPageProps = {
   todoEnabled: boolean
   agentModeLoading: boolean
   homeModeResetKey: number
-  onTodoModeChange: (checked: boolean) => void
   onCreateHomePluginCardThread: (projectId: string, initialPrompt: string) => string | void
   onEditHomePluginCard: (projectId: string, item: HomePluginRunItem) => void
 }
@@ -138,6 +137,12 @@ function buildDataCardPrompt(userRequest: string, threadId: string): string {
   ].join('\n')
 }
 
+function promptModeForThreadPurpose(purpose: WorkspaceThread['purpose']): ClaudeChatSubmitPayload['promptMode'] | undefined {
+  if (purpose === 'home-plugin-customization' || purpose === 'home-plugin-card-customization') return purpose
+  if (purpose === 'task-run') return 'home-plugin-task-run'
+  return undefined
+}
+
 const PERMISSION_MODE_STORAGE_KEY = 'codex-ui-template:claude-permission-mode'
 
 /** 主聊天路由组件（forwardRef 暴露托盘动作）/ Primary chat route exposing imperative methods */
@@ -158,7 +163,6 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     todoEnabled,
     agentModeLoading,
     homeModeResetKey,
-    onTodoModeChange,
     onCreateHomePluginCardThread,
     onEditHomePluginCard,
   },
@@ -681,10 +685,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     return {
       threadId: activeThread.id,
       project: projectForThread,
-      promptMode:
-        activeThread.purpose === 'home-plugin-customization' || activeThread.purpose === 'home-plugin-card-customization'
-          ? activeThread.purpose
-          : undefined,
+      promptMode: promptModeForThreadPurpose(activeThread.purpose),
     }
   }, [activeProject, activeThread, projects])
 
@@ -1251,11 +1252,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
 
     try {
       const submittingThread = threads.find((thread) => thread.id === submittingThreadId)
-      const promptMode =
-        target?.promptMode ??
-        (submittingThread?.purpose === 'home-plugin-customization' || submittingThread?.purpose === 'home-plugin-card-customization'
-          ? submittingThread.purpose
-          : undefined)
+      const promptMode = target?.promptMode ?? promptModeForThreadPurpose(submittingThread?.purpose)
       const { requestId } = await window.claudeChat.submit({
         text,
         attachments: attachmentsForSubmit,
@@ -1651,7 +1648,10 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   )
 
   const showThreadView =
-    hasMessages || activeThread?.purpose === 'home-plugin-customization' || activeThread?.purpose === 'home-plugin-card-customization'
+    hasMessages ||
+    activeThread?.purpose === 'home-plugin-customization' ||
+    activeThread?.purpose === 'home-plugin-card-customization' ||
+    activeThread?.purpose === 'task-run'
 
   return (
     <section
@@ -1683,7 +1683,6 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
           todoEnabled={todoEnabled}
           agentModeLoading={agentModeLoading}
           heading={homeComposerMode === 'data-card-draft' ? t('chat.dataCardDraftHeading') : undefined}
-          onTodoSwitchChange={onTodoModeChange}
           onStartDataCardDraft={() => {
             setHomeComposerMode('data-card-draft')
             requestAnimationFrame(() => chatInputRef.current?.focus())

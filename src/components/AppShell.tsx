@@ -22,7 +22,7 @@ import {
   viewFromLocation,
 } from './app-shell-constants.ts'
 import { defaultThreadTitleSet, getInitialLocale, translate, useI18n } from '../i18n/i18n'
-import type { HomePluginRunItem } from '../desktop-types'
+import type { HomePluginRunItem, HomePluginTaskEvent } from '../desktop-types'
 import type {
   AppViewId,
   ChatState,
@@ -589,6 +589,63 @@ export function AppShell() {
     })
   }, [chatWorkspace, createProject, createThreadInProject])
 
+  const ensureTaskRunThread = useCallback(
+    (event: HomePluginTaskEvent) => {
+      if (!event.thread) return
+      const seed = event.thread
+      updateChatWorkspace((prev) => {
+        const project =
+          prev.projects.find((item) => item.id === seed.projectId) ??
+          prev.projects.find((item) => sameProjectPath(item.path, event.projectPath))
+        if (!project) return prev
+
+        const now = Date.now()
+        const existing = prev.threads.find((thread) => thread.id === seed.id)
+        const title = seed.title || (event.task.mode === 'agent' ? '执行agent' : `执行${event.task.title}`)
+        if (existing) {
+          const nextThreads = prev.threads.map((thread) =>
+            thread.id === seed.id
+              ? {
+                  ...thread,
+                  projectId: project.id,
+                  title,
+                  purpose: 'task-run' as const,
+                  homePluginSlug: event.slug,
+                  updatedAt: Math.max(thread.updatedAt, seed.updatedAt || now),
+                }
+              : thread,
+          )
+          return { ...prev, threads: nextThreads }
+        }
+
+        const nextThread: WorkspaceThread = {
+          id: seed.id,
+          projectId: project.id,
+          title,
+          purpose: 'task-run',
+          homePluginSlug: event.slug,
+          createdAt: seed.createdAt || now,
+          updatedAt: seed.updatedAt || now,
+          chatState: createEmptyChatState(),
+        }
+        return {
+          ...prev,
+          projects: touchProject(prev.projects, project.id, now),
+          threads: [nextThread, ...prev.threads],
+        }
+      })
+    },
+    [updateChatWorkspace],
+  )
+
+  useEffect(() => {
+    const subscribe = window.desktop?.onHomePluginTaskEvent
+    if (!subscribe) return
+    return subscribe((event) => {
+      ensureTaskRunThread(event)
+    })
+  }, [ensureTaskRunThread])
+
   const archiveThread = useCallback(
     (threadId: string) => {
       updateChatWorkspace((prev) => {
@@ -1022,6 +1079,14 @@ function titleFromPrompt(prompt: string, fallbackTitle: string): string {
 function pathBasename(path: string, fallback: string): string {
   const parts = path.replace(/[\\/]+$/, '').split(/[\\/]/).filter(Boolean)
   return parts[parts.length - 1] || path || fallback
+}
+
+function sameProjectPath(a: string, b: string): boolean {
+  return normalizeComparablePath(a) === normalizeComparablePath(b)
+}
+
+function normalizeComparablePath(value: string): string {
+  return value.replace(/\\/g, '/').replace(/\/+$/, '')
 }
 
 function readStoredBoolean(key: string, fallback: boolean): boolean {

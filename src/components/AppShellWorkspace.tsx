@@ -86,7 +86,8 @@ export function AppShellWorkspace({
   const showConversationFlow =
     hasThreadMessages ||
     activeThread?.purpose === 'home-plugin-customization' ||
-    activeThread?.purpose === 'home-plugin-card-customization'
+    activeThread?.purpose === 'home-plugin-card-customization' ||
+    activeThread?.purpose === 'task-run'
   const showAgentModeToolbar = activeViewId === 'home' && !showConversationFlow
 
   useEffect(() => {
@@ -150,9 +151,6 @@ export function AppShellWorkspace({
             todoEnabled={agentMode.todoEnabled}
             agentModeLoading={agentMode.loading}
             homeModeResetKey={homeModeResetKey}
-            onTodoModeChange={(checked) => {
-              void agentMode.updateAgentModeState({ todoEnabled: checked })
-            }}
             onCreateHomePluginCardThread={onCreateHomePluginCardThread}
             onEditHomePluginCard={onEditHomePluginCard}
           />

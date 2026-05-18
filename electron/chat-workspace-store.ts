@@ -469,7 +469,9 @@ function lastAssistantDuration(items: TranscriptItem[]): number | undefined {
 }
 
 function normalizeThreadPurpose(value: string | null): WorkspaceThread['purpose'] {
-  return value === 'home-plugin-customization' || value === 'home-plugin-card-customization' ? value : undefined
+  return value === 'home-plugin-customization' || value === 'home-plugin-card-customization' || value === 'task-run'
+    ? value
+    : undefined
 }
 
 function safeFilename(value: string): string {

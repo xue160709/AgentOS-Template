@@ -22,6 +22,12 @@ import type {
   HomePluginLayoutSaveResult,
   HomePluginRunOptions,
   HomePluginRunResult,
+  HomePluginTaskConfig,
+  HomePluginTaskEvent,
+  HomePluginTaskReadResult,
+  HomePluginTaskRunResult,
+  HomePluginTaskSaveResult,
+  HomePluginTaskStopResult,
   TrayMenuAction,
 } from '../src/desktop-types'
 import type { ChatWorkspaceState, FileTreeResult } from '../src/components/types'
@@ -72,6 +78,13 @@ declare global {
         order: string[],
         cards: Array<{ slug: string; preferredSize: import('../src/desktop-types').HomePluginCardSize }>,
       ) => Promise<HomePluginLayoutSaveResult>
+      saveTaskHomePlugin?: (
+        rootPath: string,
+        payload: Omit<HomePluginTaskConfig, 'version' | 'slug' | 'createdAt' | 'updatedAt'> & { slug?: string },
+      ) => Promise<HomePluginTaskSaveResult>
+      getTaskHomePlugin?: (rootPath: string, slug: string) => Promise<HomePluginTaskReadResult>
+      runTaskHomePlugin?: (rootPath: string, slug: string) => Promise<HomePluginTaskRunResult>
+      stopTaskHomePlugin?: (rootPath: string, slug: string) => Promise<HomePluginTaskStopResult>
       getAgentModeStatus?: (rootPath: string, locale?: AppUiLocale) => Promise<AgentModeStatusResult>
       ensureAgentModeFiles?: (rootPath: string, locale?: AppUiLocale) => Promise<AgentModeFilesResult>
       setAgentModeState?: (
@@ -99,6 +112,7 @@ declare global {
       setDesktopPreferences?: (partial: Partial<DesktopPreferences>) => Promise<DesktopPreferences>
       syncTrayLocale?: (locale: 'zh' | 'en') => Promise<void>
       onTrayMenuAction?: (handler: (action: TrayMenuAction) => void) => () => void
+      onHomePluginTaskEvent?: (handler: (event: HomePluginTaskEvent) => void) => () => void
     }
   }
 }

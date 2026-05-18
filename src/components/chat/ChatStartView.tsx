@@ -17,7 +17,6 @@ type ChatStartViewProps = {
   todoEnabled: boolean
   agentModeLoading: boolean
   heading?: string
-  onTodoSwitchChange: (checked: boolean) => void
   onStartDataCardDraft: () => void
   onEditHomePluginCard: (item: HomePluginRunItem) => void
 }
@@ -30,7 +29,6 @@ export function ChatStartView({
   todoEnabled,
   agentModeLoading,
   heading,
-  onTodoSwitchChange,
   onStartDataCardDraft,
   onEditHomePluginCard,
 }: ChatStartViewProps) {
@@ -48,7 +46,6 @@ export function ChatStartView({
             project={project}
             todoEnabled={todoEnabled}
             loading={agentModeLoading}
-            onTodoSwitchChange={onTodoSwitchChange}
             onStartDataCardDraft={onStartDataCardDraft}
             onEditHomePluginCard={onEditHomePluginCard}
           />

@@ -679,6 +679,7 @@ export function AppShellSidebar({
                                 const isPinned = Boolean(thread.pinnedAt)
                                 const isHomePluginThread =
                                   thread.purpose === 'home-plugin-customization' || thread.purpose === 'home-plugin-card-customization'
+                                const isTaskRunThread = thread.purpose === 'task-run'
                                 const runState = threadRunStates[thread.id]
                                 const isThreadRunning = Boolean(runState)
                                 const timeLabel = formatThreadTime(thread.updatedAt, locale, t)
@@ -716,8 +717,8 @@ export function AppShellSidebar({
                                       }}
                                     >
                                       <span className="app-thread-title">{thread.title}</span>
-                                      {isHomePluginThread ? (
-                                        <IconInline name="agent" className="app-thread-purpose-icon" />
+                                      {isHomePluginThread || isTaskRunThread ? (
+                                        <IconInline name={isTaskRunThread ? 'play' : 'agent'} className="app-thread-purpose-icon" />
                                       ) : null}
                                     </button>
                                     <div className="app-thread-trailing">

@@ -11,7 +11,15 @@ export type ClaudeChatSubmitPayload = {
   attachments?: ClaudeChatAttachment[]
   threadId?: string
   /** 特殊提示词通道；普通聊天省略 / Special prompt channel; omitted for normal chat */
-  promptMode?: 'home-plugin-customization' | 'home-plugin-card-customization'
+  promptMode?: 'home-plugin-customization' | 'home-plugin-card-customization' | 'home-plugin-task-run'
+  /**
+   * 可选 Agent Mode 覆盖；任务执行可临时注入 TODO 开关而不改全局设置。
+   * Optional Agent Mode override for task execution without mutating global settings.
+   */
+  agentModeSettingsOverride?: Partial<{
+    enabled: boolean
+    todoEnabled: boolean
+  }>
   /**
    * 上次 Agent SDK 会话 ID（chatState 持久化）；主进程重启后可恢复同一会话；若已有活跃 session 则忽略。
    * Last Agent SDK session id (persisted in chatState); resumes after main restart; ignored if session already active.

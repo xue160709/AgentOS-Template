@@ -5,7 +5,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type RefObject } from 'react'
 import { A2uiSurface, basicCatalog, MarkdownContext, type ReactComponentImplementation } from '@a2ui/react/v0_9'
 import { MessageProcessor, type A2uiClientAction, type A2uiMessage, type SurfaceModel } from '@a2ui/web_core/v0_9'
-import type { HomePluginCardSize, HomePluginRunItem } from '../../desktop-types'
+import type { AgentContextSlashItem } from '../../claude-chat-types'
+import type {
+  HomePluginCardSize,
+  HomePluginRunItem,
+  HomePluginTaskMode,
+  HomePluginTaskSchedule,
+  HomePluginTaskSkillStep,
+} from '../../desktop-types'
 import { IconInline } from '../../icon-inline'
 import { useI18n } from '../../i18n/i18n'
 import type { WorkspaceProject } from '../types'
@@ -15,7 +22,6 @@ type ProjectHomeSurfaceProps = {
   project: WorkspaceProject
   todoEnabled: boolean
   loading: boolean
-  onTodoSwitchChange: (checked: boolean) => void
   onStartDataCardDraft: () => void
   onEditHomePluginCard: (item: HomePluginRunItem) => void
 }
@@ -27,7 +33,6 @@ export function ProjectHomeSurface({
   project,
   todoEnabled,
   loading,
-  onTodoSwitchChange,
   onStartDataCardDraft,
   onEditHomePluginCard,
 }: ProjectHomeSurfaceProps) {
@@ -38,6 +43,7 @@ export function ProjectHomeSurface({
   const [error, setError] = useState('')
   const [addMenuOpen, setAddMenuOpen] = useState(false)
   const [taskDialogOpen, setTaskDialogOpen] = useState(false)
+  const [editingTaskSlug, setEditingTaskSlug] = useState<string | undefined>()
   const [sortDialogOpen, setSortDialogOpen] = useState(false)
   const [draftOrder, setDraftOrder] = useState<string[]>([])
   const [draftSizes, setDraftSizes] = useState<Record<string, HomePluginCardSize>>({})
@@ -88,6 +94,28 @@ export function ProjectHomeSurface({
     window.addEventListener('project-home:refresh', onRefresh)
     return () => window.removeEventListener('project-home:refresh', onRefresh)
   }, [loadHomePlugins])
+
+  useEffect(() => {
+    const subscribe = window.desktop?.onHomePluginTaskEvent
+    if (!subscribe) return
+    let refreshTimer: number | null = null
+    const scheduleRefresh = () => {
+      if (refreshTimer != null) window.clearTimeout(refreshTimer)
+      refreshTimer = window.setTimeout(() => {
+        refreshTimer = null
+        outputHashesRef.current = {}
+        void loadHomePlugins()
+      }, 80)
+    }
+    const unsubscribe = subscribe((event) => {
+      if (!sameProjectPath(event.projectPath, project.path)) return
+      scheduleRefresh()
+    })
+    return () => {
+      if (refreshTimer != null) window.clearTimeout(refreshTimer)
+      unsubscribe()
+    }
+  }, [loadHomePlugins, project.path])
 
   useEffect(() => {
     if (!addMenuOpen) return
@@ -180,6 +208,7 @@ export function ProjectHomeSurface({
                   role="menuitem"
                   onClick={() => {
                     setAddMenuOpen(false)
+                    setEditingTaskSlug(undefined)
                     setTaskDialogOpen(true)
                   }}
                 >
@@ -201,7 +230,14 @@ export function ProjectHomeSurface({
               key={`${item.slug}:${item.outputHash ?? ''}`}
               item={item}
               projectPath={project.path}
-              onEdit={() => onEditHomePluginCard(item)}
+              onEdit={() => {
+                if (item.manifest.kind === 'task') {
+                  setEditingTaskSlug(item.slug)
+                  setTaskDialogOpen(true)
+                  return
+                }
+                onEditHomePluginCard(item)
+              }}
             />
           ))}
         </div>
@@ -209,10 +245,20 @@ export function ProjectHomeSurface({
 
       {taskDialogOpen ? (
         <TaskCardDialog
+          project={project}
+          slug={editingTaskSlug}
           todoEnabled={todoEnabled}
           loading={loading}
-          onTodoSwitchChange={onTodoSwitchChange}
-          onClose={() => setTaskDialogOpen(false)}
+          onClose={() => {
+            setTaskDialogOpen(false)
+            setEditingTaskSlug(undefined)
+          }}
+          onSaved={() => {
+            setTaskDialogOpen(false)
+            setEditingTaskSlug(undefined)
+            outputHashesRef.current = {}
+            window.dispatchEvent(new CustomEvent('project-home:refresh'))
+          }}
         />
       ) : null}
       {sortDialogOpen ? (
@@ -314,6 +360,26 @@ function A2uiCardSurface({
         window.dispatchEvent(new CustomEvent('project-home:refresh'))
         return
       }
+      if (action.name === 'task_run') {
+        const slug = resolveActionText(action.context?.slug)
+        if (!slug) return
+        const runTaskHomePlugin = window.desktop?.runTaskHomePlugin
+        if (!runTaskHomePlugin) return
+        void runTaskHomePlugin(projectPath, slug).finally(() => {
+          window.dispatchEvent(new CustomEvent('project-home:refresh'))
+        })
+        return
+      }
+      if (action.name === 'task_stop') {
+        const slug = resolveActionText(action.context?.slug)
+        if (!slug) return
+        const stopTaskHomePlugin = window.desktop?.stopTaskHomePlugin
+        if (!stopTaskHomePlugin) return
+        void stopTaskHomePlugin(projectPath, slug).finally(() => {
+          window.dispatchEvent(new CustomEvent('project-home:refresh'))
+        })
+        return
+      }
       if (action.name === 'open_file') {
         const rawPath = resolveActionPath(action.context?.filePath ?? action.context?.path)
         const safePath = rawPath ? normalizeProjectRelativePath(rawPath) : ''
@@ -368,48 +434,399 @@ function ProjectHomeEmptyState() {
 }
 
 function TaskCardDialog({
+  project,
+  slug,
   todoEnabled,
   loading,
-  onTodoSwitchChange,
   onClose,
+  onSaved,
 }: {
+  project: WorkspaceProject
+  slug?: string
   todoEnabled: boolean
   loading: boolean
-  onTodoSwitchChange: (checked: boolean) => void
   onClose: () => void
+  onSaved: () => void
 }) {
   const { t } = useI18n()
+  const [title, setTitle] = useState('')
+  const [mode, setMode] = useState<HomePluginTaskMode>('agent')
+  const [skills, setSkills] = useState<AgentContextSlashItem[]>([])
+  const [selectedSkills, setSelectedSkills] = useState<HomePluginTaskSkillStep[]>([])
+  const [draftTodoEnabled, setDraftTodoEnabled] = useState(todoEnabled)
+  const [runCount, setRunCount] = useState(1)
+  const [schedule, setSchedule] = useState<HomePluginTaskSchedule>(() => defaultTaskSchedule())
+  const [saving, setSaving] = useState(false)
+  const [skillsLoading, setSkillsLoading] = useState(false)
+  const [dialogError, setDialogError] = useState('')
+  const [draggingStepId, setDraggingStepId] = useState('')
+  const editing = Boolean(slug)
+
+  useEffect(() => {
+    let cancelled = false
+    const listAgentContext = window.desktop?.listAgentContext
+    if (!listAgentContext) {
+      setSkills([])
+      setSkillsLoading(false)
+      return () => {
+        cancelled = true
+      }
+    }
+    setSkillsLoading(true)
+    listAgentContext(project.path)
+      .then((result) => {
+        if (cancelled) return
+        setSkills(result.ok ? result.skills.filter((skill) => skill.kind === 'skill' && skill.scope === 'project') : [])
+      })
+      .catch(() => {
+        if (!cancelled) setSkills([])
+      })
+      .finally(() => {
+        if (!cancelled) setSkillsLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [project.path])
+
+  useEffect(() => {
+    if (!slug) {
+      setTitle('')
+      setMode('agent')
+      setSelectedSkills([])
+      setDraftTodoEnabled(todoEnabled)
+      setRunCount(1)
+      setSchedule(defaultTaskSchedule())
+      setDialogError('')
+      return
+    }
+
+    let cancelled = false
+    const getTaskHomePlugin = window.desktop?.getTaskHomePlugin
+    setDialogError('')
+    if (!getTaskHomePlugin) {
+      setDialogError(t('workspace.taskBridgeUnavailable'))
+      setSaving(false)
+      return () => {
+        cancelled = true
+      }
+    }
+    setSaving(true)
+    getTaskHomePlugin(project.path, slug)
+      .then((result) => {
+        if (cancelled) return
+        if (!result.ok) {
+          setDialogError(result.message)
+          return
+        }
+        setTitle(result.task.title)
+        setMode(result.task.mode)
+        setSelectedSkills(result.task.skillSteps)
+        setDraftTodoEnabled(result.task.todoEnabled)
+        setRunCount(result.task.runCount)
+        setSchedule(result.task.schedule)
+      })
+      .catch((error) => {
+        if (!cancelled) setDialogError(error instanceof Error ? error.message : String(error))
+      })
+      .finally(() => {
+        if (!cancelled) setSaving(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [project.path, slug, todoEnabled, t])
+
+  const addSkill = (skill: AgentContextSlashItem) => {
+    setSelectedSkills((prev) => [
+      ...prev,
+      {
+        id: createTaskStepId(),
+        command: skill.command,
+        path: skill.path,
+        title: skill.title || skill.name || skill.command,
+        description: skill.description,
+        addedAt: new Date().toISOString(),
+      },
+    ])
+  }
+
+  const removeSkillStep = (stepId: string) => {
+    setSelectedSkills((prev) => prev.filter((step) => step.id !== stepId))
+  }
+
+  const moveSkillStep = (stepId: string, offset: number) => {
+    setSelectedSkills((prev) => {
+      const index = prev.findIndex((step) => step.id === stepId)
+      const nextIndex = index + offset
+      if (index < 0 || nextIndex < 0 || nextIndex >= prev.length) return prev
+      const next = [...prev]
+      const [step] = next.splice(index, 1)
+      next.splice(nextIndex, 0, step)
+      return next
+    })
+  }
+
+  const onStepDrop = (event: DragEvent<HTMLDivElement>, targetStepId: string) => {
+    event.preventDefault()
+    const sourceStepId = event.dataTransfer.getData('text/plain') || draggingStepId
+    if (!sourceStepId || sourceStepId === targetStepId) return
+    setSelectedSkills((prev) => {
+      const sourceIndex = prev.findIndex((step) => step.id === sourceStepId)
+      const targetIndex = prev.findIndex((step) => step.id === targetStepId)
+      if (sourceIndex < 0 || targetIndex < 0) return prev
+      const next = [...prev]
+      const [step] = next.splice(sourceIndex, 1)
+      next.splice(targetIndex, 0, step)
+      return next
+    })
+    setDraggingStepId('')
+  }
+
+  const updateTime = (value: string) => {
+    const [hourRaw, minuteRaw] = value.split(':')
+    const hour = clampInt(Number.parseInt(hourRaw ?? '', 10), 0, 23, schedule.hour)
+    const minute = clampInt(Number.parseInt(minuteRaw ?? '', 10), 0, 59, schedule.minute)
+    setSchedule((prev) => ({ ...prev, hour, minute }))
+  }
+
+  const save = async () => {
+    const normalizedTitle = title.trim()
+    if (!normalizedTitle) {
+      setDialogError(t('workspace.taskTitleRequired'))
+      return
+    }
+    if (mode === 'skills' && selectedSkills.length === 0) {
+      setDialogError(t('workspace.taskSkillRequired'))
+      return
+    }
+    const saveTaskHomePlugin = window.desktop?.saveTaskHomePlugin
+    if (!saveTaskHomePlugin) {
+      setDialogError(t('workspace.taskBridgeUnavailable'))
+      return
+    }
+
+    setSaving(true)
+    setDialogError('')
+    try {
+      const result = await saveTaskHomePlugin(project.path, {
+        slug,
+        title: normalizedTitle,
+        mode,
+        skillSteps: mode === 'skills' ? selectedSkills : [],
+        todoEnabled: draftTodoEnabled,
+        runCount: clampInt(runCount, 1, 100, 1),
+        schedule,
+        enabled: true,
+      })
+      if (!result.ok) {
+        setDialogError(result.message)
+        return
+      }
+      onSaved()
+    } catch (error) {
+      setDialogError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const timeValue = `${String(schedule.hour).padStart(2, '0')}:${String(schedule.minute).padStart(2, '0')}`
+  const canSave = title.trim().length > 0 && (mode === 'agent' || selectedSkills.length > 0) && !saving
+
   return (
     <div className="project-home-modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <div className="project-home-modal" role="dialog" aria-modal="true" aria-label={t('workspace.addTaskCard')} onMouseDown={(event) => event.stopPropagation()}>
+      <div className="project-home-modal project-home-modal--task" role="dialog" aria-modal="true" aria-label={t('workspace.addTaskCard')} onMouseDown={(event) => event.stopPropagation()}>
         <div className="project-home-modal__header">
-          <h2>{t('workspace.addTaskCard')}</h2>
+          <h2>{editing ? t('workspace.editTaskCard') : t('workspace.addTaskCard')}</h2>
           <button type="button" className="project-home-icon-button" aria-label={t('filePanel.closeAria')} onClick={onClose}>
             <IconInline name="x" />
           </button>
         </div>
-        <label className="agent-mode-switch project-home-task-switch">
-          <span className="agent-mode-switch__copy">
-            <span>{t('workspace.todoModeToggle')}</span>
-            <span>{t('workspace.todoModeToggleDesc')}</span>
-          </span>
-          <span className="settings-switch-control">
+        <div className="project-home-task-form">
+          <label className="project-home-field">
+            <span>{t('workspace.taskTitle')}</span>
             <input
-              className="settings-switch-input"
-              type="checkbox"
-              checked={todoEnabled}
-              disabled={loading}
-              onChange={(event) => onTodoSwitchChange(event.target.checked)}
+              className="settings-input"
+              value={title}
+              maxLength={64}
+              placeholder={t('workspace.taskTitlePlaceholder')}
+              disabled={saving}
+              onChange={(event) => setTitle(event.target.value)}
             />
-            <span className="settings-switch-track" aria-hidden="true">
-              <span className="settings-switch-thumb" />
+          </label>
+
+          <div className="project-home-segmented" role="group" aria-label={t('workspace.taskMode')}>
+            <button
+              type="button"
+              className={mode === 'agent' ? 'is-active' : ''}
+              aria-pressed={mode === 'agent'}
+              disabled={saving}
+              onClick={() => setMode('agent')}
+            >
+              <IconInline name="agent" />
+              <span>{t('workspace.taskModeAgent')}</span>
+            </button>
+            <button
+              type="button"
+              className={mode === 'skills' ? 'is-active' : ''}
+              aria-pressed={mode === 'skills'}
+              disabled={saving}
+              onClick={() => setMode('skills')}
+            >
+              <IconInline name="checklist" />
+              <span>{t('workspace.taskModeSkills')}</span>
+            </button>
+          </div>
+
+          {mode === 'skills' ? (
+            <div className="project-home-skill-picker">
+              <div className="project-home-skill-pane">
+                <div className="project-home-skill-pane__heading">{t('workspace.taskProjectSkills')}</div>
+                <div className="project-home-skill-list">
+                  {skillsLoading ? <div className="project-home-skill-empty">{t('sidebar.scanning')}</div> : null}
+                  {!skillsLoading && skills.length === 0 ? <div className="project-home-skill-empty">{t('workspace.taskNoSkills')}</div> : null}
+                  {skills.map((skill) => (
+                    <div key={`${skill.path}:${skill.command}`} className="project-home-skill-row">
+                      <span>
+                        <span>{skill.title || skill.name}</span>
+                        <span>{skill.command}</span>
+                      </span>
+                      <button type="button" className="project-home-icon-button" title={t('workspace.taskAddSkill')} aria-label={t('workspace.taskAddSkill')} disabled={saving} onClick={() => addSkill(skill)}>
+                        <IconInline name="plus" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="project-home-skill-pane">
+                <div className="project-home-skill-pane__heading">{t('workspace.taskSelectedSkills')}</div>
+                <div className="project-home-selected-skill-list">
+                  {selectedSkills.length === 0 ? <div className="project-home-skill-empty">{t('workspace.taskSelectedSkillsEmpty')}</div> : null}
+                  {selectedSkills.map((step, index) => (
+                    <div
+                      key={step.id}
+                      className="project-home-selected-skill-row"
+                      draggable
+                      onDragStart={(event) => {
+                        event.dataTransfer.setData('text/plain', step.id)
+                        event.dataTransfer.effectAllowed = 'move'
+                        setDraggingStepId(step.id)
+                      }}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={(event) => onStepDrop(event, step.id)}
+                      onDragEnd={() => setDraggingStepId('')}
+                    >
+                      <span className="project-home-sort-row__grab" aria-hidden="true">
+                        <IconInline name="sort" />
+                      </span>
+                      <span className="project-home-step-index">{index + 1}</span>
+                      <span className="project-home-selected-skill-row__copy">
+                        <span>{step.title}</span>
+                        <span>{step.command}</span>
+                      </span>
+                      <button type="button" className="project-home-icon-button" disabled={saving || index === 0} onClick={() => moveSkillStep(step.id, -1)} aria-label={t('workspace.moveCardUp')}>
+                        <IconInline name="arrowUp" />
+                      </button>
+                      <button type="button" className="project-home-icon-button" disabled={saving || index === selectedSkills.length - 1} onClick={() => moveSkillStep(step.id, 1)} aria-label={t('workspace.moveCardDown')}>
+                        <IconInline name="arrowDown" />
+                      </button>
+                      <button type="button" className="project-home-icon-button" disabled={saving} onClick={() => removeSkillStep(step.id)} aria-label={t('workspace.taskRemoveSkill')}>
+                        <IconInline name="x" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          <label className="agent-mode-switch project-home-task-switch">
+            <span className="agent-mode-switch__copy">
+              <span>{t('workspace.todoModeToggle')}</span>
+              <span>{t('workspace.todoModeToggleDesc')}</span>
             </span>
-          </span>
-        </label>
-        <div className="project-home-task-placeholder">
-          <IconInline name="checklist" />
-          <span>{t('workspace.taskCardReservedTitle')}</span>
-          <span>{t('workspace.taskCardReservedDesc')}</span>
+            <span className="settings-switch-control">
+              <input
+                className="settings-switch-input"
+                type="checkbox"
+                checked={draftTodoEnabled}
+                disabled={loading || saving}
+                onChange={(event) => setDraftTodoEnabled(event.target.checked)}
+              />
+              <span className="settings-switch-track" aria-hidden="true">
+                <span className="settings-switch-thumb" />
+              </span>
+            </span>
+          </label>
+
+          <label className="project-home-field project-home-field--compact">
+            <span>{t('workspace.taskRunCount')}</span>
+            <input
+              className="settings-input"
+              type="number"
+              min={1}
+              max={100}
+              value={runCount}
+              disabled={saving}
+              onChange={(event) => setRunCount(clampInt(Number.parseInt(event.target.value, 10), 1, 100, 1))}
+            />
+          </label>
+
+          <label className="agent-mode-switch project-home-task-switch">
+            <span className="agent-mode-switch__copy">
+              <span>{t('workspace.taskScheduleToggle')}</span>
+              <span>{t('workspace.taskScheduleToggleDesc')}</span>
+            </span>
+            <span className="settings-switch-control">
+              <input
+                className="settings-switch-input"
+                type="checkbox"
+                checked={schedule.enabled}
+                disabled={saving}
+                onChange={(event) => setSchedule((prev) => ({ ...prev, enabled: event.target.checked }))}
+              />
+              <span className="settings-switch-track" aria-hidden="true">
+                <span className="settings-switch-thumb" />
+              </span>
+            </span>
+          </label>
+
+          {schedule.enabled ? (
+            <div className="project-home-schedule-grid">
+              <label className="project-home-field">
+                <span>{t('workspace.taskScheduleTime')}</span>
+                <input className="settings-input" type="time" value={timeValue} disabled={saving} onChange={(event) => updateTime(event.target.value)} />
+              </label>
+              <label className="project-home-field">
+                <span>{t('workspace.taskScheduleInterval')}</span>
+                <select
+                  className="settings-input settings-select"
+                  value={schedule.interval}
+                  disabled={saving}
+                  onChange={(event) => setSchedule((prev) => ({ ...prev, interval: event.target.value as HomePluginTaskSchedule['interval'] }))}
+                >
+                  <option value="off">{t('workspace.taskIntervalOff')}</option>
+                  <option value="1h">{t('workspace.taskInterval1h')}</option>
+                  <option value="2h">{t('workspace.taskInterval2h')}</option>
+                  <option value="3h">{t('workspace.taskInterval3h')}</option>
+                  <option value="6h">{t('workspace.taskInterval6h')}</option>
+                  <option value="12h">{t('workspace.taskInterval12h')}</option>
+                  <option value="1d">{t('workspace.taskInterval1d')}</option>
+                </select>
+              </label>
+            </div>
+          ) : null}
+
+          {dialogError ? <div className="project-home-task-error" role="alert">{dialogError}</div> : null}
+        </div>
+        <div className="project-home-modal__footer">
+          <button type="button" className="agent-card-secondary-button" disabled={saving} onClick={onClose}>
+            {t('settings.agentMode.cancel')}
+          </button>
+          <button type="button" className="agent-card-primary-button" disabled={!canSave} onClick={() => void save()}>
+            {saving ? t('workspace.taskSaving') : t('settings.agentMode.confirm')}
+          </button>
         </div>
       </div>
     </div>
@@ -567,10 +984,37 @@ function sizeToColumnSpan(size: HomePluginCardSize): number {
   return 1
 }
 
+function defaultTaskSchedule(): HomePluginTaskSchedule {
+  return { enabled: false, hour: 9, minute: 0, interval: 'off' }
+}
+
+function createTaskStepId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `step-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function clampInt(value: number, min: number, max: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback
+  return Math.max(min, Math.min(max, Math.trunc(value)))
+}
+
+function sameProjectPath(a: string, b: string): boolean {
+  return normalizeComparablePath(a) === normalizeComparablePath(b)
+}
+
+function normalizeComparablePath(value: string): string {
+  return value.replace(/\\/g, '/').replace(/\/+$/, '')
+}
+
 function resolveActionPath(value: unknown): string {
   if (typeof value === 'string') return value
   if (!isRecord(value)) return ''
   return resolveActionPath(value.path)
+}
+
+function resolveActionText(value: unknown): string {
+  if (typeof value === 'string') return value.trim()
+  if (!isRecord(value)) return ''
+  return resolveActionText(value.value ?? value.slug ?? value.path)
 }
 
 function normalizeProjectRelativePath(value: string): string {

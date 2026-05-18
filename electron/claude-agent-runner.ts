@@ -34,7 +34,11 @@ import { ClaudeChatEventCoalescer } from './claude-agent-runner/event-coalescer'
 import { fileDiffFromPostToolUse } from './claude-agent-runner/file-diff'
 import { buildSdkPromptInput, normalizeSubmitAttachments, resolveWorkspaceCwd } from './claude-agent-runner/input'
 import { ClaudeSdkMessageRouter } from './claude-agent-runner/sdk-message-router'
-import { HOME_PLUGIN_CARD_CUSTOMIZATION_SYSTEM_PROMPT, HOME_PLUGIN_CUSTOMIZATION_SYSTEM_PROMPT } from './home-plugin-customization-prompt'
+import {
+  HOME_PLUGIN_CARD_CUSTOMIZATION_SYSTEM_PROMPT,
+  HOME_PLUGIN_CUSTOMIZATION_SYSTEM_PROMPT,
+  HOME_PLUGIN_TASK_RUN_SYSTEM_PROMPT,
+} from './home-plugin-customization-prompt'
 
 /**
  * 主进程内封装 Claude Agent SDK `query`：会话恢复、权限闸门与事件转发。
@@ -56,6 +60,7 @@ type ActiveRequest = {
   didEmitThinking: boolean
   checkpointId?: string
   promptMode?: ClaudeChatSubmitPayload['promptMode']
+  agentModeSettingsOverride?: ClaudeChatSubmitPayload['agentModeSettingsOverride']
   permissionMode: ClaudePermissionMode
   seenToolUseIds: Set<string>
   toolNamesByUseId: Map<string, string>
@@ -106,6 +111,7 @@ export class ClaudeAgentRunner {
     private readonly resolveConfig: () => ClaudeAgentResolvedConfig,
     private readonly resolveAgentModeSettings: (rootPath: string) => Promise<AgentModeProjectSettings>,
     private readonly resolveUiLocale: () => AppUiLocale,
+    private readonly observeEvent?: (event: ClaudeChatEvent) => void,
   ) {
     this.eventCoalescer = new ClaudeChatEventCoalescer((event) => this.sendEventNow(event))
     this.messageRouter = new ClaudeSdkMessageRouter(
@@ -155,9 +161,12 @@ export class ClaudeAgentRunner {
       didEmitText: false,
       didEmitThinking: false,
       promptMode:
-        payload.promptMode === 'home-plugin-customization' || payload.promptMode === 'home-plugin-card-customization'
+        payload.promptMode === 'home-plugin-customization' ||
+        payload.promptMode === 'home-plugin-card-customization' ||
+        payload.promptMode === 'home-plugin-task-run'
           ? payload.promptMode
           : undefined,
+      agentModeSettingsOverride: normalizeAgentModeSettingsOverride(payload.agentModeSettingsOverride),
       permissionMode: normalizeChatPermissionMode(payload.permissionMode),
       seenToolUseIds: new Set(),
       toolNamesByUseId: new Map(),
@@ -378,11 +387,11 @@ export class ClaudeAgentRunner {
     }
 
     try {
-      const runtimeContext = await buildRuntimeContext(
-        activeRequest.cwd,
-        await this.resolveAgentModeSettings(activeRequest.cwd),
-        this.resolveUiLocale(),
-      )
+      const agentModeSettings = {
+        ...(await this.resolveAgentModeSettings(activeRequest.cwd)),
+        ...(activeRequest.agentModeSettingsOverride ?? {}),
+      }
+      const runtimeContext = await buildRuntimeContext(activeRequest.cwd, agentModeSettings, this.resolveUiLocale())
       const appendSystemPrompt = buildRequestAppendSystemPrompt(activeRequest, runtimeContext.appendSystemPrompt)
       const resolvedPrompt = await resolvePromptWithContext(prompt, runtimeContext.catalog, {
         forcedSkillCommand:
@@ -649,6 +658,7 @@ export class ClaudeAgentRunner {
 
   private sendEventNow(event: ClaudeChatEvent): void {
     if (this.webContents.isDestroyed()) return
+    this.observeEvent?.(event)
     this.webContents.send(CLAUDE_CHAT_EVENT_CHANNEL, event)
   }
 
@@ -693,6 +703,9 @@ function buildRequestAppendSystemPrompt(activeRequest: ActiveRequest, basePrompt
   if (activeRequest.promptMode === 'home-plugin-card-customization') {
     sections.push(HOME_PLUGIN_CARD_CUSTOMIZATION_SYSTEM_PROMPT)
   }
+  if (activeRequest.promptMode === 'home-plugin-task-run') {
+    sections.push(HOME_PLUGIN_TASK_RUN_SYSTEM_PROMPT)
+  }
   return sections.length > 0 ? sections.join('\n\n') : undefined
 }
 
@@ -718,6 +731,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function normalizeChatPermissionMode(value: ClaudePermissionMode | undefined): ClaudePermissionMode {
   if (value === 'plan' || value === 'default' || value === 'acceptEdits' || value === 'bypassPermissions') return value
   return 'auto'
+}
+
+function normalizeAgentModeSettingsOverride(
+  value: ClaudeChatSubmitPayload['agentModeSettingsOverride'],
+): ClaudeChatSubmitPayload['agentModeSettingsOverride'] | undefined {
+  if (!isRecord(value)) return undefined
+  const output: ClaudeChatSubmitPayload['agentModeSettingsOverride'] = {}
+  if (typeof value.enabled === 'boolean') output.enabled = value.enabled
+  if (typeof value.todoEnabled === 'boolean') output.todoEnabled = value.todoEnabled
+  return Object.keys(output).length > 0 ? output : undefined
 }
 
 function toSdkPermissionMode(value: ClaudePermissionMode): PermissionMode {

@@ -5,7 +5,13 @@ import os from 'node:os'
 import path from 'node:path'
 import zh from '../src/locales/zh.json'
 import en from '../src/locales/en.json'
-import type { AgentModeProjectSettings, AppUiLocale, DesktopPreferences, HomePluginRunOptions } from '../src/desktop-types'
+import type {
+  AgentModeProjectSettings,
+  AppUiLocale,
+  DesktopPreferences,
+  HomePluginRunOptions,
+  HomePluginTaskEvent,
+} from '../src/desktop-types'
 import { ensureAgentModeFiles, getAgentModeStatus, setAgentModeState } from './agent-mode-files'
 import { AgentModeSettingsStore } from './agent-mode-settings-store'
 import { discoverAgentContext, searchProjectFiles } from './agent-context'
@@ -15,6 +21,7 @@ import { ChatWorkspaceStore } from './chat-workspace-store'
 import { DesktopPreferencesStore } from './desktop-preferences-store'
 import { loadMainProcessEnv } from './env-loader'
 import { runProjectHomePlugin, saveProjectHomePluginLayout, saveProjectHomePluginOrder } from './home-plugin-runner'
+import { TaskHomePluginManager } from './task-home-plugin-manager'
 import { normalizeUiLocale } from './ui-locale'
 import type {
   ActiveChatPickPayload,
@@ -55,6 +62,7 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 
 
 const APP_NAME = 'AgentOS'
 const TRAY_ACTION_CHANNEL = 'desktop:tray-action'
+const TASK_HOME_PLUGIN_EVENT_CHANNEL = 'desktop:task-home-plugin-event'
 
 const TRAY_LOCALE_BUNDLE = { zh, en } as const
 type TrayLocale = keyof typeof TRAY_LOCALE_BUNDLE
@@ -68,6 +76,7 @@ let claudeAgentSettingsStore: ClaudeAgentSettingsStore | null = null
 let agentModeSettingsStore: AgentModeSettingsStore | null = null
 let chatWorkspaceStore: ChatWorkspaceStore | null = null
 let desktopPreferencesStore: DesktopPreferencesStore | null = null
+let taskHomePluginManager: TaskHomePluginManager | null = null
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 
@@ -155,7 +164,15 @@ function createWindow() {
     () => getClaudeAgentSettingsStore().resolve(),
     (rootPath) => getAgentModeSettingsStore().resolve(rootPath),
     () => normalizeUiLocale(getDesktopPreferencesStore().read().locale),
+    (event) => taskHomePluginManager?.handleClaudeEvent(event),
   )
+
+  taskHomePluginManager = new TaskHomePluginManager({
+    getRunner: () => claudeAgentRunner,
+    getWorkspace: () => chatWorkspaceStore?.read() ?? null,
+    emitTaskEvent: sendTaskHomePluginEvent,
+  })
+  void taskHomePluginManager.refreshFromWorkspace()
 
   win.on('close', (event) => {
     if (isQuitting) return
@@ -178,6 +195,7 @@ function createWindow() {
 
   win.on('closed', () => {
     claudeAgentRunner = null
+    taskHomePluginManager = null
   })
 
   if (VITE_DEV_SERVER_URL) {
@@ -221,6 +239,18 @@ function getDesktopPreferencesStore() {
     throw new Error('Desktop preferences store is not ready.')
   }
   return desktopPreferencesStore
+}
+
+function getTaskHomePluginManager() {
+  if (!taskHomePluginManager) {
+    throw new Error('Task home plugin manager is not ready.')
+  }
+  return taskHomePluginManager
+}
+
+function sendTaskHomePluginEvent(event: HomePluginTaskEvent): void {
+  if (!win || win.isDestroyed()) return
+  win.webContents.send(TASK_HOME_PLUGIN_EVENT_CHANNEL, event)
 }
 
 function resolveAgentModeIpcLocale(raw: unknown): AppUiLocale {
@@ -438,8 +468,10 @@ if (gotSingleInstanceLock) {
     ipcMain.handle('chat-workspace:get', () => {
       return getChatWorkspaceStore().read()
     })
-    ipcMain.handle('chat-workspace:save', (_event, state: unknown) => {
-      return getChatWorkspaceStore().save(state)
+    ipcMain.handle('chat-workspace:save', async (_event, state: unknown) => {
+      const saved = await getChatWorkspaceStore().save(state)
+      void taskHomePluginManager?.refreshFromWorkspace(saved)
+      return saved
     })
     ipcMain.handle('desktop:pick-project-directory', async () => {
       const parent = BrowserWindow.getFocusedWindow() ?? win
@@ -494,6 +526,18 @@ if (gotSingleInstanceLock) {
     })
     ipcMain.handle('desktop:save-home-plugin-layout', (_event, rootPath: string, order: unknown, cards: unknown) => {
       return saveProjectHomePluginLayout(rootPath, order, cards)
+    })
+    ipcMain.handle('desktop:save-task-home-plugin', (_event, rootPath: string, payload: unknown) => {
+      return getTaskHomePluginManager().saveTask(rootPath, payload as Parameters<TaskHomePluginManager['saveTask']>[1])
+    })
+    ipcMain.handle('desktop:get-task-home-plugin', (_event, rootPath: string, slug: string) => {
+      return getTaskHomePluginManager().readTask(rootPath, slug)
+    })
+    ipcMain.handle('desktop:run-task-home-plugin', (_event, rootPath: string, slug: string) => {
+      return getTaskHomePluginManager().startTask(rootPath, slug)
+    })
+    ipcMain.handle('desktop:stop-task-home-plugin', (_event, rootPath: string, slug: string) => {
+      return getTaskHomePluginManager().stopTask(rootPath, slug)
     })
     ipcMain.handle('desktop:get-agent-mode-status', (_event, rootPath: string, rawLocale?: unknown) => {
       return getAgentModeStatus(rootPath, getAgentModeSettingsStore(), resolveAgentModeIpcLocale(rawLocale))
