@@ -5427,3 +5427,61 @@ button.app-file-tree-row {
     justify-content: flex-start;
   }
 }
+
+.app-shell-empty {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 32px;
+}
+
+.app-shell-empty__card {
+  width: min(100%, 420px);
+  padding: 28px;
+  border: 1px solid var(--border-subtle, rgba(127, 127, 127, 0.24));
+  border-radius: 16px;
+  background: var(--surface-elevated, rgba(127, 127, 127, 0.08));
+  text-align: center;
+}
+
+.app-shell-empty__card h1 {
+  margin: 0 0 8px;
+  font-size: 1.35rem;
+}
+
+.app-shell-empty__card p {
+  margin: 0 0 20px;
+  color: var(--text-secondary, rgba(127, 127, 127, 0.92));
+  line-height: 1.5;
+}
+
+.app-shell-empty__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.project-path-missing-banner {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--danger, #d14343) 35%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--danger, #d14343) 10%, transparent);
+}
+
+.project-path-missing-banner strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.project-path-missing-banner p {
+  margin: 0;
+  color: var(--text-secondary, rgba(127, 127, 127, 0.92));
+}
+
+.app-project-path-missing {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.75rem;
+  color: var(--danger, #d14343);
+}

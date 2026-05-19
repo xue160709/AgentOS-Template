@@ -5,11 +5,11 @@
 
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
-import os from 'node:os'
 import path from 'node:path'
 import vm from 'node:vm'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { formatProjectPathError, resolveProjectPath } from './project-path'
 import type {
   HomePluginCardSize,
   HomePluginCardLayoutItem,
@@ -122,7 +122,7 @@ export async function runProjectHomePlugin(rootPath: string, options: HomePlugin
       ok: false,
       rootPath: resolvedRootPath,
       pluginPath: pluginRootPath,
-      message: error instanceof Error ? error.message : String(error),
+      message: formatProjectPathError(error),
     }
   }
 }
@@ -192,7 +192,7 @@ export async function saveProjectHomePluginLayout(
     return {
       ok: false,
       rootPath: resolvedRootPath,
-      message: error instanceof Error ? error.message : String(error),
+      message: formatProjectPathError(error),
     }
   }
 }
@@ -898,15 +898,6 @@ function resolveInsideProject(projectRoot: string, value: string): string {
     throw new Error(`Home Plugin 不能读取项目外路径：${value}`)
   }
   return resolved
-}
-
-function resolveProjectPath(projectPath: string): string {
-  const trimmedPath = projectPath.trim()
-  if (trimmedPath === '~') return os.homedir()
-  if (trimmedPath.startsWith(`~${path.sep}`) || trimmedPath.startsWith('~/')) {
-    return path.resolve(os.homedir(), trimmedPath.slice(2))
-  }
-  return path.resolve(trimmedPath)
 }
 
 function normalizeRelativePath(relativePath: string): string {

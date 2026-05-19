@@ -22,6 +22,7 @@ import {
   viewFromLocation,
 } from './app-shell-constants.ts'
 import { defaultThreadTitleSet, getInitialLocale, translate, useI18n } from '../i18n/i18n'
+import { IconInline } from '../icon-inline'
 import type { HomePluginRunItem, HomePluginTaskEvent } from '../desktop-types'
 import type {
   AppViewId,
@@ -183,6 +184,29 @@ export function AppShell() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (!chatWorkspace || !activeProject) return
+    const validate = window.desktop?.validateProjectPaths
+    if (!validate) return
+
+    let cancelled = false
+    void validate([activeProject.path]).then((results) => {
+      if (cancelled) return
+      const missing = results[activeProject.path] === false
+      if (missing === Boolean(activeProject.pathMissing)) return
+      updateChatWorkspace((prev) => ({
+        ...prev,
+        projects: prev.projects.map((project) =>
+          project.id === activeProject.id ? { ...project, pathMissing: missing || undefined } : project,
+        ),
+      }))
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeProject?.id, activeProject?.path, activeProject?.pathMissing, chatWorkspace, updateChatWorkspace])
 
   useEffect(() => {
     if (!chatWorkspace) return
@@ -806,6 +830,29 @@ export function AppShell() {
     void window.desktop?.showItemInFolder?.(projectPath)
   }, [])
 
+  const relocateProject = useCallback(
+    async (projectId: string) => {
+      let value: string | undefined
+      if (window.desktop?.pickProjectDirectory) {
+        value = (await window.desktop.pickProjectDirectory())?.trim()
+      } else {
+        value = window.prompt(t('project.promptExistingPath'), '')?.trim()
+      }
+      if (!value) return
+
+      const now = Date.now()
+      updateChatWorkspace((prev) => ({
+        ...prev,
+        projects: prev.projects.map((project) =>
+          project.id === projectId
+            ? { ...project, path: value, pathMissing: undefined, updatedAt: now }
+            : project,
+        ),
+      }))
+    },
+    [t, updateChatWorkspace],
+  )
+
   const hideProjectSkill = useCallback((projectId: string, skillPath: string) => {
     setHiddenSkillPathsByProject((prev) => {
       const existing = prev[projectId] ?? []
@@ -967,7 +1014,26 @@ export function AppShell() {
     return t(VIEW_HEADING_KEYS[activeViewId])
   }, [activeProject?.name, activeThread?.title, activeViewId, settingsCategory, t])
 
-  if (!chatWorkspace || !activeProject) {
+  if (!chatWorkspace) {
+    return null
+  }
+
+  if (chatWorkspace.projects.length === 0) {
+    return (
+      <div className="app-shell app-shell-empty" id="app-shell">
+        <div className="app-shell-empty__card">
+          <h1>{t('shell.emptyWorkspaceHeading')}</h1>
+          <p>{t('shell.emptyWorkspaceBody')}</p>
+          <button type="button" className="app-shell-empty__action" onClick={() => void createProject('existing')}>
+            <IconInline name="plus" />
+            <span>{t('shell.emptyWorkspaceAction')}</span>
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!activeProject) {
     return null
   }
 
@@ -1005,6 +1071,7 @@ export function AppShell() {
           onReorderProject={reorderProject}
           onToggleSidebarProjectCollapsed={toggleSidebarProjectCollapsed}
           onRemoveProject={removeProject}
+          onRelocateProject={(projectId) => void relocateProject(projectId)}
           onRevealProjectInFileManager={revealProjectInFileManager}
           onHideProjectSkill={hideProjectSkill}
           onToggleCollapsed={toggleSidebarCollapsed}

@@ -6,6 +6,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { resolveProjectPath } from './project-path'
 import type { ClaudeChatEvent } from '../src/claude-chat-types'
 import type { ChatWorkspaceState, WorkspaceProject } from '../src/components/types'
 import type {
@@ -1133,12 +1134,8 @@ function normalizeSlug(value: string): string {
   return value.trim().replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase()
 }
 
-function resolveProjectPath(value: string): string {
-  return path.resolve(value)
-}
-
 function normalizeProjectPath(value: string): string {
-  return path.resolve(value)
+  return resolveProjectPath(value)
 }
 
 function clampNumber(value: unknown, min: number, max: number, fallback: number): number {

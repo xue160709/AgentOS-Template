@@ -1173,12 +1173,16 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   ) => {
     const text = rawText.trim()
     if (!text && attachmentsForSubmit.length === 0) return
+    const projectForSubmit =
+      target?.project ?? (activeThread ? projects.find((project) => project.id === activeThread.projectId) : undefined) ?? activeProject
+    if (projectForSubmit.pathMissing) {
+      onStatusChange(t('shell.projectPathMissingSubmitBlocked'))
+      return
+    }
     if (attachmentsForSubmit.some((attachment) => attachment.kind === 'image') && !activeModelSupportsImages) {
       onStatusChange(t('chat.imageInputDisabledStatus'))
       return
     }
-    const projectForSubmit =
-      target?.project ?? (activeThread ? projects.find((project) => project.id === activeThread.projectId) : undefined) ?? activeProject
     let submittingThreadId = target?.threadId ?? activeThreadIdRef.current
     if (!submittingThreadId) {
       const createdThreadId = onNewThread(projectForSubmit.id)

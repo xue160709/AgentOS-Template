@@ -73,6 +73,7 @@ type AppShellSidebarProps = {
   onReorderProject: (projectId: string, targetProjectId: string, position: 'before' | 'after') => void
   onToggleSidebarProjectCollapsed: (projectId: string) => void
   onRemoveProject: (projectId: string) => void
+  onRelocateProject: (projectId: string) => void
   onRevealProjectInFileManager: (projectPath: string) => void
   onHideProjectSkill: (projectId: string, skillPath: string) => void
   onToggleCollapsed: () => void
@@ -109,6 +110,7 @@ export function AppShellSidebar({
   onReorderProject,
   onToggleSidebarProjectCollapsed,
   onRemoveProject,
+  onRelocateProject,
   onRevealProjectInFileManager,
   onHideProjectSkill,
   onToggleCollapsed,
@@ -307,11 +309,20 @@ export function AppShellSidebar({
         {
           id: 'reveal',
           label: isDarwin ? t('sidebar.menuRevealInFinder') : t('sidebar.menuRevealInFileManager'),
-          disabled: !window.desktop?.showItemInFolder,
+          disabled: !window.desktop?.showItemInFolder || project.pathMissing,
           onSelect: () => {
             closeContextMenu()
             setConfirmingArchiveThreadId(null)
             onRevealProjectInFileManager(project.path)
+          },
+        },
+        {
+          id: 'relocate-project',
+          label: t('sidebar.menuRelocateProject'),
+          onSelect: () => {
+            closeContextMenu()
+            setConfirmingArchiveThreadId(null)
+            onRelocateProject(project.id)
           },
         },
         {
@@ -529,6 +540,9 @@ export function AppShellSidebar({
                             <IconInline name="folder" />
                             <span className="app-project-copy">
                               <span className="app-project-name">{project.name}</span>
+                              {project.pathMissing ? (
+                                <span className="app-project-path-missing">{t('sidebar.projectPathMissingBadge')}</span>
+                              ) : null}
                             </span>
                           </button>
                           <button

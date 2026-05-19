@@ -69,6 +69,7 @@ declare global {
       listProjectFiles?: (rootPath: string) => Promise<FileTreeResult>
       searchProjectFiles?: (rootPath: string, query: string) => Promise<ProjectFileSearchResult>
       listAgentContext?: (rootPath: string) => Promise<AgentContextResult>
+      validateProjectPaths?: (projectPaths: string[]) => Promise<Record<string, boolean>>
       /** 相对路径须不含 `..`；用于探测项目下目录/文件是否存在 / Relative path must not contain `..` */
       pathExistsUnderProject?: (rootPath: string, relativePath: string) => Promise<boolean>
       runHomePlugin?: (rootPath: string, options?: HomePluginRunOptions) => Promise<HomePluginRunResult>

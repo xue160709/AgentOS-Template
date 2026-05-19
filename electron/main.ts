@@ -1,7 +1,6 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, shell, Tray } from 'electron'
 import { fileURLToPath } from 'node:url'
 import fs from 'node:fs/promises'
-import os from 'node:os'
 import path from 'node:path'
 import zh from '../src/locales/zh.json'
 import en from '../src/locales/en.json'
@@ -23,6 +22,7 @@ import { loadMainProcessEnv } from './env-loader'
 import { runProjectHomePlugin, saveProjectHomePluginLayout, saveProjectHomePluginOrder } from './home-plugin-runner'
 import { TaskHomePluginManager } from './task-home-plugin-manager'
 import { normalizeUiLocale } from './ui-locale'
+import { formatProjectPathError, resolveProjectPath, validateProjectPaths } from './project-path'
 import type {
   ActiveChatPickPayload,
   ClaudeChatAttachment,
@@ -508,6 +508,10 @@ if (gotSingleInstanceLock) {
     ipcMain.handle('desktop:list-project-files', (_event, rootPath: string) => {
       return readProjectFileTree(rootPath)
     })
+    ipcMain.handle('desktop:validate-project-paths', async (_event, paths: unknown) => {
+      if (!Array.isArray(paths)) return {}
+      return validateProjectPaths(paths.filter((path): path is string => typeof path === 'string'))
+    })
     ipcMain.handle('desktop:search-project-files', (_event, rootPath: string, query: string) => {
       return searchProjectFiles(rootPath, query)
     })
@@ -896,18 +900,9 @@ async function readProjectFileTree(rootPath: string): Promise<FileTreeResult> {
     return {
       ok: false,
       rootPath: resolvedRootPath,
-      message: error instanceof Error ? error.message : '无法读取文件树',
+      message: formatProjectPathError(error),
     }
   }
-}
-
-function resolveProjectPath(projectPath: string): string {
-  const trimmedPath = projectPath.trim()
-  if (trimmedPath === '~') return os.homedir()
-  if (trimmedPath.startsWith(`~${path.sep}`) || trimmedPath.startsWith('~/')) {
-    return path.resolve(os.homedir(), trimmedPath.slice(2))
-  }
-  return path.resolve(trimmedPath)
 }
 
 function normalizeRelativePath(relativePath: string): string {

@@ -123,6 +123,8 @@ export type WorkspaceProject = {
   updatedAt: number
   /** 置顶权重：越大越靠前（持久化）/ Pin rank: larger sorts higher (persisted) */
   pinnedAt?: number
+  /** 运行时标记：本地路径不可达（不持久化）/ Runtime-only flag when local path is unreachable */
+  pathMissing?: boolean
 }
 
 /** 侧栏折叠偏好（与置顶同属工作区持久化）/ Sidebar collapse prefs co-persisted with pins */
