@@ -32,3 +32,10 @@ release
 /.agents/skills/*
 !/.agents/skills/a2ui-project-home-panel/
 !/.agents/skills/a2ui-project-home-panel/**
+AGENT.md
+codex-css-tokens.css
+codex-css-tokens.json
+codex-css-tokens.md
+codex-settings-design-system.md
+codex-sidebar-project-chat-design.md
+codex-ui-framework-notes.md
