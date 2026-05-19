@@ -28,8 +28,7 @@
     "gatekeeperAssess": false,
     "entitlements": "build/entitlements.mac.plist",
     "entitlementsInherit": "build/entitlements.mac.inherit.plist",
-    // Required when APPLE_ID / API Key env vars trigger built-in notarization (electron-builder 24.13+).
-    "notarize": true,
+    // mac.notarize.teamId is injected at build time via electron-builder.config.cjs (APPLE_TEAM_ID).
     "target": [
       "dmg",
       "zip"
