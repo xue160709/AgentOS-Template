@@ -1112,7 +1112,6 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
   height: var(--height-toolbar-pane);
   min-height: var(--height-toolbar-pane);
   padding: 0 calc(var(--spacing) * 3);
-  border-bottom: 1px solid var(--color-token-border);
   background: var(--color-token-main-surface-primary);
 }
 
