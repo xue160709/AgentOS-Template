@@ -28,7 +28,7 @@ import type {
   WorkspaceProject,
   WorkspaceThread,
 } from './types'
-import { SETTINGS_SIDEBAR_NAV } from './app-shell-constants.ts'
+import { getSettingsSidebarNav } from './app-shell-constants.ts'
 import { sortProjectsForSidebar } from './project-order'
 
 /** 侧栏单区块预览条数（超过则显示「展开显示」）/ Max items before "show more" in sidebar sections */
@@ -525,7 +525,7 @@ export function AppShellSidebar({
                   <span>{t('sidebar.backToApp')}</span>
                 </button>
                 <div className="app-sidebar-section-label">{t('sidebar.settingsSection')}</div>
-                {SETTINGS_SIDEBAR_NAV.map((item) => (
+                {getSettingsSidebarNav().map((item) => (
                   <button
                     key={item.id}
                     type="button"

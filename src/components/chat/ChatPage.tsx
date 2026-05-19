@@ -28,6 +28,7 @@ import type {
   ClaudePermissionMode,
   ProjectFileSearchItem,
 } from '../../claude-chat-types'
+import { CLAUDE_AGENT_SETTINGS_CHANGED_EVENT } from '../../app-events'
 import type { HomePluginRunItem } from '../../desktop-types'
 import { useI18n } from '../../i18n/i18n'
 import type {
@@ -49,7 +50,6 @@ import { ChatThreadView } from './ChatThreadView'
 import { Composer } from './Composer'
 import type { BuiltInSlashCommand, ChatModelMenuRow, ComposerSuggestion, ComposerTrigger, PermissionModeRow } from './local-types'
 
-const SETTINGS_CHANGED_EVENT = 'claude-agent-settings:changed'
 const PROCESS_TRACE_TOGGLE_EVENT = 'chat-process-trace:toggle'
 const MAX_COMPOSER_SUGGESTIONS = 64
 const MAX_COMPOSER_ATTACHMENTS = 8
@@ -344,8 +344,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     const onSettingsChanged = (event: Event) => {
       applyGlobalModelFromSettings((event as CustomEvent<ClaudeAgentSettingsSnapshot>).detail)
     }
-    window.addEventListener(SETTINGS_CHANGED_EVENT, onSettingsChanged)
-    return () => window.removeEventListener(SETTINGS_CHANGED_EVENT, onSettingsChanged)
+    window.addEventListener(CLAUDE_AGENT_SETTINGS_CHANGED_EVENT, onSettingsChanged)
+    return () => window.removeEventListener(CLAUDE_AGENT_SETTINGS_CHANGED_EVENT, onSettingsChanged)
   }, [applyGlobalModelFromSettings])
 
   // --- Composer autocomplete: slash commands, @mentions, debounced file search / 输入框联想：斜杠、@ 与防抖文件搜索 ---
@@ -447,7 +447,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
         providerId: row.providerId,
         anthropicModel: row.useOverlayPick ? row.anthropicModelId : undefined,
       })
-      window.dispatchEvent(new CustomEvent(SETTINGS_CHANGED_EVENT, { detail: snapshot }))
+      window.dispatchEvent(new CustomEvent(CLAUDE_AGENT_SETTINGS_CHANGED_EVENT, { detail: snapshot }))
       setModelPickerOpen(false)
     } catch {
       /* 设置写入失败时静默 / Ignore settings write failures */

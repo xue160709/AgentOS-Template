@@ -22,9 +22,11 @@ const DEFAULT_PROVIDER_ID = 'default-provider'
 /** `claude-agent-settings.json` 读写与 env/settings 融合解析 / Settings store merging env vs UI sources */
 export class ClaudeAgentSettingsStore {
   private readonly settingsFilePath: string
+  private readonly allowEnvConfigSource: boolean
 
-  constructor(userDataPath: string) {
+  constructor(userDataPath: string, options?: { allowEnvConfigSource?: boolean }) {
     this.settingsFilePath = path.join(userDataPath, SETTINGS_FILE_NAME)
+    this.allowEnvConfigSource = options?.allowEnvConfigSource ?? true
     safeConsoleInfo('[ClaudeAgentSettingsStore] using settings file', this.settingsFilePath)
   }
 
@@ -40,14 +42,14 @@ export class ClaudeAgentSettingsStore {
 
     try {
       const raw = JSON.parse(readFileSync(this.settingsFilePath, 'utf8')) as unknown
-      return normalizeSettings(raw)
+      return normalizeSettings(raw, this.allowEnvConfigSource)
     } catch {
       return createDefaultSettings()
     }
   }
 
   save(settings: unknown): ClaudeAgentSettingsSnapshot {
-    const normalized = normalizeSettings(settings)
+    const normalized = normalizeSettings(settings, this.allowEnvConfigSource)
     mkdirSync(path.dirname(this.settingsFilePath), { recursive: true })
     writeFileSync(this.settingsFilePath, `${JSON.stringify(normalized, null, 2)}\n`, 'utf8')
     safeConsoleInfo('[ClaudeAgentSettingsStore] saved settings', summarizeSettingsForLog(normalized))
@@ -75,7 +77,7 @@ export class ClaudeAgentSettingsStore {
     const settings = this.read()
     const env = this.getEnvSnapshot()
 
-    if (settings.configSource === 'env') {
+    if (this.allowEnvConfigSource && settings.configSource === 'env') {
       const resolved: ClaudeAgentResolvedConfig = {
         configSource: 'env',
         apiKey: readEnv('ANTHROPIC_API_KEY'),
@@ -149,10 +151,10 @@ export class ClaudeAgentSettingsStore {
   }
 }
 
-function normalizeSettings(raw: unknown): ClaudeAgentSettings {
+function normalizeSettings(raw: unknown, allowEnvConfigSource: boolean): ClaudeAgentSettings {
   if (!isRecord(raw)) return createDefaultSettings()
 
-  const configSource = normalizeSource(raw.configSource)
+  const configSource = normalizeSource(raw.configSource, allowEnvConfigSource)
   const providers = normalizeProviders(raw)
   const activeProviderId = providers.some((provider) => provider.id === normalizeString(raw.activeProviderId))
     ? normalizeString(raw.activeProviderId)
@@ -269,7 +271,8 @@ function createDefaultProvider(): ClaudeAgentModelProvider {
   }
 }
 
-function normalizeSource(value: unknown): ClaudeAgentConfigSource {
+function normalizeSource(value: unknown, allowEnvConfigSource: boolean): ClaudeAgentConfigSource {
+  if (!allowEnvConfigSource) return 'settings'
   return value === 'env' ? 'env' : 'settings'
 }
 

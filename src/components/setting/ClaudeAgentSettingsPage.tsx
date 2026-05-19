@@ -10,10 +10,11 @@ import type {
   ClaudeAgentSettings,
   ClaudeAgentSettingsSnapshot,
 } from '../../claude-chat-types'
+import { CLAUDE_AGENT_SETTINGS_CHANGED_EVENT } from '../../app-events'
 import { IconInline } from '../../icon-inline'
 import { getInitialLocale, translate, useI18n } from '../../i18n/i18n'
 
-const SETTINGS_CHANGED_EVENT = 'claude-agent-settings:changed'
+const IS_DEV_BUILD = import.meta.env.DEV
 
 // --- Snapshot helpers / 快照辅助 ---
 
@@ -71,6 +72,7 @@ export function ClaudeAgentSettingsPage() {
   const [deleteConfirmDialogOpen, setDeleteConfirmDialogOpen] = useState(false)
   const [pendingDeleteProviderId, setPendingDeleteProviderId] = useState('')
   const deleteConfirmDialogRef = useRef<HTMLDialogElement>(null)
+  const effectiveConfigSource = IS_DEV_BUILD ? configSource : 'settings'
 
   useEffect(() => {
     latestRef.current = { providers, configSource, chatActiveProviderId, chatActiveAnthropicModel }
@@ -99,7 +101,7 @@ export function ClaudeAgentSettingsPage() {
       ? snapshot.settings.activeProviderId
       : nextProviders[0].id
 
-    setConfigSource(snapshot.settings.configSource)
+    setConfigSource(IS_DEV_BUILD ? snapshot.settings.configSource : 'settings')
     setProviders(nextProviders)
     setChatActiveProviderId(nextChatActiveId)
     setChatActiveAnthropicModel(snapshot.settings.activeAnthropicModel ?? '')
@@ -122,7 +124,7 @@ export function ClaudeAgentSettingsPage() {
       : nextProviders[0].id
     const overlay = pruneStoredAnthropicOverlay(nextProviders, persistedChatId, overlayRaw)
     const payload: ClaudeAgentSettings = {
-      configSource: src,
+      configSource: IS_DEV_BUILD ? src : 'settings',
       activeProviderId: persistedChatId,
       activeAnthropicModel: overlay,
       providers: nextProviders,
@@ -137,7 +139,7 @@ export function ClaudeAgentSettingsPage() {
       applySnapshot(snapshot)
       lastSyncedSnapshotRef.current = cloneSettingsSnapshot(snapshot)
       setLastSyncedSeq((n) => n + 1)
-      window.dispatchEvent(new CustomEvent('claude-agent-settings:changed', { detail: snapshot }))
+      window.dispatchEvent(new CustomEvent(CLAUDE_AGENT_SETTINGS_CHANGED_EVENT, { detail: snapshot }))
       setStatus(t('settings.models.saved'))
     } catch (error) {
       if (seq === saveSeqRef.current) {
@@ -261,8 +263,8 @@ export function ClaudeAgentSettingsPage() {
         setChatActiveAnthropicModel(detail.settings.activeAnthropicModel ?? '')
       }
     }
-    window.addEventListener(SETTINGS_CHANGED_EVENT, onExternal)
-    return () => window.removeEventListener(SETTINGS_CHANGED_EVENT, onExternal)
+    window.addEventListener(CLAUDE_AGENT_SETTINGS_CHANGED_EVENT, onExternal)
+    return () => window.removeEventListener(CLAUDE_AGENT_SETTINGS_CHANGED_EVENT, onExternal)
   }, [])
 
   useEffect(() => {
@@ -318,42 +320,44 @@ export function ClaudeAgentSettingsPage() {
           event.preventDefault()
         }}
       >
-        <section className="settings-section" aria-labelledby="settings-section-source-heading">
-          <h2 id="settings-section-source-heading" className="settings-section-heading">
-            {t('settings.models.configSource')}
-          </h2>
-          <div className="settings-group">
-            <div className="settings-select-row">
-              <div className="settings-field-row__meta">
-                <p className="settings-select-row__lede">
-                  {configSource === 'settings'
-                    ? t('settings.models.settingsFirstDesc')
-                    : t('settings.models.envOnlyDesc')}
-                </p>
-              </div>
-              <div className="settings-select-wrap">
-                <select
-                  id="claude-config-source"
-                  className="settings-input settings-select"
-                  value={configSource}
-                  aria-labelledby="settings-section-source-heading"
-                  aria-label={t('settings.models.configSourceRadiogroup')}
-                  onChange={(event) => {
-                    setConfigSource(event.target.value as ClaudeAgentConfigSource)
-                  }}
-                >
-                  <option value="settings">{t('settings.models.settingsFirst')}</option>
-                  <option value="env">{t('settings.models.envOnly')}</option>
-                </select>
-                <span className="settings-select-wrap__chevron" aria-hidden>
-                  <IconInline name="chevron" />
-                </span>
+        {IS_DEV_BUILD ? (
+          <section className="settings-section" aria-labelledby="settings-section-source-heading">
+            <h2 id="settings-section-source-heading" className="settings-section-heading">
+              {t('settings.models.configSource')}
+            </h2>
+            <div className="settings-group">
+              <div className="settings-select-row">
+                <div className="settings-field-row__meta">
+                  <p className="settings-select-row__lede">
+                    {configSource === 'settings'
+                      ? t('settings.models.settingsFirstDesc')
+                      : t('settings.models.envOnlyDesc')}
+                  </p>
+                </div>
+                <div className="settings-select-wrap">
+                  <select
+                    id="claude-config-source"
+                    className="settings-input settings-select"
+                    value={configSource}
+                    aria-labelledby="settings-section-source-heading"
+                    aria-label={t('settings.models.configSourceRadiogroup')}
+                    onChange={(event) => {
+                      setConfigSource(event.target.value as ClaudeAgentConfigSource)
+                    }}
+                  >
+                    <option value="settings">{t('settings.models.settingsFirst')}</option>
+                    <option value="env">{t('settings.models.envOnly')}</option>
+                  </select>
+                  <span className="settings-select-wrap__chevron" aria-hidden>
+                    <IconInline name="chevron" />
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
-        </section>
+          </section>
+        ) : null}
 
-        {configSource === 'settings' ? (
+        {effectiveConfigSource === 'settings' ? (
           <section className="settings-section" aria-labelledby="settings-section-providers-heading">
             <div className="settings-section-header">
               <h2 id="settings-section-providers-heading" className="settings-section-heading">
@@ -583,7 +587,7 @@ export function ClaudeAgentSettingsPage() {
           </section>
         ) : null}
 
-        {configSource === 'env' ? (
+        {effectiveConfigSource === 'env' ? (
           <section className="settings-section" aria-labelledby="settings-section-env-heading">
             <h2 id="settings-section-env-heading" className="settings-section-heading">
               {t('settings.models.envHeading')}
@@ -616,7 +620,7 @@ export function ClaudeAgentSettingsPage() {
           </div>
         </div>
       </form>
-      {configSource === 'settings' ? (
+      {effectiveConfigSource === 'settings' ? (
         <dialog
           ref={deleteConfirmDialogRef}
           className="settings-restart-dialog"

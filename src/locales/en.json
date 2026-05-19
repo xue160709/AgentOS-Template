@@ -7,6 +7,7 @@
     "workspaceSettingsGeneral": "Settings · General",
     "workspaceSettingsUpdates": "Settings · Updates",
     "workspaceSettingsAgentMode": "Settings · Agent Mode",
+    "workspaceSettingsDeveloper": "Settings · Developer Mode",
     "headerDefault": "Claude Agent",
     "headerProcessingThread": "Current conversation is busy",
     "projectSkillUnavailable": "This environment cannot read project skills",
@@ -31,7 +32,8 @@
     "models": "Models",
     "general": "General",
     "updates": "Updates",
-    "agentMode": "Agent Mode"
+    "agentMode": "Agent Mode",
+    "developer": "Developer Mode"
   },
   "sidebar": {
     "windowNav": "Window navigation",
@@ -247,6 +249,30 @@
     "updates": {
       "pageTitle": "Version Updates",
       "pageLede": "New versions are checked and downloaded in the background. Once the installer is ready, confirm once to restart and install."
+    },
+    "developer": {
+      "pageTitle": "Developer Mode",
+      "pageLede": "Visible only in development builds. It clears only the user data needed for testing, and leaves project files untouched.",
+      "groupAria": "Developer mode cleanup options",
+      "workspaceTitle": "Clear workspace / sessions",
+      "workspaceBoundary": "Boundary: removes only workspace snapshot and session data, including the local mirror `CodeX-UI-Template-chat-workspace-v1`, main-process `chat-workspace.json`, `chat-workspace.sqlite*`, and `chat-sessions/`. Project folders and files stay untouched.",
+      "workspaceImpact": "Impact: the current workspace's projects, threads, session IDs, and active selection return to a blank state; desktop preferences, Agent Mode, display language, sidebar width, project skill toggles, and other pure local prefs stay as they are.",
+      "workspaceAction": "Clear workspace / sessions",
+      "workspaceDialogTitle": "Clear workspace / sessions?",
+      "claudeTitle": "Clear Claude settings",
+      "claudeBoundary": "Boundary: removes only `claude-agent-settings.json` in the main process; it does not touch the workspace, project files, desktop preferences, or other local prefs.",
+      "claudeImpact": "Impact: Claude's provider list, active selection, API key, base URL, and model mappings reset to defaults; project files, workspace data, Agent Mode, sidebar width, and pure local prefs stay untouched.",
+      "claudeAction": "Clear Claude settings",
+      "claudeDialogTitle": "Clear Claude settings?",
+      "dialogBody": "This will run immediately and cannot be undone.",
+      "dialogConfirm": "Clear",
+      "dialogDismiss": "Cancel",
+      "boundaryLabel": "Boundary",
+      "impactLabel": "Impact",
+      "workspaceClearing": "Clearing workspace / sessions…",
+      "workspaceCleared": "Workspace / sessions cleared",
+      "claudeClearing": "Clearing Claude settings…",
+      "claudeCleared": "Claude settings cleared"
     },
     "models": {
       "pageTitle": "Models",

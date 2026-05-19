@@ -103,6 +103,12 @@ contextBridge.exposeInMainWorld('desktop', {
   saveChatWorkspace(state: unknown) {
     return ipcRenderer.invoke('chat-workspace:save', state)
   },
+  clearChatWorkspaceData() {
+    return ipcRenderer.invoke('desktop:clear-chat-workspace-data') as Promise<void>
+  },
+  clearClaudeAgentSettings() {
+    return ipcRenderer.invoke('desktop:clear-claude-agent-settings-data') as Promise<void>
+  },
   quitApp() {
     return ipcRenderer.invoke('desktop:quit') as Promise<void>
   },

@@ -27,8 +27,7 @@ export const HOME_PLUGINS_DIR_RELATIVE = '.agents/home-plugins'
 /** 默认设置分类 / Default settings category */
 export const DEFAULT_SETTINGS_CATEGORY: SettingsCategoryId = 'general'
 
-/** 设置侧栏导航（文案键 + 图标）/ Settings sidebar nav entries (i18n keys + icons) */
-export const SETTINGS_SIDEBAR_NAV: {
+const SETTINGS_SIDEBAR_NAV_BASE: {
   id: SettingsCategoryId
   labelKey: string
   icon: IconName
@@ -40,6 +39,15 @@ export const SETTINGS_SIDEBAR_NAV: {
   { id: 'updates', labelKey: 'settingsCategory.updates', icon: 'refresh' },
 ]
 
+/** 设置侧栏导航（文案键 + 图标）/ Settings sidebar nav entries (i18n keys + icons) */
+export function getSettingsSidebarNav() {
+  const nav = [...SETTINGS_SIDEBAR_NAV_BASE]
+  if (import.meta.env.DEV) {
+    nav.push({ id: 'developer', labelKey: 'settingsCategory.developer', icon: 'laptop' })
+  }
+  return nav
+}
+
 /** 非设置视图标题所用 i18n 键 / Heading keys for non-settings views */
 export const VIEW_HEADING_KEYS: Record<Exclude<AppViewId, 'settings'>, string> = {
   home: 'shell.viewHome',
@@ -50,6 +58,7 @@ export const VIEW_HEADING_KEYS: Record<Exclude<AppViewId, 'settings'>, string> =
 export function settingsWorkspaceTitleKey(category: SettingsCategoryId): string {
   if (category === 'skills') return 'shell.workspaceSettingsGeneral'
   if (category === 'updates') return 'shell.workspaceSettingsUpdates'
+  if (category === 'developer') return 'shell.workspaceSettingsDeveloper'
   if (category === 'agent') return 'shell.workspaceSettingsAgentMode'
   return 'shell.workspaceSettingsModels'
 }
@@ -82,6 +91,7 @@ export function settingsCategoryFromLocation(): SettingsCategoryId {
   const sub = parts[1]
   if (sub === 'skills') return 'skills'
   if (sub === 'updates') return 'updates'
+  if (sub === 'developer' && import.meta.env.DEV) return 'developer'
   if (sub === 'agent') return 'agent'
   return DEFAULT_SETTINGS_CATEGORY
 }

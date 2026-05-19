@@ -84,6 +84,8 @@ let agentModeSettingsStore: AgentModeSettingsStore | null = null
 let chatWorkspaceStore: ChatWorkspaceStore | null = null
 let desktopPreferencesStore: DesktopPreferencesStore | null = null
 let taskHomePluginManager: TaskHomePluginManager | null = null
+let chatWorkspaceOperationChain: Promise<void> = Promise.resolve()
+let claudeSettingsOperationChain: Promise<void> = Promise.resolve()
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 
@@ -357,6 +359,58 @@ function getTaskHomePluginManager() {
   return taskHomePluginManager
 }
 
+function runChatWorkspaceOperation<T>(operation: () => Promise<T>): Promise<T> {
+  const next = chatWorkspaceOperationChain.then(operation, operation)
+  chatWorkspaceOperationChain = next.then(
+    () => undefined,
+    () => undefined,
+  )
+  return next
+}
+
+function runClaudeSettingsOperation<T>(operation: () => Promise<T>): Promise<T> {
+  const next = claudeSettingsOperationChain.then(operation, operation)
+  claudeSettingsOperationChain = next.then(
+    () => undefined,
+    () => undefined,
+  )
+  return next
+}
+
+async function clearChatWorkspaceData(userDataPath: string): Promise<void> {
+  try {
+    await claudeAgentRunner?.cancel()
+  } catch {
+    /* ignore */
+  }
+
+  await removeWorkspaceArtifacts(userDataPath)
+  await taskHomePluginManager?.refreshFromWorkspace()
+}
+
+async function clearClaudeAgentSettingsData(userDataPath: string): Promise<void> {
+  await removeIfExists(path.join(userDataPath, 'claude-agent-settings.json'))
+}
+
+async function removeWorkspaceArtifacts(userDataPath: string): Promise<void> {
+  await Promise.all([
+    removeIfExists(path.join(userDataPath, 'chat-workspace.json')),
+    removeIfExists(path.join(userDataPath, 'chat-workspace.sqlite')),
+    removeIfExists(path.join(userDataPath, 'chat-workspace.sqlite-wal')),
+    removeIfExists(path.join(userDataPath, 'chat-workspace.sqlite-shm')),
+    removeIfExists(path.join(userDataPath, 'chat-workspace.sqlite-journal')),
+    removeIfExists(path.join(userDataPath, 'chat-sessions')),
+  ])
+}
+
+async function removeIfExists(targetPath: string): Promise<void> {
+  try {
+    await fs.rm(targetPath, { recursive: true, force: true })
+  } catch {
+    /* ignore */
+  }
+}
+
 function sendTaskHomePluginEvent(event: HomePluginTaskEvent): void {
   if (!win || win.isDestroyed()) return
   win.webContents.send(TASK_HOME_PLUGIN_EVENT_CHANNEL, event)
@@ -507,7 +561,9 @@ if (gotSingleInstanceLock) {
     applyDockBranding()
     const userDataPath = app.getPath('userData')
     desktopPreferencesStore = new DesktopPreferencesStore(userDataPath)
-    claudeAgentSettingsStore = new ClaudeAgentSettingsStore(userDataPath)
+    claudeAgentSettingsStore = new ClaudeAgentSettingsStore(userDataPath, {
+      allowEnvConfigSource: isDevRuntime,
+    })
     agentModeSettingsStore = new AgentModeSettingsStore(userDataPath)
     chatWorkspaceStore = new ChatWorkspaceStore(userDataPath)
     applyLoginItemSettingsOnStartup(getDesktopPreferencesStore().read())
@@ -572,18 +628,30 @@ if (gotSingleInstanceLock) {
       return getClaudeAgentSettingsStore().getSnapshot()
     })
     ipcMain.handle('claude-agent-settings:save', (_event, settings: ClaudeAgentSettings) => {
-      return getClaudeAgentSettingsStore().save(settings)
+      return runClaudeSettingsOperation(async () => getClaudeAgentSettingsStore().save(settings))
     })
     ipcMain.handle('claude-agent-settings:set-active-chat-pick', (_event, payload: ActiveChatPickPayload) => {
-      return getClaudeAgentSettingsStore().setActiveChatPick(payload)
+      return runClaudeSettingsOperation(async () => getClaudeAgentSettingsStore().setActiveChatPick(payload))
     })
     ipcMain.handle('chat-workspace:get', () => {
       return getChatWorkspaceStore().read()
     })
-    ipcMain.handle('chat-workspace:save', async (_event, state: unknown) => {
-      const saved = await getChatWorkspaceStore().save(state)
-      void taskHomePluginManager?.refreshFromWorkspace(saved)
-      return saved
+    ipcMain.handle('chat-workspace:save', (_event, state: unknown) => {
+      return runChatWorkspaceOperation(async () => {
+        const saved = await getChatWorkspaceStore().save(state)
+        void taskHomePluginManager?.refreshFromWorkspace(saved)
+        return saved
+      })
+    })
+    ipcMain.handle('desktop:clear-chat-workspace-data', () => {
+      return runChatWorkspaceOperation(async () => {
+        await clearChatWorkspaceData(userDataPath)
+      })
+    })
+    ipcMain.handle('desktop:clear-claude-agent-settings-data', () => {
+      return runClaudeSettingsOperation(async () => {
+        await clearClaudeAgentSettingsData(userDataPath)
+      })
     })
     ipcMain.handle('desktop:pick-project-directory', async () => {
       const parent = BrowserWindow.getFocusedWindow() ?? win
