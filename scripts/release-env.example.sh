@@ -5,6 +5,9 @@
 # macOS 签名：本机钥匙串有证书时用 CSC_NAME
 # export CSC_NAME="Developer ID Application: Your Name (TEAMID)"
 
+# macOS 公证（与 APPLE_ID + 专用密码配合时必填）
+# export APPLE_TEAM_ID="XXXXXXXXXX"
+
 # macOS 签名：或用 .p12
 # export CSC_LINK="/path/to/certificate.p12"
 # export CSC_KEY_PASSWORD="p12-password"
