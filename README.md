@@ -250,6 +250,23 @@ your-project/
 - electron-builder
 - marked + DOMPurify
 
+## 未来方向
+
+### 产品分支
+
+- 自动生成 SKILL 和 Agent。
+- 预置更多模型厂商数据。
+
+### 框架分支
+
+- 融入记忆模块。
+- 加强 Chat 和数据卡片的关联。
+- 自主优化 SKILL。
+
+### 实验分支
+
+- 将所有 UI 组件重构，支持意图理解。
+
 ## 联系方式
 
 如果想交流想法、反馈问题或参与共创，可以加微信：
@@ -260,6 +277,7 @@ your-project/
 
 - 感谢 Anthropic 提供 Claude Code 的二进制文件，不然这个项目很难把本地 Agent 运行层真正落到桌面工作台里。
 - 感谢 歸藏 分享 chat 里交互式 UI 的技术方案，https://x.com/op7418/status/2033113845120807170，不然我们很难把对话里的互动体验做得这么顺。
+- 感谢 OpenClaw 提供 SOUL.md、USER.md、Identify.md 的灵感，https://openclaw.ai/，不然我们很难把项目的身份、用户和边界梳理得这么清楚。
 
 ## 许可证
 

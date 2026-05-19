@@ -239,6 +239,23 @@ your-project/
 - electron-builder
 - marked + DOMPurify
 
+## Future Direction
+
+### Product branch
+
+- Automatically generate Skills and Agents.
+- Preload more model provider data.
+
+### Framework branch
+
+- Integrate a memory module.
+- Strengthen the link between Chat and data cards.
+- Let the system optimize Skills on its own.
+
+### Experimental branch
+
+- Rebuild all UI components to support intent understanding.
+
 ## Contact
 
 For discussion, feedback, or co-creation, add WeChat:
@@ -249,6 +266,7 @@ For discussion, feedback, or co-creation, add WeChat:
 
 - Thanks to Anthropic for providing the Claude Code binary. Without it, it would be much harder to bring the local Agent runtime into a desktop workspace like this.
 - Thanks to 歸藏 for sharing the interactive UI approach inside chat, [https://x.com/op7418/status/2033113845120807170](https://x.com/op7418/status/2033113845120807170). Without that, it would be much harder to make the in-chat interaction feel this smooth.
+- Thanks to OpenClaw for inspiring `SOUL.md`, `USER.md`, and `Identify.md`, [https://openclaw.ai/](https://openclaw.ai/). Without that, it would be much harder to shape the project identity, user model, and boundaries so clearly.
 
 ## License
 
