@@ -110,6 +110,7 @@ export class TaskHomePluginManager {
       const records = await this.readProjectTasks(project)
       for (const record of records) {
         const key = this.taskKey(record.projectPath, record.task.slug)
+        await this.reconcileInterruptedRuntime(record)
         nextRecords.set(key, record)
         this.records.set(key, record)
         this.scheduleRecord(record)
@@ -136,6 +137,7 @@ export class TaskHomePluginManager {
     const key = this.taskKey(resolvedProjectPath, slug)
     const cached = this.records.get(key)
     if (cached) {
+      await this.reconcileInterruptedRuntime(cached)
       return {
         ok: true,
         rootPath: resolvedProjectPath,
@@ -150,6 +152,7 @@ export class TaskHomePluginManager {
     if (!record) {
       return { ok: false, rootPath: resolvedProjectPath, slug, message: '未找到任务卡配置' }
     }
+    await this.reconcileInterruptedRuntime(record)
     this.records.set(key, record)
     return {
       ok: true,
@@ -372,6 +375,11 @@ export class TaskHomePluginManager {
     const key = this.taskKey(resolvedProjectPath, slug)
     const session = this.activeSessions.get(key)
     if (!session) {
+      const record = await this.ensureRecord(resolvedProjectPath, slug)
+      if (record && isActiveTaskRuntimeStatus(record.runtime.status)) {
+        await this.markRuntimeInterrupted(record, '已手动终止', '已终止')
+        return { ok: true, rootPath: resolvedProjectPath, slug: record.task.slug, stopped: true }
+      }
       return { ok: true, rootPath: resolvedProjectPath, slug, stopped: false }
     }
 
@@ -620,6 +628,25 @@ export class TaskHomePluginManager {
     record.runtime.updatedAt = new Date().toISOString()
     await writeJson(record.runtimePath, record.runtime)
     this.emitTaskEvent(record, threadSeed)
+  }
+
+  private async reconcileInterruptedRuntime(record: ManagedTaskRecord): Promise<boolean> {
+    const key = this.taskKey(record.projectPath, record.task.slug)
+    if (this.activeSessions.has(key) || !isActiveTaskRuntimeStatus(record.runtime.status)) return false
+    await this.markRuntimeInterrupted(record, '应用重启，上次运行已中断', '上次运行已中断')
+    return true
+  }
+
+  private async markRuntimeInterrupted(record: ManagedTaskRecord, detail: string, summary: string): Promise<void> {
+    const now = new Date().toISOString()
+    record.runtime.status = 'cancelled'
+    record.runtime.requestId = undefined
+    record.runtime.summary = summary
+    record.runtime.detail = detail
+    record.runtime.lastCompletedAt = now
+    record.runtime.updatedAt = now
+    await writeJson(record.runtimePath, record.runtime)
+    this.emitTaskEvent(record)
   }
 
   private scheduleRecord(record: ManagedTaskRecord): void {
@@ -1046,6 +1073,10 @@ function normalizeTaskRuntimeStatus(value: unknown): HomePluginTaskRuntime['stat
   return value === 'queued' || value === 'running' || value === 'waiting' || value === 'done' || value === 'error' || value === 'cancelled'
     ? value
     : 'idle'
+}
+
+function isActiveTaskRuntimeStatus(status: HomePluginTaskRuntime['status']): boolean {
+  return status === 'queued' || status === 'running' || status === 'waiting'
 }
 
 function computeNextRunAt(record: ManagedTaskRecord, now: number): number | null {
