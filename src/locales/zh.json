@@ -108,8 +108,8 @@
     "confirm": "确认",
     "settings": "设置",
     "versionUpdate": "版本更新",
-    "versionUpdateDownloading": "下载中 {{percent}}%",
-    "versionUpdateTitle": "打开版本更新",
+    "versionUpdateDownloading": "版本更新",
+    "versionUpdateTitle": "安装已下载更新",
     "resizeSidebar": "调整侧栏宽度",
     "justNow": "刚刚",
     "minutesShort": "{{n}} 分",
@@ -259,7 +259,7 @@
       "openAtLogin": "登录时自动启动",
       "openAtLoginHint": "登录本机系统后自动启动应用（可在系统「登录项」中查看或关闭）。",
       "updateHeading": "版本更新",
-      "updateCaption": "启动后会自动检查新版本；发现更新后会默认下载好安装包，准备完成后可一键重启安装。",
+      "updateCaption": "启动后会自动检查新版本；安装包下载完成后才会显示“版本更新”按钮，点击后会退出应用并安装。",
       "updateCurrentVersion": "当前版本",
       "updateDevHint": "开发模式不支持自动更新",
       "updateLoading": "正在读取版本信息…",
@@ -267,8 +267,8 @@
       "updateChecking": "正在检查更新…",
       "updateAvailable": "发现新版本 {{version}}，正在准备下载…",
       "updateNotAvailable": "当前已是最新版本。",
-      "updateDownloading": "正在下载 {{percent}}%（{{transferred}} / {{total}}）",
-      "updateDownloaded": "新版本 {{version}} 已下载。点击“版本更新”将重启并安装。",
+      "updateDownloading": "正在后台下载更新包，完成后会显示“版本更新”按钮。",
+      "updateDownloaded": "新版本 {{version}} 已下载完成。点击“版本更新”会退出应用并安装。",
       "updateError": "检查或下载更新失败",
       "updateCheck": "检查更新",
       "updateDownload": "重新下载",
@@ -276,7 +276,7 @@
     },
     "updates": {
       "pageTitle": "版本更新",
-      "pageLede": "应用会在后台检查并下载新版本。安装包准备完成后，你只需要确认重启安装。"
+      "pageLede": "应用会在后台检查并下载新版本。安装包准备完成后，这里会显示“版本更新”按钮。"
     },
     "developer": {
       "pageTitle": "开发者模式",

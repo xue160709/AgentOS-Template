@@ -12,7 +12,7 @@
   "scripts": {
     "dev": "vite",
     "typecheck": "tsc",
-    "test:electron": "node --test electron/window-chrome.test.mjs",
+    "test:electron": "node --test electron/*.test.mjs",
     "test:home-plugin": "node .agents/skills/a2ui-project-home-panel/scripts/validate_home_plugin.js --allow-missing",
     "build": "tsc && vite build && electron-builder --config electron-builder.config.cjs",
     "build:local": "tsc && vite build && electron-builder --config electron-builder.config.cjs --publish never",

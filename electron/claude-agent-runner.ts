@@ -36,6 +36,7 @@ import {
   summarizeSdkEnvForLog,
 } from './claude-agent-runner/config'
 import { ClaudeChatEventCoalescer } from './claude-agent-runner/event-coalescer'
+import { resolveClaudeCodeExecutablePath } from './claude-agent-runner/executable'
 import { fileDiffFromPostToolUse } from './claude-agent-runner/file-diff'
 import { buildSdkPromptInput, normalizeSubmitAttachments, resolveWorkspaceCwd } from './claude-agent-runner/input'
 import { ClaudeSdkMessageRouter } from './claude-agent-runner/sdk-message-router'
@@ -308,6 +309,7 @@ export class ClaudeAgentRunner {
     const abortController = new AbortController()
     const timeout = setTimeout(() => abortController.abort(), 30_000)
     const cwd = resolveWorkspaceCwd(payload.cwd ?? threadState.cwd, this.cwd)
+    const pathToClaudeCodeExecutable = resolveClaudeCodeExecutablePath({ appRoot: this.cwd })
     let response: Query | undefined
 
     try {
@@ -319,6 +321,7 @@ export class ClaudeAgentRunner {
           enableFileCheckpointing: true,
           env: buildSdkEnv(config),
           extraArgs: { 'replay-user-messages': null },
+          pathToClaudeCodeExecutable,
           permissionMode: 'default',
           resume: threadState.sessionId,
           settingSources: [],
@@ -402,6 +405,7 @@ export class ClaudeAgentRunner {
       })
       const promptInput = buildSdkPromptInput(resolvedPrompt, attachments)
       const sdkEnv = buildSdkEnv(config)
+      const pathToClaudeCodeExecutable = resolveClaudeCodeExecutablePath({ appRoot: this.cwd })
       if (attachments.length > 0) {
         this.emitActivity(
           activeRequest,
@@ -430,6 +434,7 @@ export class ClaudeAgentRunner {
             attachmentCount: attachments.length,
             imageAttachmentCount,
             resumeSessionIdPresent: Boolean(resumeSessionId),
+            claudeCodeExecutablePath: pathToClaudeCodeExecutable,
             config: summarizeConfigForLog(config),
             sdkEnv: summarizeSdkEnvForLog(sdkEnv),
           })
@@ -459,6 +464,7 @@ export class ClaudeAgentRunner {
               // custom models through ANTHROPIC_MODEL. Passing options.model makes
               // Claude Code treat the value as its own model flag and can trigger
               // false "model does not exist" errors.
+              pathToClaudeCodeExecutable,
               permissionMode: toSdkPermissionMode(activeRequest.permissionMode),
               resume: resumeSessionId,
               // Keep this app's provider settings authoritative. Claude Code user or

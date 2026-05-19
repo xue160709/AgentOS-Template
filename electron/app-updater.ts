@@ -33,6 +33,7 @@ function formatReleaseNotes(notes: unknown): string | undefined {
 
 class AppUpdaterService {
   private getWindow: () => BrowserWindow | null = () => null
+  private beforeQuitAndInstall: () => void = () => undefined
   private installed = false
   private state: AppUpdaterState = {
     phase: 'idle',
@@ -41,8 +42,9 @@ class AppUpdaterService {
   }
 
   /** 仅在打包环境注册；开发模式为 no-op / Register only when packaged */
-  install(getWindow: () => BrowserWindow | null) {
+  install(getWindow: () => BrowserWindow | null, options?: { beforeQuitAndInstall?: () => void }) {
     this.getWindow = getWindow
+    this.beforeQuitAndInstall = options?.beforeQuitAndInstall ?? (() => undefined)
     if (!app.isPackaged) return
 
     this.installed = true
@@ -147,6 +149,7 @@ class AppUpdaterService {
   quitAndInstall(): void {
     if (!this.installed) return
     if (this.state.phase !== 'downloaded') return
+    this.beforeQuitAndInstall()
     autoUpdater.quitAndInstall()
   }
 
@@ -169,8 +172,8 @@ class AppUpdaterService {
 
 export const appUpdaterService = new AppUpdaterService()
 
-export function registerAppUpdaterIpc(getWindow: () => BrowserWindow | null) {
-  appUpdaterService.install(getWindow)
+export function registerAppUpdaterIpc(getWindow: () => BrowserWindow | null, options?: { beforeQuitAndInstall?: () => void }) {
+  appUpdaterService.install(getWindow, options)
 
   ipcMain.handle('app-updater:get-state', () => appUpdaterService.getState())
   ipcMain.handle('app-updater:check', () => appUpdaterService.check())

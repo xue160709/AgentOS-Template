@@ -7,13 +7,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { AppUpdaterState } from '../../desktop-types'
 import { useI18n } from '../../i18n/i18n'
 
-function formatBytes(value: number | undefined): string {
-  if (value === undefined || !Number.isFinite(value)) return ''
-  if (value < 1024) return `${value} B`
-  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`
-  return `${(value / (1024 * 1024)).toFixed(1)} MB`
-}
-
 export function AppUpdateSection() {
   const { t } = useI18n()
   const [state, setState] = useState<AppUpdaterState | null>(null)
@@ -60,11 +53,7 @@ export function AppUpdateSection() {
       case 'not-available':
         return t('settings.general.updateNotAvailable')
       case 'downloading':
-        return t('settings.general.updateDownloading', {
-          percent: Math.round(state.percent ?? 0),
-          transferred: formatBytes(state.transferred),
-          total: formatBytes(state.total),
-        })
+        return t('settings.general.updateDownloading')
       case 'downloaded':
         return t('settings.general.updateDownloaded', { version: state.availableVersion ?? '' })
       case 'error':
@@ -100,12 +89,28 @@ export function AppUpdateSection() {
     void window.desktop?.quitAndInstallAppUpdate?.()
   }, [])
 
-  const showDownload = state?.phase === 'error' && Boolean(state.availableVersion)
-  const showInstall = state?.phase === 'downloaded'
-  const showCheck = !showInstall && state?.phase !== 'downloading' && state?.phase !== 'available'
+  const showDownload = updaterAvailable && state?.phase === 'error' && Boolean(state.availableVersion)
+  const showInstall = updaterAvailable && state?.phase === 'downloaded'
+  const showCheck =
+    updaterAvailable &&
+    !showInstall &&
+    !showDownload &&
+    state?.phase !== 'checking' &&
+    state?.phase !== 'downloading' &&
+    state?.phase !== 'available'
+  const hasUpdateAction = showCheck || showDownload || showInstall
 
   const currentVersion = state?.currentVersion ?? '—'
-  const downloadPercent = Math.max(0, Math.min(100, Math.round(state?.percent ?? 0)))
+  const statusTone =
+    state?.phase === 'downloaded'
+      ? 'is-ready'
+      : state?.phase === 'error'
+        ? 'is-error'
+        : state?.phase === 'not-available'
+          ? 'is-current'
+          : state?.phase === 'checking' || state?.phase === 'available' || state?.phase === 'downloading'
+            ? 'is-active'
+            : 'is-idle'
 
   return (
     <section className="settings-section" aria-labelledby="settings-section-update-heading">
@@ -113,47 +118,43 @@ export function AppUpdateSection() {
         {t('settings.general.updateHeading')}
       </h2>
       <p className="settings-section-caption">{t('settings.general.updateCaption')}</p>
-      <div className="settings-group">
-        <div className="settings-field-row">
-          <div className="settings-field-row__meta">
-            <p className="settings-field-row__label">{t('settings.general.updateCurrentVersion')}</p>
-            <p className="settings-field-row__hint" role="status">
-              {currentVersion}
-              {!updaterAvailable ? ` · ${t('settings.general.updateDevHint')}` : null}
-            </p>
+      <div className="settings-update-panel">
+        <div className="settings-update-overview">
+          <div className="settings-update-version-block">
+            <p className="settings-update-kicker">{t('settings.general.updateCurrentVersion')}</p>
+            <p className="settings-update-version">{currentVersion}</p>
+            {!updaterAvailable ? <p className="settings-update-dev-hint">{t('settings.general.updateDevHint')}</p> : null}
+          </div>
+          <div className={`settings-update-status ${statusTone}`} role="status" aria-live="polite">
+            <span className="settings-update-status-dot" aria-hidden="true" />
+            <p>{statusText}</p>
           </div>
         </div>
 
         {updaterAvailable ? (
           <>
-            <p className="settings-switch-status" role="status">
-              {statusText}
-            </p>
-            {state?.phase === 'downloading' ? (
-              <div className="settings-update-progress" aria-hidden="true">
-                <span style={{ width: `${downloadPercent}%` }} />
-              </div>
-            ) : null}
             {state?.releaseNotes ? (
               <pre className="settings-update-notes">{state.releaseNotes}</pre>
             ) : null}
-            <div className="settings-restart-dialog__actions settings-update-actions">
-              {showCheck ? (
-                <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void onCheck()}>
-                  {t('settings.general.updateCheck')}
-                </button>
-              ) : null}
-              {showDownload ? (
-                <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void onDownload()}>
-                  {t('settings.general.updateDownload')}
-                </button>
-              ) : null}
-              {showInstall ? (
-                <button type="button" className="btn btn-primary" onClick={onInstall}>
-                  {t('settings.general.updateInstall')}
-                </button>
-              ) : null}
-            </div>
+            {hasUpdateAction ? (
+              <div className="settings-update-actions">
+                {showCheck ? (
+                  <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void onCheck()}>
+                    {t('settings.general.updateCheck')}
+                  </button>
+                ) : null}
+                {showDownload ? (
+                  <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void onDownload()}>
+                    {t('settings.general.updateDownload')}
+                  </button>
+                ) : null}
+                {showInstall ? (
+                  <button type="button" className="btn btn-primary" onClick={onInstall}>
+                    {t('settings.general.updateInstall')}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
           </>
         ) : null}
       </div>

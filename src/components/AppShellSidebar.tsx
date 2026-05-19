@@ -298,15 +298,7 @@ export function AppShellSidebar({
 
   const hasSidebarUpdate =
     appUpdaterState?.updatesSupported === true &&
-    (appUpdaterState.phase === 'available' ||
-      appUpdaterState.phase === 'downloading' ||
-      appUpdaterState.phase === 'downloaded' ||
-      (appUpdaterState.phase === 'error' && Boolean(appUpdaterState.availableVersion)))
-  const sidebarUpdatePercent = Math.max(0, Math.min(100, Math.round(appUpdaterState?.percent ?? 0)))
-  const sidebarUpdateLabel =
-    appUpdaterState?.phase === 'downloading'
-      ? t('sidebar.versionUpdateDownloading', { percent: sidebarUpdatePercent })
-      : t('sidebar.versionUpdate')
+    appUpdaterState.phase === 'downloaded'
 
   const handleSidebarUpdate = useCallback(() => {
     if (appUpdaterState?.phase === 'downloaded') {
@@ -902,12 +894,12 @@ export function AppShellSidebar({
             {hasSidebarUpdate ? (
               <button
                 type="button"
-                className={`app-sidebar-update-button${appUpdaterState?.phase === 'downloading' ? ' is-downloading' : ''}`}
+                className="app-sidebar-update-button"
                 title={t('sidebar.versionUpdateTitle')}
                 aria-label={t('sidebar.versionUpdateTitle')}
                 onClick={handleSidebarUpdate}
               >
-                {sidebarUpdateLabel}
+                {t('sidebar.versionUpdate')}
               </button>
             ) : null}
           </footer>
