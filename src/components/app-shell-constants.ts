@@ -37,6 +37,7 @@ export const SETTINGS_SIDEBAR_NAV: {
   { id: 'general', labelKey: 'settingsCategory.models', icon: 'settings' },
   { id: 'skills', labelKey: 'settingsCategory.general', icon: 'chip' },
   { id: 'agent', labelKey: 'settingsCategory.agentMode', icon: 'agent' },
+  { id: 'updates', labelKey: 'settingsCategory.updates', icon: 'refresh' },
 ]
 
 /** 非设置视图标题所用 i18n 键 / Heading keys for non-settings views */
@@ -48,6 +49,7 @@ export const VIEW_HEADING_KEYS: Record<Exclude<AppViewId, 'settings'>, string> =
 /** 设置分类对应的工作区标题键 / Workspace title key per settings category */
 export function settingsWorkspaceTitleKey(category: SettingsCategoryId): string {
   if (category === 'skills') return 'shell.workspaceSettingsGeneral'
+  if (category === 'updates') return 'shell.workspaceSettingsUpdates'
   if (category === 'agent') return 'shell.workspaceSettingsAgentMode'
   return 'shell.workspaceSettingsModels'
 }
@@ -79,6 +81,7 @@ export function settingsCategoryFromLocation(): SettingsCategoryId {
   if (parts[0] !== 'settings') return DEFAULT_SETTINGS_CATEGORY
   const sub = parts[1]
   if (sub === 'skills') return 'skills'
+  if (sub === 'updates') return 'updates'
   if (sub === 'agent') return 'agent'
   return DEFAULT_SETTINGS_CATEGORY
 }

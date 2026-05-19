@@ -6,6 +6,13 @@
   "appId": "com.agentos.desktop",
   "asar": true,
   "productName": "AgentOS",
+  "publish": [
+    {
+      "provider": "github",
+      "owner": "xue160709",
+      "repo": "AgentOS"
+    }
+  ],
   "directories": {
     "output": "release/${version}",
     "buildResources": "build"
@@ -18,7 +25,8 @@
   "mac": {
     "icon": "build/icons/icon.icns",
     "target": [
-      "dmg"
+      "dmg",
+      "zip"
     ],
     "artifactName": "${productName}-Mac-${version}-Installer.${ext}"
   },

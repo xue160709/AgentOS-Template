@@ -5,6 +5,7 @@
     "viewSettings": "Settings",
     "workspaceSettingsModels": "Settings · Models",
     "workspaceSettingsGeneral": "Settings · General",
+    "workspaceSettingsUpdates": "Settings · Updates",
     "workspaceSettingsAgentMode": "Settings · Agent Mode",
     "headerDefault": "Claude Agent",
     "headerProcessingThread": "Current conversation is busy",
@@ -29,6 +30,7 @@
   "settingsCategory": {
     "models": "Models",
     "general": "General",
+    "updates": "Updates",
     "agentMode": "Agent Mode"
   },
   "sidebar": {
@@ -75,6 +77,9 @@
     "confirmRemoveRunningTask": "This task is still running. Removing it will stop the current run and archive this chat: {{title}}. Continue?",
     "confirm": "Confirm",
     "settings": "Settings",
+    "versionUpdate": "Update",
+    "versionUpdateDownloading": "Downloading {{percent}}%",
+    "versionUpdateTitle": "Open version update",
     "resizeSidebar": "Resize sidebar",
     "justNow": "Just now",
     "minutesShort": "{{n}} min",
@@ -222,7 +227,26 @@
       "closeToTray": "Keep running in the menu bar tray after closing the window",
       "closeToTrayHint": "When enabled, closing the main window hides it instead of quitting; use the tray menu to continue.",
       "openAtLogin": "Open at login",
-      "openAtLoginHint": "Launch this app when you log in to your computer (also visible in system login items)."
+      "openAtLoginHint": "Launch this app when you log in to your computer (also visible in system login items).",
+      "updateHeading": "Version updates",
+      "updateCaption": "The app checks for new builds after launch. When an update is found, the installer is downloaded in the background and becomes ready for one-click restart.",
+      "updateCurrentVersion": "Current version",
+      "updateDevHint": "Auto-update is disabled in development",
+      "updateLoading": "Loading version info…",
+      "updateIdle": "You can check for updates manually.",
+      "updateChecking": "Checking for updates…",
+      "updateAvailable": "Version {{version}} is available. Preparing the download…",
+      "updateNotAvailable": "You are on the latest version.",
+      "updateDownloading": "Downloading {{percent}}% ({{transferred}} / {{total}})",
+      "updateDownloaded": "Version {{version}} is downloaded. Click Update to restart and install.",
+      "updateError": "Update check or download failed",
+      "updateCheck": "Check for updates",
+      "updateDownload": "Download again",
+      "updateInstall": "Update"
+    },
+    "updates": {
+      "pageTitle": "Version Updates",
+      "pageLede": "New versions are checked and downloaded in the background. Once the installer is ready, confirm once to restart and install."
     },
     "models": {
       "pageTitle": "Models",

@@ -1,8 +1,12 @@
 {
   "name": "agentos",
   "productName": "AgentOS",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xue160709/AgentOS.git"
+  },
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -10,6 +14,8 @@
     "typecheck": "tsc",
     "test:home-plugin": "node .agents/skills/a2ui-project-home-panel/scripts/validate_home_plugin.js --allow-missing",
     "build": "tsc && vite build && electron-builder",
+    "build:local": "tsc && vite build && electron-builder --publish never",
+    "release": "tsc && vite build && electron-builder --publish always",
     "preview": "vite preview"
   },
   "devDependencies": {
@@ -31,6 +37,7 @@
     "marked": "^18.0.3",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
+    "electron-updater": "^6.6.2",
     "zod": "^4.4.3"
   }
 }

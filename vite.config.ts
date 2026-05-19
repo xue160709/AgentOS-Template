@@ -19,7 +19,7 @@ export default defineConfig({
         vite: {
           build: {
             rollupOptions: {
-              external: ['@anthropic-ai/claude-agent-sdk'],
+              external: ['@anthropic-ai/claude-agent-sdk', 'electron-updater'],
             },
           },
         },

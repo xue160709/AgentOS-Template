@@ -13,6 +13,7 @@ dist-ssr
 dist-electron
 release
 *.local
+scripts/release-env.local.sh
 .env
 .env.*
 !.env.example
@@ -39,6 +40,7 @@ codex-css-tokens.md
 codex-settings-design-system.md
 codex-sidebar-project-chat-design.md
 codex-ui-framework-notes.md
+/docs
 package-lock.json
 .npmrc
-package-lock.json
+

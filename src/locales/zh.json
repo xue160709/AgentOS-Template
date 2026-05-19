@@ -5,6 +5,7 @@
     "viewSettings": "设置",
     "workspaceSettingsModels": "设置 · 模型",
     "workspaceSettingsGeneral": "设置 · 常规",
+    "workspaceSettingsUpdates": "设置 · 版本更新",
     "workspaceSettingsAgentMode": "设置 · Agent模式",
     "headerDefault": "Claude Agent",
     "headerProcessingThread": "当前对话处理中",
@@ -29,6 +30,7 @@
   "settingsCategory": {
     "models": "模型",
     "general": "常规",
+    "updates": "版本更新",
     "agentMode": "Agent模式"
   },
   "sidebar": {
@@ -75,6 +77,9 @@
     "confirmRemoveRunningTask": "该任务正在运行。移除后会先终止当前运行并归档这段对话：{{title}}。继续吗？",
     "confirm": "确认",
     "settings": "设置",
+    "versionUpdate": "版本更新",
+    "versionUpdateDownloading": "下载中 {{percent}}%",
+    "versionUpdateTitle": "打开版本更新",
     "resizeSidebar": "调整侧栏宽度",
     "justNow": "刚刚",
     "minutesShort": "{{n}} 分",
@@ -222,7 +227,26 @@
       "closeToTray": "关闭窗口后保留在托盘",
       "closeToTrayHint": "开启后，关闭主窗口不会退出应用，可从托盘图标右键菜单继续操作。",
       "openAtLogin": "登录时自动启动",
-      "openAtLoginHint": "登录本机系统后自动启动应用（可在系统「登录项」中查看或关闭）。"
+      "openAtLoginHint": "登录本机系统后自动启动应用（可在系统「登录项」中查看或关闭）。",
+      "updateHeading": "版本更新",
+      "updateCaption": "启动后会自动检查新版本；发现更新后会默认下载好安装包，准备完成后可一键重启安装。",
+      "updateCurrentVersion": "当前版本",
+      "updateDevHint": "开发模式不支持自动更新",
+      "updateLoading": "正在读取版本信息…",
+      "updateIdle": "可手动检查更新。",
+      "updateChecking": "正在检查更新…",
+      "updateAvailable": "发现新版本 {{version}}，正在准备下载…",
+      "updateNotAvailable": "当前已是最新版本。",
+      "updateDownloading": "正在下载 {{percent}}%（{{transferred}} / {{total}}）",
+      "updateDownloaded": "新版本 {{version}} 已下载。点击“版本更新”将重启并安装。",
+      "updateError": "检查或下载更新失败",
+      "updateCheck": "检查更新",
+      "updateDownload": "重新下载",
+      "updateInstall": "版本更新"
+    },
+    "updates": {
+      "pageTitle": "版本更新",
+      "pageLede": "应用会在后台检查并下载新版本。安装包准备完成后，你只需要确认重启安装。"
     },
     "models": {
       "pageTitle": "模型",

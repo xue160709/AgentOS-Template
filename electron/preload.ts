@@ -5,6 +5,7 @@
 
 import { ipcRenderer, contextBridge, type IpcRendererEvent } from 'electron'
 import type {
+  AppUpdaterState,
   DesktopPreferences,
   HomePluginTaskEvent,
   HomePluginTaskReadResult,
@@ -26,6 +27,7 @@ import type {
 const CLAUDE_CHAT_EVENT_CHANNEL = 'claude-chat:event'
 const TRAY_MENU_ACTION_CHANNEL = 'desktop:tray-action'
 const TASK_HOME_PLUGIN_EVENT_CHANNEL = 'desktop:task-home-plugin-event'
+const APP_UPDATER_EVENT_CHANNEL = 'app-updater:event'
 
 // --- Desktop bridge / 桌面通用 API ---
 
@@ -136,6 +138,26 @@ contextBridge.exposeInMainWorld('desktop', {
     const listener = (_event: IpcRendererEvent, event: HomePluginTaskEvent) => handler(event)
     ipcRenderer.on(TASK_HOME_PLUGIN_EVENT_CHANNEL, listener)
     return () => ipcRenderer.off(TASK_HOME_PLUGIN_EVENT_CHANNEL, listener)
+  },
+  getAppVersion() {
+    return ipcRenderer.invoke('app-updater:get-state').then((state: AppUpdaterState) => state.currentVersion)
+  },
+  getAppUpdaterState() {
+    return ipcRenderer.invoke('app-updater:get-state') as Promise<AppUpdaterState>
+  },
+  checkForAppUpdates() {
+    return ipcRenderer.invoke('app-updater:check') as Promise<AppUpdaterState>
+  },
+  downloadAppUpdate() {
+    return ipcRenderer.invoke('app-updater:download') as Promise<AppUpdaterState>
+  },
+  quitAndInstallAppUpdate() {
+    return ipcRenderer.invoke('app-updater:quit-and-install') as Promise<void>
+  },
+  onAppUpdaterState(handler: (state: AppUpdaterState) => void) {
+    const listener = (_event: IpcRendererEvent, state: AppUpdaterState) => handler(state)
+    ipcRenderer.on(APP_UPDATER_EVENT_CHANNEL, listener)
+    return () => ipcRenderer.off(APP_UPDATER_EVENT_CHANNEL, listener)
   },
 })
 
