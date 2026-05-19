@@ -10,6 +10,11 @@ export type InstallApplicationMenuOptions = {
 }
 
 export function installApplicationMenu(options: InstallApplicationMenuOptions): void {
+  if (process.platform === 'win32') {
+    Menu.setApplicationMenu(null)
+    return
+  }
+
   Menu.setApplicationMenu(Menu.buildFromTemplate(buildApplicationMenuTemplate(options.isDev)))
 }
 

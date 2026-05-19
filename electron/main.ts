@@ -30,6 +30,7 @@ import { TaskHomePluginManager } from './task-home-plugin-manager'
 import { normalizeUiLocale } from './ui-locale'
 import { installApplicationMenu } from './app-menu'
 import { formatProjectPathError, resolveProjectPath, validateProjectPaths } from './project-path'
+import { getMainWindowBackgroundColor, getMainWindowChromeOptions } from './window-chrome'
 import type {
   ActiveChatPickPayload,
   ClaudeChatAttachment,
@@ -219,7 +220,7 @@ const FILE_TREE_IGNORED_DIRECTORIES = new Set([
 // --- Window, tray & branding / 窗口、托盘与 Dock ---
 
 function getWindowBackgroundColor() {
-  return nativeTheme.shouldUseDarkColors ? '#181818' : '#f9f9f9'
+  return getMainWindowBackgroundColor(nativeTheme.shouldUseDarkColors)
 }
 
 function getAppIconPath() {
@@ -237,13 +238,14 @@ function applyDockBranding() {
 
 function createWindow() {
   const isMac = process.platform === 'darwin'
+  const windowBackgroundColor = getWindowBackgroundColor()
 
   win = new BrowserWindow({
     width: 1100,
     height: 720,
     minWidth: 640,
     minHeight: 480,
-    backgroundColor: isMac ? '#00000000' : getWindowBackgroundColor(),
+    backgroundColor: isMac ? '#00000000' : windowBackgroundColor,
     icon: getAppIconPath(),
     title: APP_NAME,
     webPreferences: {
@@ -260,6 +262,7 @@ function createWindow() {
           backgroundColor: '#00000000',
         }
       : {}),
+    ...getMainWindowChromeOptions(process.platform, nativeTheme.shouldUseDarkColors),
   })
 
   claudeAgentRunner = new ClaudeAgentRunner(

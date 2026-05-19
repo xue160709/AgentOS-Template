@@ -42,7 +42,7 @@ export function getWindowControlsSafeArea(): SafeArea {
     return { left: 76, right: 0, top: 34 }
   }
   if (platform === 'win32') {
-    return { left: 0, right: 0, top: 0 }
+    return { left: 0, right: 138, top: 40 }
   }
   if (platform === 'linux') {
     return { left: 0, right: 120, top: 0 }

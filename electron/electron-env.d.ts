@@ -63,6 +63,8 @@ declare global {
       /** macOS 透明磨砂窗口标记（渲染层样式钩子）/ Enables vibrancy-aware styling on macOS */
       windowEffects?: {
         macVibrancy: boolean
+        /** Windows 自绘标题栏 + 原生窗口控制覆盖区 / App-drawn titlebar with native window-controls overlay */
+        windowsTitlebarOverlay: boolean
       }
       pickProjectDirectory?: () => Promise<string | null>
       pickChatAttachments?: (options?: { allowImages?: boolean }) => Promise<ClaudeChatAttachmentPickerResult>

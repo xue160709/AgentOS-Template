@@ -149,6 +149,7 @@ export function AppShell() {
   )
 
   const sidebarCollapsed = chatWorkspace?.sidebarPrefs.collapsed ?? false
+  const isWindows = typeof window !== 'undefined' && window.desktop?.platform === 'win32'
 
   // --- Prune stored maps when projects disappear; keep collapsed ids consistent / 项目删除后裁剪存储映射；折叠 id 列表保持一致 ---
 
@@ -1093,7 +1094,7 @@ export function AppShell() {
 
   return (
     <div
-      className={`app-shell${sidebarCollapsed ? ' is-sidebar-collapsed' : ''}${activeViewId === 'settings' ? ' is-shell-settings' : ''}`}
+      className={`app-shell${isWindows ? ' is-platform-win32' : ''}${sidebarCollapsed ? ' is-sidebar-collapsed' : ''}${activeViewId === 'settings' ? ' is-shell-settings' : ''}`}
       id="app-shell"
       ref={shellRef}
     >
