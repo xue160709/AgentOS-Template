@@ -108,8 +108,8 @@
     "confirm": "Confirm",
     "settings": "Settings",
     "versionUpdate": "Update",
-    "versionUpdateDownloading": "Downloading {{percent}}%",
-    "versionUpdateTitle": "Open version update",
+    "versionUpdateDownloading": "Update",
+    "versionUpdateTitle": "Install downloaded update",
     "resizeSidebar": "Resize sidebar",
     "justNow": "Just now",
     "minutesShort": "{{n}} min",
@@ -259,7 +259,7 @@
       "openAtLogin": "Open at login",
       "openAtLoginHint": "Launch this app when you log in to your computer (also visible in system login items).",
       "updateHeading": "Version updates",
-      "updateCaption": "The app checks for new builds after launch. When an update is found, the installer is downloaded in the background and becomes ready for one-click restart.",
+      "updateCaption": "The app checks for new builds after launch. The Update button appears only after the installer finishes downloading, then quits the app and installs it.",
       "updateCurrentVersion": "Current version",
       "updateDevHint": "Auto-update is disabled in development",
       "updateLoading": "Loading version info…",
@@ -267,8 +267,8 @@
       "updateChecking": "Checking for updates…",
       "updateAvailable": "Version {{version}} is available. Preparing the download…",
       "updateNotAvailable": "You are on the latest version.",
-      "updateDownloading": "Downloading {{percent}}% ({{transferred}} / {{total}})",
-      "updateDownloaded": "Version {{version}} is downloaded. Click Update to restart and install.",
+      "updateDownloading": "Downloading the installer in the background. The Update button appears when it is ready.",
+      "updateDownloaded": "Version {{version}} is downloaded. Click Update to quit and install.",
       "updateError": "Update check or download failed",
       "updateCheck": "Check for updates",
       "updateDownload": "Download again",
@@ -276,7 +276,7 @@
     },
     "updates": {
       "pageTitle": "Version Updates",
-      "pageLede": "New versions are checked and downloaded in the background. Once the installer is ready, confirm once to restart and install."
+      "pageLede": "New versions are checked and downloaded in the background. The Update button appears here once the installer is ready."
     },
     "developer": {
       "pageTitle": "Developer Mode",

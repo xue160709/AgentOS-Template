@@ -5,6 +5,9 @@
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
   "appId": "com.agentos.desktop",
   "asar": true,
+  "asarUnpack": [
+    "node_modules/@anthropic-ai/claude-agent-sdk-*/**"
+  ],
   "productName": "AgentOS",
   "publish": [
     {

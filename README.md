@@ -1,214 +1,261 @@
 # AgentOS
 
-面向 **类 Codex 桌面工作台** 体验的 **Electron + Vite + React + TypeScript** 模板：内置 **App Shell**（可 resize 侧栏、工作区顶栏、随系统的深浅色外观、基于 Hash 的视图切换），集成 **Claude Agent SDK**（主进程运行）、**多项目 / 多会话聊天工作区**、**本地项目文件树面板** 与持久化。在 **macOS** 上使用隐藏式标题栏、透明窗口与 `vibrancy: under-window`，侧栏区域可透出系统质感，工作区为不透明白底以便阅读与输入。
+**默认中文 / English version: [README_EN.md](./README_EN.md)**
 
-![界面预览 1](image1.png)
+AgentOS 是一个面向本地项目与长期任务的桌面 Agent 工作台。它不是把大模型包装成一个聊天窗口，而是把「项目文件夹」变成 Agent 的运行空间：对话、技能、可视化卡片、任务编排、项目记忆和本地文件上下文，都围绕同一个文件夹组织起来。
+
+项目的后台运行层由 Electron 主进程中的 **Claude Agent SDK** 驱动，负责会话流式输出、会话恢复、权限请求、工具调用和任务执行；前端只负责呈现和交互。
+
+我们的愿景是让每个项目都拥有自己的 Agent 操作系统。用户不需要先理解复杂的 Agent 框架，也不需要把项目资料搬到云端；只要选择一个本地文件夹，AgentOS 就可以围绕这个文件夹建立上下文、沉淀记忆、运行 Skills、展示数据面板，并逐步形成一个可以长期协作的智能工作区。
+
+![AgentOS 界面预览](image1.png)
+
+## 界面预览
 
 ![界面预览 2](image2.png)
+![界面预览 3](image3.png)
+![界面预览 4](image4.png)
+![界面预览 5](image5.png)
 
-## 功能概览
+## 目录
 
-| 领域 | 说明 |
-| --- | --- |
-| **桌面壳** | Electron 30 + Vite 5 + React 19；主进程 / 预加载 / 渲染进程由 `vite-plugin-electron` 串联开发与构建。 |
-| **macOS 外观** | `titleBarStyle: hiddenInset`、交通灯可拖拽区域；透明窗口 + 侧栏 vibrancy；详见 `electron/main.ts`。 |
-| **App Shell** | 侧栏导航（聊天、文档）、会话与项目相关的侧栏结构（由 `AppShell` / `AppShellSidebar` 管理）、工作区标题栏、可折叠/可拖拽调整宽度的侧栏（宽度键名 `CodeX-UI-Template-sidebar-width-px`）。 |
-| **主题** | 深浅色主要 **跟随系统** `prefers-color-scheme`（见 `src/theme/tokens.css`）。「设置 · 外观」当前为占位，后续可接手动的主题/字体等。 |
-| **路由** | 使用 `location.hash`：`#` / 空为聊天首页，`#docs` 文档，`#settings` 模型设置，`#settings/appearance` 外观设置（逻辑见 `src/components/app-shell-constants.ts`）。 |
-| **对话** | `ChatPage` 通过 `preload` 暴露的 `window.claudeChat` 与主进程中的 **Claude Agent SDK** 交互；支持流式事件、取消、新线程、读取/保存 Agent 相关设置。 |
-| **工作区** | 多项目、多线程（会话）状态；通过 `chat-workspace:get` / `chat-workspace:save` 持久化（见 `electron/chat-workspace-store` 与 `src/chat-workspace-persistence.ts`）。 |
-| **文件树** | 选择本地项目目录、`listProjectFiles` 列举树形结构；工作区内 **文件树面板**（`AppFilePanel`）可开关浏览。 |
-| **安全区** | `src/window-safe-area.ts` 将窗口控件安全区写入 CSS 变量，适配自定义标题栏。 |
-| **内容渲染** | Markdown 等展示使用 `marked` + `dompurify`（见依赖与聊天消息渲染逻辑）。 |
+- [项目愿景](#项目愿景)
+- [项目分支](#项目分支)
+- [项目特点](#项目特点)
+- [当前功能](#当前功能)
+- [下载安装](#下载安装)
+- [开发运行](#开发运行)
+- [项目约定](#项目约定)
+- [联系方式](#联系方式)
 
-## 具体功能
+## 项目愿景
 
-以下为当前代码中已接好或已占位的能力，便于区分「可用」与「待扩展」。
+AgentOS 想解决的问题是：Agent 不应该只存在于一次性的聊天里。
 
-### 应用壳与导航
+真正有用的 Agent 需要知道它正在服务哪个项目，需要记得项目里的约定，需要能把运行结果变成可读、可点、可继续操作的界面，也需要能把多个技能按顺序或按时间执行。AgentOS 因此把 Agent 的边界放回到用户最熟悉的地方：文件夹。
 
-- **布局**：工具条（侧栏显隐、后退/前进）、可滚动侧栏、右侧主工作区；macOS 下配合隐藏标题栏与 `window-safe-area` 的 CSS 变量做控件区避让与拖拽。
-- **侧栏宽度**：拖拽分隔条调节，持久化键 **`CodeX-UI-Template-sidebar-width-px`**（见 `app-shell-constants.ts`）。
-- **Hash 路由**：`#` 或空 → 聊天；`#docs` → 文档；`#settings` → 模型设置；`#settings/appearance` → 外观占位页（见 `app-shell-constants.ts`）。
-- **设置模式侧栏**：处于设置视图时，侧栏切换为设置分组导航样式，并可返回主界面。
+在 AgentOS 里，一个文件夹可以逐渐长出自己的指令、记忆、技能、任务卡片、数据卡片和会话历史。你可以把它当作一个个人工作台，也可以把它当作开发自己 Agent 产品的框架基础。
 
-### 聊天（Claude Agent）
+## 项目分支
 
-- **主进程 Agent**：渲染层通过 `window.claudeChat.submit` 发送请求，`cancel` 取消，`newThread` 新建会话线程，`onEvent` 接收流式与状态更新。
-- **消息展示**：用户/助手文本；助手侧 **Markdown**（`marked`）转 HTML 后经 **DOMPurify** 消毒；数据模型中还支持 **工具调用**、**thinking**、**活动/状态** 等时间线条目（见 `src/components/types.ts`）。
-- **工作目录**：发送时会带上当前选中项目的 **`cwd`**（项目路径），供 Agent 在该目录上下文中运行。
-- **输入增强**：输入框支持类 Codex 的 `/` slash command 菜单与 `@` mention 菜单；`/` 聚合内置命令、全局/项目 skills 与 commands，`@` 可搜索当前项目文件/文件夹并引用 subagent。
-- **Skills / Agents 发现**：主进程扫描 `~/.claude`、项目 `.claude`，并兼容 `~/.agent`、`~/.agents`、项目 `.agent`、项目 `.agents`、`~/.cursor`、项目 `.cursor` 下的 `skills/`、`commands/`、`agents/`。
-- **项目指令读取**：Claude 原生 `CLAUDE.md` 通过 SDK `settingSources: ['user', 'project', 'local']` 加载；模板额外把 `AGENT.md` / `AGENTS.md`、`.agent`、`.cursor/rules` 作为 host append prompt 注入。
-- **模型选择**：聊天输入区旁的模型菜单与 Agent 设置里的「当前对话所用配置」一致并持久化；与设置页里「正在编辑哪一条厂商配置」相互独立（见 `ClaudeAgentSettingsPage`）。
+这个项目有三个定位不同的分支：
 
-### 工作区（多项目 / 多会话）
+| 分支 | 定位 | 适合谁 |
+| --- | --- | --- |
+| `main` | 产品分支。这里会持续加入更多人性化、面向普通用户的功能，稳定版本会通过 GitHub Releases 发布。 | 想直接安装和使用 AgentOS 的用户。 |
+| `AgentOS-Framework` | 框架分支。这里保留更清晰的框架结构，适合基于 AgentOS 的桌面框架开发自己的 Agent 产品。 | 想二次开发、改造成自己产品的开发者。 |
+| `AgentOS-Experimental` | 实验分支。这里会更激进地探索人机协作、Agent 记忆、可视化交互和自动化编排的可能性。 | 想关注早期实验、参与共创的人。 |
 
-- **项目**：多个 `WorkspaceProject`；支持 **新建占位项目** 与 **选择本机文件夹** 作为项目根（系统对话框）。
-- **会话线程**：归属项目；支持 **置顶**、**归档**（侧栏内需二次确认）。
-- **列表排序**：同项目下置顶优先，其余按更新时间排序。
-- **持久化**：优先 **`desktop.getChatWorkspace` / `saveChatWorkspace`**（主进程）；不可用时 **`localStorage`** 兜底，并含从旧版单会话数据的迁移（见 `chat-workspace-persistence.ts`）。
+如果你只是想使用产品，请优先下载 `main` 分支发布的 Release。  
+如果你想研究代码或做自己的产品，请从 `AgentOS-Framework` 开始。  
+如果你想看最新想法和不稳定实验，可以关注 `AgentOS-Experimental`。
 
-### 文件树面板
+## 项目特点
 
-- 工作区标题栏可 **开关文件树**；按当前项目路径调用 **`desktop.listProjectFiles`**（主进程对深度、数量、忽略目录有限制）。
-- 支持目录 **展开/收起**、`Escape` **关闭面板**。
+### 文件夹即 Agent
 
-### 设置与文档
+AgentOS 的核心不是「新建一个机器人」，而是「选择一个项目文件夹」。项目文件夹里的 `AGENT.md`、`SOUL.md`、`MEMORY.md`、`memory/`、`.agents/skills/`、`.agents/home-plugins/` 等内容，会共同构成这个 Agent 的身份、长期记忆、技能和可视化界面。
 
-- **模型 / Agent**：多条厂商配置、配置来源、`getSettings` / `saveSettings` 读写；界面展示环境与条目状态摘要。
-- **外观**：**占位页**，文案说明后续接入主题、字体等。
-- **文档**：**占位视图**（`DocsPage`），可后续接路由或 WebView。
+这意味着 Agent 不再是孤立的对话窗口，而是和你的项目文件、项目规则、历史记录、任务计划绑定在一起。
 
-### Electron 与其它平台
+### Agent = Chat + 数据可视化 + 可交互内容 + 记忆
 
-- **`window.desktop`**：选目录、列文件、聊天工作区读写等。
-- **非 macOS**：窗口背景随系统明暗通过 `nativeTheme` 同步（见 `electron/main.ts`）。
+在 AgentOS 里，Agent 不只是会回复文字：
 
-## 环境要求
+- **Chat**：通过对话理解需求、执行任务、解释过程。
+- **数据可视化**：通过 Home Plugin 和 A2UI 卡片展示项目状态、数据结果、任务进度和自定义面板。
+- **可交互内容**：卡片可以带按钮、状态、刷新、打开文件、执行任务等交互。
+- **记忆**：通过项目级指令、记忆文件和每日记忆目录，让 Agent 逐渐理解项目背景和协作方式。
 
-- **Node.js** 18+（建议当前 LTS）
-- **npm** 或兼容的包管理器
+这也是 AgentOS 与普通聊天工具最大的区别：它关心 Agent 如何长期住在一个项目里，而不只是完成一次问答。
 
-## 快速开始
+## 当前功能
+
+### 1. 多 Agent / 多项目 / 多会话
+
+- 支持添加多个本地项目文件夹，每个文件夹都可以成为独立 Agent 工作区。
+- 支持每个项目下创建多个会话线程。
+- 支持会话置顶、归档、排序和持久化。
+- 支持恢复 Claude Agent SDK 的会话 `sessionId`，应用重启后可以继续上下文。
+- 侧边栏会按项目组织会话，并可显示项目级 Skills。
+
+### 2. 多 Skills 定时 / 循环编排
+
+- 支持扫描项目中的 `.agents/skills/`、`.claude/skills/` 等 Skill 目录。
+- 支持在侧边栏直接运行项目 Skill。
+- 支持通过任务卡片选择「基于当前 Agent.md 运行」或「编排多个 Skills」。
+- Skill 编排可以重复运行，当前支持最多 100 次。
+- 支持定时执行和循环执行，间隔包含 1 小时、2 小时、3 小时、6 小时、12 小时和 1 天。
+- 任务运行会映射到独立会话线程，并可以在运行中停止。
+
+说明：当前定时任务依赖 Electron 进程存活，不是系统级后台守护进程。
+
+### 3. 内容可视化
+
+- 项目首页支持 Home Plugin 卡片系统。
+- 支持数据卡片和任务卡片两类卡片。
+- 卡片输出使用 A2UI v0.9，可展示结构化、可交互的内容。
+- 支持 small / medium / large 三种卡片尺寸。
+- 支持卡片排序、尺寸调整、刷新和单卡片编辑。
+- 支持从卡片动作打开项目文件、刷新内容、执行任务或停止任务。
+
+### 4. Agent Mode 项目脚手架
+
+- 可为项目自动生成或补齐 `AGENT.md`、`SOUL.md`、`MEMORY.md`、`memory/`。
+- 可开启 TODO 模式，生成并维护 `TODO.md`。
+- 支持在设置中编辑项目级 USER / IDENTITY 文案，让 Agent 更明确地理解用户和自身角色。
+- Agent Mode 的上下文会被注入到 Agent 运行环境中。
+
+### 5. 本地文件上下文
+
+- 支持选择本地项目目录。
+- 支持项目文件树浏览、展开、刷新和文件预览。
+- 支持预览 Markdown、JSON、普通文本和图片。
+- 输入框支持 `@` 搜索并引用项目文件、文件夹或子 Agent。
+- 输入框支持添加文本附件和图片附件，图片能力会根据当前模型配置判断是否可用。
+
+### 6. Slash Commands、Skills 与子 Agent
+
+- 输入 `/` 可以唤起内置命令、项目 Skills、项目 Commands。
+- 支持全局和项目级上下文来源，包括 `.claude`、`.agent`、`.agents`、`.cursor`。
+- 支持读取 `AGENT.md` / `AGENTS.md` 作为项目指令。
+- 支持发现子 Agent 定义，并在输入框中通过 `@` 引用。
+
+### 7. Agent 运行过程可见
+
+- 对话时间线会展示模型响应、工具调用、thinking、活动状态和运行耗时。
+- 支持权限模式选择，包括 Plan、Auto、Default、Accept Edits、Bypass Permissions。
+- Agent 需要用户确认或补充信息时，会在界面中弹出交互式确认。
+- 支持展示文件变更 diff，并提供文件回滚入口。
+
+### 8. 模型配置与应用体验
+
+- 支持多模型提供商配置，可在设置页维护 API Key、Base URL、模型和模型档位映射。
+- 支持通过聊天输入框旁的模型菜单切换当前对话使用的配置。
+- 支持中文 / English 双语界面，默认中文。
+- 支持 macOS 隐藏标题栏、侧栏 vibrancy、托盘菜单、关闭到托盘和开机启动偏好。
+- 支持 GitHub Releases 应用内更新检查、下载和安装。
+
+## 下载安装
+
+### 普通用户
+
+1. 打开 [AgentOS Releases](https://github.com/xue160709/AgentOS/releases)。
+2. 下载适合你系统的安装包：
+   - macOS：`AgentOS-Mac-x.y.z-Installer.dmg`
+   - Windows：`AgentOS-Windows-x.y.z-Setup.exe`
+   - Linux：`AgentOS-Linux-x.y.z.AppImage`，如果当前 Release 提供该文件
+3. 安装并启动 AgentOS。
+4. 在设置页配置模型服务，或使用默认环境配置。
+5. 选择一个本地项目文件夹，开始创建会话、运行 Skill 或添加 Agent 卡片。
+
+### 开发者
+
+如果你想基于 AgentOS 框架开发自己的产品，建议使用 `AgentOS-Framework` 分支：
 
 ```bash
+git clone https://github.com/xue160709/AgentOS.git
+cd AgentOS
+git checkout AgentOS-Framework
 npm install
 npm run dev
 ```
 
-开发模式会拉起 Vite 开发服务器并打开 Electron 窗口。
+如果你想体验产品分支：
 
-## Claude Agent 与环境变量
+```bash
+git checkout main
+npm install
+npm run dev
+```
 
-Claude Agent SDK 在 **Electron 主进程** 中运行，环境变量写在项目根目录的 **`.env.local`**，不要使用 `VITE_*` 前缀（那些仅作用于渲染层构建）。可从示例文件复制：
+如果你想查看实验分支：
+
+```bash
+git checkout AgentOS-Experimental
+npm install
+npm run dev
+```
+
+## 开发运行
+
+### 环境要求
+
+- Node.js 18+
+- npm
+
+### 常用命令
+
+| 命令 | 说明 |
+| --- | --- |
+| `npm run dev` | 启动 Vite + Electron 开发环境 |
+| `npm run typecheck` | 运行 TypeScript 类型检查 |
+| `npm run test:electron` | 运行 Electron 相关测试 |
+| `npm run test:home-plugin` | 校验 Home Plugin 结构 |
+| `npm run build:local` | 本地打包，不发布到 GitHub |
+| `npm run build` | 构建并通过 electron-builder 打包 |
+| `npm run release` | 构建并发布到 GitHub Releases |
+
+### 模型环境变量
+
+开发模式下可以复制 `.env.example`：
 
 ```bash
 cp .env.example .env.local
 ```
 
-常用变量（完整列表以 `.env.example` 为准）：
+常见变量：
 
 | 变量 | 说明 |
 | --- | --- |
 | `ANTHROPIC_API_KEY` | Claude API Key |
 | `ANTHROPIC_BASE_URL` | 兼容 Anthropic 的 API Base URL |
-| `ANTHROPIC_MODEL` | 默认模型，会传给 Agent 的 `model` 配置 |
-| `ANTHROPIC_DEFAULT_HAIKU_MODEL` | 可选：Haiku 档位模型映射 |
-| `ANTHROPIC_DEFAULT_SONNET_MODEL` | 可选：Sonnet 档位模型映射 |
-| `ANTHROPIC_DEFAULT_OPUS_MODEL` | 可选：Opus 档位模型映射 |
-| `ANTHROPIC_AUTH_TOKEN` | 可选：部分鉴权流程下替代 API Key |
+| `ANTHROPIC_MODEL` | 默认请求模型 |
+| `ANTHROPIC_DEFAULT_HAIKU_MODEL` | Haiku 档位模型 |
+| `ANTHROPIC_DEFAULT_SONNET_MODEL` | Sonnet 档位模型 |
+| `ANTHROPIC_DEFAULT_OPUS_MODEL` | Opus 档位模型 |
+| `ANTHROPIC_AUTH_TOKEN` | 可选鉴权 Token |
 
-**设置页与对话模型的关系**：在「设置 · 模型」中可维护多条厂商/端点配置（API Key、Base URL、模型与各档位映射）。**真正用于当前对话的模型条目**在聊天输入旁的模型菜单中选择并会持久化；设置页不直接「切换正在对话的模型」。默认策略为「设置优先」：若当前选中的配置里某字段有值，则覆盖同名环境变量；留空则回落到 `.env.local` 或系统环境变量。
+已安装应用的普通用户也可以直接在「设置」里维护模型配置。
 
-## Codex 式 Skills / Agents 策略
+## 项目约定
 
-这套模板把「发现、展示、提交」拆成三层：
-
-- **发现层**：`electron/agent-context.ts` 读取全局与当前项目目录，支持 `.claude/skills/<name>/SKILL.md`、`.claude/commands/*.md`、`.claude/agents/*.md`，并用同样规则兼容 `.agent`、`.agents`、`.cursor`。
-- **交互层**：`ChatPage` 在输入 `/` 时打开命令菜单，在输入 `@` 时打开文件/文件夹/agent 菜单；选择项只替换当前 token，不直接提交，用户可以继续补充上下文。
-- **运行层**：`claude-agent-runner` 交给 Claude Agent SDK 原生加载 `.claude` 的 skills、commands、agents、CLAUDE.md；对 `.agent/.agents/.cursor` 的 slash command 做 host-side 展开，对 agents 转成 SDK `agents` 配置。
-
-兼容目录约定：
+AgentOS 会围绕项目目录读取和生成上下文。一个典型项目可以长这样：
 
 ```text
-~/.claude/skills/<name>/SKILL.md
-~/.claude/commands/<name>.md
-~/.claude/agents/<name>.md
-<project>/.claude/skills/<name>/SKILL.md
-<project>/.claude/commands/<name>.md
-<project>/.claude/agents/<name>.md
-<project>/.agent/skills/<name>/SKILL.md
-<project>/.agent/agents/<name>.md
-<project>/.agents/skills/<name>/SKILL.md
-<project>/.agents/agents/<name>.md
-<project>/.cursor/skills/<name>/SKILL.md
-<project>/.cursor/agents/<name>.md
-<project>/AGENT.md
-<project>/AGENTS.md
+your-project/
+├── AGENT.md                  # 项目 Agent 指令
+├── SOUL.md                   # 项目愿景、价值观、长期身份
+├── MEMORY.md                 # 项目级记忆
+├── TODO.md                   # TODO 模式任务文件
+├── memory/                   # 每日记忆
+├── .agents/
+│   ├── skills/               # 项目 Skills
+│   ├── agents/               # 项目子 Agent
+│   └── home-plugins/         # 项目首页卡片
+├── .claude/                  # Claude 原生上下文，可选
+└── .cursor/                  # Cursor 规则或兼容上下文，可选
 ```
 
-`.claude` 是 Claude SDK 原生路径；`.agent` / `.agents` / `.cursor` 是模板兼容层。兼容层支持 frontmatter 的 `name`、`description`、`argument-hint`、`model`、`tools`、`allowed-tools`、`skills` 等常见字段。
-
-## 预加载与 IPC
-
-渲染进程通过 `contextBridge` 暴露三类常用入口（定义见 `electron/preload.ts`）：
-
-- **`window.desktop`**：`platform`、`windowEffects`（macOS vibrancy 标记）、`pickProjectDirectory`、`listProjectFiles`、`searchProjectFiles`、`listAgentContext`、`getChatWorkspace`、`saveChatWorkspace`。
-- **`window.claudeChat`**：`submit`、`cancel`、`newThread`、`getSettings`、`saveSettings`、`setActiveChatPick`、`onEvent`（主进程推送的聊天/Agent 事件）。
-- **`window.ipcRenderer`**：通用 `on` / `off` / `send` / `invoke`（按需使用，注意最小暴露面与安全）。
-
-类型与载荷见 `src/claude-chat-types.ts` 与相关主进程模块（如 `electron/claude-agent-runner.ts`、`electron/claude-agent-settings.ts`）。
-
-## 脚本说明
-
-| 命令 | 说明 |
-| --- | --- |
-| `npm run dev` | 启动 Vite + Electron 开发环境 |
-| `npm run build` | 执行 `tsc`、Vite 生产构建，并调用 **electron-builder** 打安装包 |
-| `npm run preview` | 仅预览 Vite 构建后的静态资源（**不**启动 Electron） |
-
-构建产物：
-
-- **`dist`**：渲染进程静态资源与 `index.html`
-- **`dist-electron`**：主进程与预加载脚本
-
-安装包输出目录见 `electron-builder.json5` 中的 `directories.output`（默认 `release/${version}`）。
-
-## 项目结构
-
-```text
-├── electron/                      # 主进程与预加载
-│   ├── main.ts                    # 窗口、IPC、与 Agent 运行器衔接
-│   ├── preload.ts                 # contextBridge API
-│   ├── env-loader.ts              # 加载 .env.local 等主进程环境变量
-│   ├── claude-agent-runner.ts     # Claude Agent SDK 运行逻辑
-│   ├── claude-agent-settings.ts   # Agent 设置读写
-│   ├── agent-context.ts           # skills / commands / agents / AGENT.md 发现与兼容层
-│   └── chat-workspace-store.ts    # 聊天工作区持久化
-├── src/
-│   ├── main.tsx                   # React 挂载入口
-│   ├── components/                # AppShell、聊天、文档、设置、文件面板等
-│   ├── theme/tokens.css           # 设计令牌（建议在此演进）
-│   ├── style.css                  # 全局与应用壳样式
-│   ├── window-safe-area.ts       # 窗口控件安全区 → CSS 变量
-│   ├── chat-workspace-persistence.ts
-│   ├── claude-chat-types.ts       # 前后端共享的类型
-│   ├── icons.ts / icon-inline.tsx
-│   └── vite-env.d.ts
-├── public/
-├── index.html
-├── vite.config.ts                 # React 插件 + vite-plugin-electron/simple
-├── electron-builder.json5
-├── tsconfig.json
-├── .env.example
-├── codex-ui-framework-notes.md    # Codex 类桌面 UI 分层笔记（参考）
-├── codex-css-tokens.md / .json    # 从参考应用抽取的 CSS 令牌说明与清单
-└── AGENT.md                       # 克隆/开发界面时的代理说明（含本地 Codex 参照路径）
-```
-
-## 打包与发布
-
-1. 在 `electron-builder.json5` 中修改 **`appId`**、**`productName`** 等与品牌一致的字段。
-2. 按需调整各平台 `mac` / `win` / `linux` 的 `target` 与签名、公证等（详见 [electron-builder 文档](https://www.electron.build/)）。
-3. 本地打包：`npm run build:local`；推 tag `v*` 后由 GitHub Actions 发布到 [Releases](https://github.com/xue160709/AgentOS/releases)。
-
-发布与应用内更新见 **[docs/RELEASE.md](docs/RELEASE.md)**。
-
-主进程依赖里将 `@anthropic-ai/claude-agent-sdk` 标为 **external**（见 `vite.config.ts`），以便在 Electron 运行时从 `node_modules` 加载；发布前请确认打包配置包含该依赖。
+其中 `.agents/home-plugins/` 是项目首页卡片系统的核心目录。每张卡片可以读取项目文件、生成 A2UI 输出，并在 AgentOS 首页渲染为数据卡片或任务卡片。
 
 ## 技术栈
 
-- [Electron](https://www.electronjs.org/)
-- [React](https://react.dev/)
-- [Vite](https://vitejs.dev/)
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react)
-- [vite-plugin-electron](https://github.com/electron-vite/vite-plugin-electron)
-- [@anthropic-ai/claude-agent-sdk](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk)
-- [electron-builder](https://www.electron.build/)
-- [marked](https://marked.js.org/) · [DOMPurify](https://github.com/cure53/DOMPurify)
+- Electron
+- React
 - TypeScript
+- Vite
+- Claude Agent SDK
+- A2UI
+- electron-builder
+- marked + DOMPurify
+
+## 联系方式
+
+如果想交流想法、反馈问题或参与共创，可以加微信：
+
+**xuezhirong233**
 
 ## 许可证
 
-[MIT](LICENSE)。使用前可按需在 `LICENSE` 第二行将版权归属改为你的名字或组织。
+[MIT](LICENSE)

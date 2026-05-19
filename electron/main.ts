@@ -510,6 +510,12 @@ function ensureTray() {
   }
 }
 
+function prepareForAppQuit() {
+  isQuitting = true
+  tray?.destroy()
+  tray = null
+}
+
 function applyLoginItemSettingsFromPrefs(prefs: DesktopPreferences) {
   app.setLoginItemSettings({
     openAtLogin: prefs.openAtLogin,
@@ -532,6 +538,11 @@ if (gotSingleInstanceLock) {
   })
 
   app.on('window-all-closed', () => {
+    if (isQuitting) {
+      app.quit()
+      win = null
+      return
+    }
     const prefs = desktopPreferencesStore?.read() ?? { closeToTray: false, openAtLogin: false, locale: 'zh' }
     if (prefs.closeToTray) return
     app.quit()
@@ -549,11 +560,7 @@ if (gotSingleInstanceLock) {
     }
   })
 
-  app.on('before-quit', () => {
-    isQuitting = true
-    tray?.destroy()
-    tray = null
-  })
+  app.on('before-quit', prepareForAppQuit)
 
   app.whenReady().then(() => {
     nativeTheme.themeSource = 'system'
@@ -571,7 +578,7 @@ if (gotSingleInstanceLock) {
 
     // --- IPC handlers / IPC 注册 ---
 
-    registerAppUpdaterIpc(() => win)
+    registerAppUpdaterIpc(() => win, { beforeQuitAndInstall: prepareForAppQuit })
 
     ipcMain.handle('desktop-preferences:get', () => {
       return getDesktopPreferencesStore().read()
