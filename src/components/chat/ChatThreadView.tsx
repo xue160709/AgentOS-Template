@@ -23,7 +23,7 @@ type ChatThreadViewProps = {
   onRewindFileChanges: (item: ChatFileDiffItem) => void
 }
 
-/** Thread timeline chrome wrapping scroll hints / Timeline chrome around transcript scroll controls */
+/** 有消息时的会话区：可滚动 Transcript + 吸底按钮 + Composer 插槽 / Active thread: scrollable transcript, scroll-to-bottom control, composer slot */
 export function ChatThreadView({
   items,
   isRunning,
@@ -41,6 +41,7 @@ export function ChatThreadView({
 
   return (
     <>
+      {/* 主滚动区：ChatPage 据此计算吸底与 ResizeObserver / Main scroll viewport; ChatPage attaches stick-to-bottom logic here */}
       <div className="chat-scroll-region" id="chat-scroll-region" ref={scrollRegionRef}>
         <div className="chat-transcript" id="chat-transcript" aria-live="polite">
           <Transcript
@@ -54,6 +55,7 @@ export function ChatThreadView({
           />
         </div>
       </div>
+      {/* 远离底部时的快捷回底（可见性由 `showScrollButton` 控制）/ Floating control when user scrolled up */}
       <button
         type="button"
         className="btn btn-scroll-bottom"
@@ -67,6 +69,7 @@ export function ChatThreadView({
       >
         <IconInline name="arrowDown" />
       </button>
+      {/* Composer 由父级 `ChatPage` 传入，保持布局插槽稳定 / Composer is slotted from `ChatPage` for stable layout */}
       {composer}
     </>
   )

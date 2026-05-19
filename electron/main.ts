@@ -1,3 +1,8 @@
+/**
+ * Electron 主进程入口：BrowserWindow、托盘、IPC 与 Claude Agent。
+ * Electron main entry: window lifecycle, tray menu, IPC bridges, and Claude Agent runner.
+ */
+
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, shell, Tray } from 'electron'
 import { fileURLToPath } from 'node:url'
 import fs from 'node:fs/promises'
@@ -34,14 +39,9 @@ import type {
 } from '../src/claude-chat-types'
 import type { FileTreeNode, FileTreeResult } from '../src/components/types'
 
-/**
- * Electron 主进程入口：BrowserWindow、托盘、IPC 与 Claude Agent。
- * Electron main entry: window lifecycle, tray menu, IPC bridges, and Claude Agent runner.
- */
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-// The built directory structure
+// 构建产物目录示意 / Built output layout (for orientation when reading paths)
 //
 // ├─┬─┬ dist
 // │ │ └── index.html
@@ -53,7 +53,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 process.env.APP_ROOT = path.join(__dirname, '..')
 loadMainProcessEnv(process.env.APP_ROOT)
 
-// 🚧 Use ['ENV_NAME'] avoid vite:define plugin - Vite@2.x
+// 🚧 使用 process.env['KEY'] 避免被 vite:define 内联；见 Vite 2.x 插件行为 /
+// 🚧 Use bracket notation so vite:define does not replace env keys (Vite@2.x plugin behavior).
 export const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
 export const MAIN_DIST = path.join(process.env.APP_ROOT, 'dist-electron')
 export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
@@ -201,7 +202,8 @@ function createWindow() {
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL)
   } else {
-    // win.loadFile('dist/index.html')
+    // 生产环境从磁盘加载打包后的 index.html（非直连 dist 根路径）/
+    // Production: load packaged `index.html` from disk (not the dev-server URL).
     win.loadFile(path.join(RENDERER_DIST, 'index.html'))
   }
 }

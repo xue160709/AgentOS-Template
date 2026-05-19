@@ -23,11 +23,13 @@ import { SettingsPage } from './setting/SettingsPage'
 import { useWorkspaceAgentMode } from './useWorkspaceAgentMode'
 import type { HomePluginRunItem } from '../desktop-types'
 
+/** 右侧辅助抽屉开关与当前标签 / Auxiliary side panel open flag and active tab */
 type SidePanelState = {
   open: boolean
   tab: WorkspaceSidePanelTab
 }
 
+/** `AppShellWorkspace` 的 props：标题、活动视图、聊天委托与侧栏联动 / Props wiring title, active view, chat callbacks, and drawer prefs */
 type AppShellWorkspaceProps = {
   workspaceTitle: string
   headerStatus: string
@@ -74,6 +76,8 @@ export function AppShellWorkspace({
   showProjectSkillsInSidebar,
   onShowProjectSkillsInSidebarChange,
 }: AppShellWorkspaceProps) {
+  // --- Derived chrome flags (settings hide header; home “surface” vs chat stream) / 派生框架标志（设置页隐藏顶栏；首页表面对话流）---
+
   const { t } = useI18n()
   const isSettingsChromeHidden = activeViewId === 'settings'
   const [sidePanel, setSidePanel] = useState<SidePanelState>(() => ({ open: false, tab: 'files' }))
@@ -90,9 +94,13 @@ export function AppShellWorkspace({
     activeThread?.purpose === 'task-run'
   const showAgentModeToolbar = activeViewId === 'home' && !showConversationFlow
 
+  // --- Close auxiliary drawer when navigating into settings / 进入设置路由时收起辅助抽屉 ---
+
   useEffect(() => {
     if (activeViewId === 'settings') setSidePanel((prev) => ({ ...prev, open: false }))
   }, [activeViewId])
+
+  // --- Side panel: single-tab toggle (second click closes) / 侧栏：单标签切换（再点同按钮则关闭）---
 
   const toggleSidePanelTab = useCallback((tab: WorkspaceSidePanelTab) => {
     setSidePanel((prev) => {
@@ -104,6 +112,8 @@ export function AppShellWorkspace({
   }, [])
 
   const folderToolbarActive = sidePanel.open && sidePanel.tab === 'files'
+
+  // --- Layout: title bar (hidden in settings), routed `<main>`, right drawer / 布局：标题栏（设置页隐藏）、路由主区、右侧抽屉 ---
 
   return (
     <div className="app-workspace">
@@ -134,6 +144,7 @@ export function AppShellWorkspace({
       )}
       <div className="app-workspace-content">
         <main className="app-main" role="main">
+          {/* 三视图互斥：`hidden` 保留挂载以维持 Chat 内存态 / Mutually exclusive routes; `hidden` keeps Chat mounted */}
           <ChatPage
             ref={chatRef}
             hidden={activeViewId !== 'home'}

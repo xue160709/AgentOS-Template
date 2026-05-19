@@ -1,3 +1,8 @@
+/**
+ * 聊天工作区 localStorage + Electron 双写与迁移归一化逻辑。
+ * Dual-write chat workspace state (localStorage + Electron) with normalization helpers.
+ */
+
 import type {
   ClaudeFileChangeSetStatus,
   ClaudeFileDiffFile,
@@ -19,11 +24,6 @@ import {
   reconcileActiveProject,
   stripRuntimeProjectFields,
 } from './project-path'
-
-/**
- * 聊天工作区 localStorage + Electron 双写与迁移归一化逻辑。
- * Dual-write chat workspace state (localStorage + Electron) with normalization helpers.
- */
 
 // --- Factories & selectors / 默认值与查询 ---
 

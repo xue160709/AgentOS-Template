@@ -118,6 +118,8 @@ export function AppShellSidebar({
   splitterRef,
   onSplitterPointerDown,
 }: AppShellSidebarProps) {
+  // --- Local UI state: context menu, skill tooltip, drag-reorder, per-project list expansion / 本地 UI：右键菜单、技能浮层、拖拽排序、各项目列表折叠 ---
+
   const { locale, t } = useI18n()
   const isSettingsSidebar = activeViewId === 'settings'
   const [confirmingArchiveThreadId, setConfirmingArchiveThreadId] = useState<string | null>(null)
@@ -139,9 +141,13 @@ export function AppShellSidebar({
   const skillTipPanelRef = useRef<HTMLDivElement>(null)
   const isDarwin = typeof window !== 'undefined' && window.desktop?.platform === 'darwin'
 
+  // --- Sorted project list (manual order > pin > recency) / 已排序项目列表（手工顺序优先于置顶与时间）---
+
   const sortedProjects = useMemo(() => {
     return sortProjectsForSidebar(projects, projectOrderIds)
   }, [projectOrderIds, projects])
+
+  // --- Project row HTML5 DnD: set dataTransfer + compute drop “before/after” / 项目行原生拖拽：写入 dataTransfer 并计算插入前后 ---
 
   const closeContextMenu = () => setContextMenu(null)
 
@@ -192,6 +198,8 @@ export function AppShellSidebar({
     }
     clearProjectDragState()
   }
+
+  // --- Floating panels: skill description tooltip + context menu clamp inside viewport / 浮动层：技能说明提示与右键菜单视口内夹紧 ---
 
   useEffect(() => {
     if (contextMenu) setSkillTip(null)
@@ -264,6 +272,8 @@ export function AppShellSidebar({
     window.location.hash = ''
   }
 
+  // --- Data prep: visible threads grouped & sorted per project / 数据准备：按项目分组并排序未归档线程 ---
+
   const visibleThreads = threads.filter((thread) => !thread.archivedAt)
   const threadsByProject = new Map<string, WorkspaceThread[]>()
   for (const thread of visibleThreads) {
@@ -277,6 +287,8 @@ export function AppShellSidebar({
       return pinDiff || b.updatedAt - a.updatedAt
     })
   }
+
+  // --- Context menu factories (project / skill / thread rows) / 右键菜单构造（项目、技能、线程）---
 
   const requestArchive = (threadId: string) => {
     if (confirmingArchiveThreadId === threadId) {
@@ -401,6 +413,8 @@ export function AppShellSidebar({
       ],
     })
   }
+
+  // --- Render: window toolbar, settings vs app rail, portal menus / 渲染：窗口工具条、设置/应用侧栏入口、传送门菜单 ---
 
   return (
     <>
@@ -881,6 +895,7 @@ export function AppShellSidebar({
 
 // --- Module helpers / 模块内工具 ---
 
+/** 侧栏线程相对时间（刚刚、分钟、小时、否则月日）/ Relative timestamp label for sidebar threads */
 function formatThreadTime(timestamp: number, locale: AppLocale, t: (path: string, vars?: Record<string, string | number>) => string): string {
   const diff = Date.now() - timestamp
   if (diff < 60_000) return t('sidebar.justNow')

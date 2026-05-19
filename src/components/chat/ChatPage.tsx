@@ -126,6 +126,7 @@ function getBuiltInSlashCommands(t: (path: string, vars?: Record<string, string 
   ]
 }
 
+/** 为「数据卡片」Home Plugin 起草阶段拼装的系统提示词 / System prompt for creating a single data-card Home Plugin */
 function buildDataCardPrompt(userRequest: string, threadId: string): string {
   return [
     '请基于下面的需求，只创建一张独立的数据卡片 Home Plugin。',
@@ -137,6 +138,7 @@ function buildDataCardPrompt(userRequest: string, threadId: string): string {
   ].join('\n')
 }
 
+/** 将线程用途映射到 `claudeChat.submit` 的 `promptMode` / Map thread `purpose` to SDK `promptMode` */
 function promptModeForThreadPurpose(purpose: WorkspaceThread['purpose']): ClaudeChatSubmitPayload['promptMode'] | undefined {
   if (purpose === 'home-plugin-customization' || purpose === 'home-plugin-card-customization') return purpose
   if (purpose === 'task-run') return 'home-plugin-task-run'
@@ -249,6 +251,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     [onThreadChatStateChange],
   )
 
+  // --- Agent context catalog (skills/agents for slash & @) / Agent 上下文目录（斜杠与 @ 联想数据来源） ---
+
   const refreshAgentContext = useCallback(async () => {
     const listAgentContext = window.desktop?.listAgentContext
     if (!listAgentContext) {
@@ -324,7 +328,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     setPendingAttachments([])
 
     window.claudeChat?.getSettings().then(applyGlobalModelFromSettings).catch(() => {
-      /* Browser preview can run without the Electron bridge. */
+      /* 浏览器独立预览可能没有 Electron 桥接 / Browser preview may run without the Electron bridge */
     })
   }, [activeThread?.id, activeProject.id, applyGlobalModelFromSettings])
 
@@ -334,7 +338,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
 
   useEffect(() => {
     window.claudeChat?.getSettings().then(applyGlobalModelFromSettings).catch(() => {
-      /* Browser preview can run without the Electron bridge. */
+      /* 浏览器独立预览可能没有 Electron 桥接 / Browser preview may run without the Electron bridge */
     })
 
     const onSettingsChanged = (event: Event) => {
@@ -343,6 +347,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     window.addEventListener(SETTINGS_CHANGED_EVENT, onSettingsChanged)
     return () => window.removeEventListener(SETTINGS_CHANGED_EVENT, onSettingsChanged)
   }, [applyGlobalModelFromSettings])
+
+  // --- Composer autocomplete: slash commands, @mentions, debounced file search / 输入框联想：斜杠、@ 与防抖文件搜索 ---
 
   const activeComposerTrigger = useMemo(
     () => getComposerTrigger(inputValue, composerSelection.start, composerSelection.end),
@@ -432,6 +438,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     return () => document.removeEventListener('mousedown', onPointerDown)
   }, [activeAutocompleteKey, composerAutocompleteOpen])
 
+  // --- Model & permission pickers: floating position + click-outside / 模型与权限选择器：浮层定位与点击外部关闭 ---
+
   const pickChatMenuRow = useCallback(async (row: ChatModelMenuRow) => {
     if (!window.claudeChat || isRunningRef.current) return
     try {
@@ -442,7 +450,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       window.dispatchEvent(new CustomEvent(SETTINGS_CHANGED_EVENT, { detail: snapshot }))
       setModelPickerOpen(false)
     } catch {
-      /* ignore */
+      /* 设置写入失败时静默 / Ignore settings write failures */
     }
   }, [])
 
@@ -555,6 +563,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     }
   }, [permissionModeOpen])
 
+  // --- Transcript region: stick to bottom, resize observer, “scroll to latest” chip / 会话区：吸底、ResizeObserver、回到底部按钮 ---
+
   const syncScrollButtonVisibility = useCallback(() => {
     const sr = scrollRegionRef.current
     if (!sr || sr.hidden) {
@@ -661,6 +671,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     return () => ro.disconnect()
   }, [hasMessages, syncScrollButtonVisibility])
 
+  // --- Composer `<textarea>` auto height (cap 180px) / 输入框自适应高度（上限 180px）---
+
   const resizeComposer = useCallback(() => {
     const ta = chatInputRef.current
     if (!ta) return
@@ -678,6 +690,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     sr.scrollTo({ top: sr.scrollHeight, behavior })
     setShowScrollButton(false)
   }, [])
+
+  // --- Submit target + run state bookkeeping (request id maps, finish/cleanup) / 提交目标与运行态簿记（requestId 映射、结束清理）---
 
   const getActiveSubmitTarget = useCallback((): SubmitPromptTarget | undefined => {
     if (!activeThread) return undefined
@@ -749,6 +763,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     },
     [onStatusChange, setThreadRunState],
   )
+
+  // --- Map every `ClaudeChatEvent` into `ChatState.items` / 将每条 SDK 事件折叠进对话时间线 items ---
 
   const handleClaudeEvent = useCallback(
     (event: ClaudeChatEvent) => {
@@ -1166,6 +1182,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     }
   }, [handleClaudeEvent])
 
+  // --- `submitPrompt`: optimistic user row, pending id → real `requestId`, bridge errors / 发送：乐观用户消息、pending id 对齐真实 requestId、桥接错误处理 ---
+
   const submitPrompt = async (
     rawText: string,
     target?: SubmitPromptTarget,
@@ -1307,6 +1325,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     }
   }
 
+  // --- Generative UI can dispatch follow-up user text / 生成式 UI 可派发后续用户文案 ---
+
   useEffect(() => {
     const submitWidgetMessage = (event: Event) => {
       const text = (event as CustomEvent<{ text?: unknown }>).detail?.text
@@ -1316,6 +1336,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     window.addEventListener('generative-ui:send-message', submitWidgetMessage)
     return () => window.removeEventListener('generative-ui:send-message', submitWidgetMessage)
   })
+
+  // --- Transcript actions: clipboard + edit user message (branch & resubmit) / 消息区：剪贴板与编辑用户消息后重发 ---
 
   const copyMessage = useCallback(
     async (text: string) => {
@@ -1371,6 +1393,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     })()
   }
 
+  // --- `forwardRef`: tray / shell entrypoints call into here / `forwardRef`：托盘等外部入口调用的命令式 API ---
+
   useImperativeHandle(
     ref,
     () => ({
@@ -1419,6 +1443,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     [onNewThread, onStatusChange, projects, setThreadRunState, t],
   )
 
+  // --- Cancel streaming + answer permission / tool questions from modal / 停止生成；在弹窗中应答权限或工具提问 ---
+
   const cancelActiveRequest = async () => {
     const requestId = threadRunStatesRef.current[activeThread?.id ?? activeThreadIdRef.current]?.requestId
     if (!requestId || isPendingRequestId(requestId) || !window.claudeChat) return
@@ -1436,6 +1462,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       ...decision,
     })
   }
+
+  // --- Composer attachments via native file picker (Electron) / 通过系统文件选择器添加附件（Electron）---
 
   const addComposerAttachments = async () => {
     const pickChatAttachments = window.desktop?.pickChatAttachments
@@ -1497,6 +1525,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     [activeComposerTrigger, inputValue],
   )
 
+  // --- Home “data card” draft → dedicated customization thread / 首页「数据卡片」草稿 → 专用定制线程 ---
+
   const submitDataCardDraft = async () => {
     const text = inputValue.trim()
     if (!text) return
@@ -1513,6 +1543,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       promptMode: 'home-plugin-card-customization',
     })
   }
+
+  // --- Composer form + keyboard routing (autocomplete vs send) / 表单提交与键盘路由（联想优先于发送）---
 
   const handleFormSubmit = (event: FormEvent) => {
     event.preventDefault()
@@ -1562,6 +1594,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     void submitPrompt(inputValue, getActiveSubmitTarget(), pendingAttachments)
   }
 
+  // --- File diff UX: mark reviewed + optional rewind via SDK / 文件 diff：标记已读与可选 SDK 回滚 ---
+
   const reviewFileChanges = useCallback(
     (changeSetId: string) => {
       const threadId = activeThreadIdRef.current
@@ -1599,6 +1633,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     },
     [activeProject.path, setThreadChatState, t],
   )
+
+  // --- Composer subtree (props-only; layout lives in `Composer.tsx`) / Composer 子树（仅传参；布局在 Composer 组件内）---
 
   const composer = (
     <Composer
@@ -1650,6 +1686,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       onPickChatMenuRow={(row) => void pickChatMenuRow(row)}
     />
   )
+
+  // --- Main render: active thread transcript vs empty “start” surface / 主渲染：有消息走会话轨，否则走起始视图 ---
 
   const showThreadView =
     hasMessages ||
@@ -1703,6 +1741,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     </section>
   )
 })
+
+// --- Module-level pure helpers (no React) / 模块级纯函数（无 React 依赖）---
 
 function getComposerTrigger(value: string, selectionStart: number, selectionEnd: number): ComposerTrigger | null {
   if (selectionStart !== selectionEnd) return null

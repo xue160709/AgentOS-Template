@@ -75,6 +75,8 @@ export function AppShell() {
   const sidebarSplitterRef = useRef<HTMLDivElement>(null)
   const sidebarResizeActive = useRef(false)
 
+  // --- Workspace mutation helpers (centralized `setChatWorkspace`) / 工作区变更辅助（统一走 setChatWorkspace）---
+
   const updateChatWorkspace = useCallback((update: (prev: ChatWorkspaceState) => ChatWorkspaceState) => {
     setChatWorkspace((prev) => (prev ? update(prev) : prev))
   }, [])
@@ -104,11 +106,15 @@ export function AppShell() {
     })
   }, [])
 
+  // --- Desktop bridge: mirror `locale` into desktop prefs + tray strings / 桌面桥：将 locale 写入桌面偏好与托盘文案 ---
+
   useEffect(() => {
     if (!window.desktop?.setDesktopPreferences) return
     void window.desktop.setDesktopPreferences({ locale })
     void window.desktop.syncTrayLocale?.(locale)
   }, [locale])
+
+  // --- Derived handles: active project/thread powering chat chrome / 派生句柄：驱动聊天框架的当前项目与线程 ---
 
   const activeProject =
     chatWorkspace?.projects.find((project) => project.id === chatWorkspace.activeProjectId) ??
@@ -144,6 +150,8 @@ export function AppShell() {
 
   const sidebarCollapsed = chatWorkspace?.sidebarPrefs.collapsed ?? false
 
+  // --- Prune stored maps when projects disappear; keep collapsed ids consistent / 项目删除后裁剪存储映射；折叠 id 列表保持一致 ---
+
   useEffect(() => {
     if (!projectIdsKey) return
     setHiddenSkillPathsByProject((prev) => {
@@ -175,6 +183,8 @@ export function AppShell() {
     })
   }, [projectIdsKey, updateChatWorkspace])
 
+  // --- Hydrate workspace from persistence (Electron file + localStorage merge) / 从持久化恢复工作区（Electron 文件与 localStorage 合并）---
+
   useEffect(() => {
     let cancelled = false
     void loadChatWorkspaceState().then((state) => {
@@ -184,6 +194,8 @@ export function AppShell() {
       cancelled = true
     }
   }, [])
+
+  // --- Watch active project folder on disk (`pathMissing` badge in UI) / 监视当前项目目录是否存在（侧栏 pathMissing 标记）---
 
   useEffect(() => {
     if (!chatWorkspace || !activeProject) return
@@ -207,6 +219,8 @@ export function AppShell() {
       cancelled = true
     }
   }, [activeProject?.id, activeProject?.path, activeProject?.pathMissing, chatWorkspace, updateChatWorkspace])
+
+  // --- GC: strip orphan skill/run maps after thread & project deletes / 垃圾回收：删除线程/项目后移除孤儿技能与运行态 ---
 
   useEffect(() => {
     if (!chatWorkspace) return
@@ -243,6 +257,8 @@ export function AppShell() {
   useEffect(() => {
     projectSkillStatesRef.current = projectSkillStates
   }, [projectSkillStates])
+
+  // --- Sidebar skills rail: debounced `listAgentContext` scan per project / 侧栏技能：按项目惰性扫描 listAgentContext ---
 
   useEffect(() => {
     if (!showProjectSkillsInSidebar || !chatWorkspace) return
@@ -318,6 +334,8 @@ export function AppShell() {
     }
   }, [projectSkillProjectKey, showProjectSkillsInSidebar, t])
 
+  // --- Autosave: debounce `persistChatWorkspaceState` + flush on unmount / 自动保存：防抖写入 persist，并在卸载时刷盘 ---
+
   const flushWorkspaceSave = useCallback(() => {
     if (workspaceSaveInFlightRef.current) return
     const pending = pendingWorkspaceSaveRef.current
@@ -353,9 +371,13 @@ export function AppShell() {
     }
   }, [flushWorkspaceSave])
 
+  // --- Routing helper: strip hash to return to main workspace chrome / 路由辅助：清空 hash 回到主工作区框架 ---
+
   const goHome = useCallback(() => {
     window.location.hash = ''
   }, [])
+
+  // --- Chat/workspace reducers: merge transcript updates and CRUD threads/projects / 归约器：合并聊天内容并增删改线程与项目 ---
 
   const updateThreadChatState = useCallback(
     (threadId: string, update: ChatState | ((prev: ChatState) => ChatState)) => {
@@ -596,6 +618,8 @@ export function AppShell() {
     [goHome, updateChatWorkspace, t],
   )
 
+  // --- OS tray: default locale once + wire menu actions (new thread / open project) / 系统托盘：初始化语言并绑定新建会话与打开项目 ---
+
   useEffect(() => {
     void window.desktop?.syncTrayLocale?.(getInitialLocale())
   }, [])
@@ -612,6 +636,8 @@ export function AppShell() {
       }
     })
   }, [chatWorkspace, createProject, createThreadInProject])
+
+  // --- Home plugin tasks: mirror background threads opened from the panel / 首页插件任务：同步面板打开的后台线程 ---
 
   const ensureTaskRunThread = useCallback(
     (event: HomePluginTaskEvent) => {
@@ -887,6 +913,8 @@ export function AppShell() {
     }))
   }, [updateChatWorkspace, t])
 
+  // --- Read CSS length tokens, clamp sidebar, persist user width / 读取 CSS 长度 token、夹紧侧栏宽度并持久化用户宽度 ---
+
   const readCssPxVar = useCallback((name: string, fallback: number): number => {
     const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
     const n = Number.parseFloat(raw)
@@ -914,7 +942,7 @@ export function AppShell() {
       try {
         localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(Math.round(clamped)))
       } catch {
-        /* ignore */
+        /* 私密模式或禁用存储时忽略 / Ignore when storage is blocked (private mode, etc.) */
       }
     },
     [clampSidebarWidth],
@@ -939,6 +967,8 @@ export function AppShell() {
     setCanForward(false)
   }, [])
 
+  // --- `hashchange` → settings view; keep back/forward mirrors in sync / hash 变化映射到设置视图；同步前进后退按钮态 ---
+
   useEffect(() => {
     const onHash = () => {
       setActiveViewId(viewFromLocation())
@@ -956,6 +986,8 @@ export function AppShell() {
     }
   }, [handleWindowResize, syncHistoryButtons])
 
+  // --- On boot, reapply stored sidebar width token / 启动时重新应用已保存的侧栏宽度 ---
+
   useEffect(() => {
     try {
       const raw = localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY)
@@ -963,9 +995,11 @@ export function AppShell() {
       const n = Number.parseInt(raw, 10)
       if (Number.isFinite(n)) applySidebarWidthPx(n)
     } catch {
-      /* ignore */
+      /* 私密模式或禁用存储时忽略 / Ignore when storage is blocked (private mode, etc.) */
     }
   }, [applySidebarWidthPx])
+
+  // --- Splitter drag: pointer capture translates to sidebar width delta / 分割条拖拽：指针捕获映射为侧栏宽度增量 ---
 
   const handleSidebarPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return
@@ -999,9 +1033,11 @@ export function AppShell() {
     try {
       splitter.setPointerCapture(event.pointerId)
     } catch {
-      /* ignore */
+      /* 旧版 Chromium 可能抛错；无捕获时仍可用 mousemove 兜底 / Older Chromium may throw; move handlers still work */
     }
   }
+
+  // --- Title region: settings category vs “project · thread” on home / 标题区：设置分类与首页「项目 · 线程」---
 
   const workspaceTitle = useMemo(() => {
     if (activeViewId === 'settings') return t(settingsWorkspaceTitleKey(settingsCategory))
@@ -1013,6 +1049,8 @@ export function AppShell() {
     }
     return t(VIEW_HEADING_KEYS[activeViewId])
   }, [activeProject?.name, activeThread?.title, activeViewId, settingsCategory, t])
+
+  // --- Render gates: wait for data; empty workspace CTA; guard missing project / 渲染门控：等待数据；空工作区引导；缺少项目则短路 ---
 
   if (!chatWorkspace) {
     return null
@@ -1036,6 +1074,8 @@ export function AppShell() {
   if (!activeProject) {
     return null
   }
+
+  // --- Primary layout once a project exists: sidebar rail + workspace stack / 存在项目后的主布局：侧栏轨道 + 工作区堆叠 ---
 
   return (
     <div
@@ -1105,6 +1145,8 @@ export function AppShell() {
     </div>
   )
 }
+
+// --- File-level utilities (pure helpers below `AppShell`) / 文件级工具函数（`AppShell` 下方的纯函数）---
 
 function resolveChatStateUpdate(
   prev: ChatState,

@@ -1,3 +1,8 @@
+/**
+ * 主进程内封装 Claude Agent SDK `query`：会话恢复、权限闸门与事件转发。
+ * Main-process facade for Claude Agent SDK `query`: resume, permission gating, and IPC streaming.
+ */
+
 import type { WebContents } from 'electron'
 import { randomUUID } from 'node:crypto'
 import {
@@ -39,11 +44,6 @@ import {
   HOME_PLUGIN_CUSTOMIZATION_SYSTEM_PROMPT,
   HOME_PLUGIN_TASK_RUN_SYSTEM_PROMPT,
 } from './home-plugin-customization-prompt'
-
-/**
- * 主进程内封装 Claude Agent SDK `query`：会话恢复、权限闸门与事件转发。
- * Main-process facade for Claude Agent SDK `query`: resume, permission gating, and IPC streaming.
- */
 
 /** 渲染进程订阅聊天事件的 IPC 信道 / IPC channel for streamed chat events to renderer */
 export const CLAUDE_CHAT_EVENT_CHANNEL = 'claude-chat:event'

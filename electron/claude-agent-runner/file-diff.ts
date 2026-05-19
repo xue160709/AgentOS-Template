@@ -1,3 +1,8 @@
+/**
+ * 将 Claude Code Edit/Write 工具输出归一化为 UI 可渲染的文件 diff。
+ * Normalize Claude Code Edit/Write tool output into renderer-friendly file diffs.
+ */
+
 import path from 'node:path'
 import type {
   ClaudeFileDiffFile,
@@ -5,11 +10,6 @@ import type {
   ClaudeFileDiffHunk,
   ClaudeFileDiffLine,
 } from '../../src/claude-chat-types'
-
-/**
- * 将 Claude Code Edit/Write 工具输出归一化为 UI 可渲染的文件 diff。
- * Normalize Claude Code Edit/Write tool output into renderer-friendly file diffs.
- */
 
 const MAX_DIFF_LINES_PER_FILE = 800
 
