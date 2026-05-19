@@ -104,6 +104,7 @@ export class TaskHomePluginManager {
   async refreshFromWorkspace(workspace = this.deps.getWorkspace()): Promise<void> {
     const projectIds = new Set<string>()
     const nextRecords = new Map<string, ManagedTaskRecord>()
+    this.records.clear()
 
     for (const project of workspace?.projects ?? []) {
       projectIds.add(project.id)

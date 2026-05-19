@@ -14,7 +14,7 @@ import type {
 export type AppViewId = 'home' | 'docs' | 'settings'
 
 /** 设置页侧栏路由 `#settings/<id>` / Settings sidebar route fragment `#settings/<id>` */
-export type SettingsCategoryId = 'general' | 'skills' | 'updates' | 'agent'
+export type SettingsCategoryId = 'general' | 'skills' | 'updates' | 'agent' | 'developer'
 
 /** 消息气泡渲染状态 / Chat bubble render status */
 export type MessageStatus = 'done' | 'streaming' | 'error' | 'cancelled'

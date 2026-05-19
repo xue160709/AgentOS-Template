@@ -2088,6 +2088,17 @@ button.app-file-tree-row {
   color: var(--color-token-text-primary);
 }
 
+.btn-danger {
+  height: 32px;
+  padding: 0 calc(var(--spacing) * 3);
+  color: var(--color-token-error-foreground);
+  background: color-mix(in oklab, var(--color-token-error-foreground) 8%, transparent);
+  border-color: color-mix(in oklab, var(--color-token-error-foreground) 28%, transparent);
+}
+.btn-danger:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--color-token-error-foreground) 14%, transparent);
+}
+
 .btn-compact {
   height: 28px;
   padding-inline: calc(var(--spacing) * 2);
@@ -2540,6 +2551,18 @@ button.app-file-tree-row {
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
+.settings-field-row--action {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.settings-field-row__controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: calc(var(--spacing) * 1);
+}
+
 .settings-toggle {
   display: inline-flex;
   align-items: center;
@@ -2902,6 +2925,26 @@ button.app-file-tree-row {
   font-size: var(--text-xs);
   line-height: 1.45;
   color: var(--color-token-text-secondary);
+}
+
+.settings-dev-dialog__summary {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--spacing) * 1.25);
+  margin-top: calc(var(--spacing) * 2);
+}
+
+.settings-dev-dialog__line {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--color-token-text-secondary);
+}
+
+.settings-dev-dialog__line strong {
+  display: block;
+  margin-bottom: calc(var(--spacing) * 0.5);
+  color: var(--color-token-text-primary);
 }
 
 .settings-env-tags {
@@ -5768,6 +5811,14 @@ button.app-file-tree-row {
 
   .settings-field-row--textarea {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-field-row--action {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-field-row--action .settings-field-row__controls {
+    align-items: flex-start;
   }
 
   .settings-group--provider-fields {

@@ -7,6 +7,7 @@
     "workspaceSettingsGeneral": "设置 · 常规",
     "workspaceSettingsUpdates": "设置 · 版本更新",
     "workspaceSettingsAgentMode": "设置 · Agent模式",
+    "workspaceSettingsDeveloper": "设置 · 开发者模式",
     "headerDefault": "Claude Agent",
     "headerProcessingThread": "当前对话处理中",
     "projectSkillUnavailable": "当前运行环境无法读取项目 skills",
@@ -31,7 +32,8 @@
     "models": "模型",
     "general": "常规",
     "updates": "版本更新",
-    "agentMode": "Agent模式"
+    "agentMode": "Agent模式",
+    "developer": "开发者模式"
   },
   "sidebar": {
     "windowNav": "窗口导航",
@@ -247,6 +249,30 @@
     "updates": {
       "pageTitle": "版本更新",
       "pageLede": "应用会在后台检查并下载新版本。安装包准备完成后，你只需要确认重启安装。"
+    },
+    "developer": {
+      "pageTitle": "开发者模式",
+      "pageLede": "仅在开发版可见，只清理测试需要的用户数据，不会删除项目目录里的文件。",
+      "groupAria": "开发者模式清理选项",
+      "workspaceTitle": "清空工作区/会话",
+      "workspaceBoundary": "边界：只删除工作区快照与会话数据，包括本地镜像 `CodeX-UI-Template-chat-workspace-v1`、主进程里的 `chat-workspace.json`、`chat-workspace.sqlite*` 和 `chat-sessions/`。项目目录与项目文件不动。",
+      "workspaceImpact": "影响：当前工作区里的项目、线程、会话 ID 和活动选择会回到空白状态；桌面偏好、Agent Mode、界面语言、侧栏宽度、项目 Skills 开关和纯本地偏好都保留。",
+      "workspaceAction": "清空工作区/会话",
+      "workspaceDialogTitle": "确认清空工作区/会话？",
+      "claudeTitle": "清空 Claude 设置",
+      "claudeBoundary": "边界：只删除主进程中的 `claude-agent-settings.json`，不碰工作区、项目文件、桌面偏好或其他本地偏好。",
+      "claudeImpact": "影响：Claude 的提供商列表、当前选中项、API Key、Base URL 和模型映射会恢复默认；项目文件、工作区、Agent Mode、侧栏宽度和纯本地偏好不受影响。",
+      "claudeAction": "清空 Claude 设置",
+      "claudeDialogTitle": "确认清空 Claude 设置？",
+      "dialogBody": "确认后会立即执行这项清理，无法恢复。",
+      "dialogConfirm": "确认清空",
+      "dialogDismiss": "取消",
+      "boundaryLabel": "边界",
+      "impactLabel": "影响",
+      "workspaceClearing": "正在清空工作区/会话…",
+      "workspaceCleared": "工作区/会话已清空",
+      "claudeClearing": "正在清空 Claude 设置…",
+      "claudeCleared": "Claude 设置已清空"
     },
     "models": {
       "pageTitle": "模型",

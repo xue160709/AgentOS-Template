@@ -5,6 +5,7 @@
 
 import { AgentModeSettingsPage } from './AgentModeSettingsPage'
 import { AppUpdateSettingsPage } from './AppUpdateSettingsPage'
+import { DeveloperSettingsPage } from './DeveloperSettingsPage'
 import { ClaudeAgentSettingsPage } from './ClaudeAgentSettingsPage'
 import { ProjectSkillsSettingsPage } from './ProjectSkillsSettingsPage'
 import type { SettingsCategoryId, WorkspaceProject } from '../types'
@@ -44,6 +45,10 @@ export function SettingsPage({
 
   if (settingsCategory === 'updates') {
     return <AppUpdateSettingsPage />
+  }
+
+  if (settingsCategory === 'developer' && import.meta.env.DEV) {
+    return <DeveloperSettingsPage />
   }
 
   return <ClaudeAgentSettingsPage />

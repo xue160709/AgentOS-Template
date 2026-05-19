@@ -104,6 +104,8 @@ declare global {
       ) => Promise<AgentModeSettingsResult>
       getChatWorkspace?: () => Promise<ChatWorkspaceState | null>
       saveChatWorkspace?: (state: ChatWorkspaceState) => Promise<ChatWorkspaceState>
+      clearChatWorkspaceData?: () => Promise<void>
+      clearClaudeAgentSettings?: () => Promise<void>
       quitApp?: () => Promise<void>
       /** 在访达/资源管理器中展示路径 / Reveal path in Finder or Explorer */
       showItemInFolder?: (targetPath: string) => Promise<void>

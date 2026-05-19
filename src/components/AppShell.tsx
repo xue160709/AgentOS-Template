@@ -10,6 +10,7 @@ import {
   latestVisibleThreadForProject,
   loadChatWorkspaceState,
   persistChatWorkspaceState,
+  createDefaultChatWorkspaceState,
 } from '../chat-workspace-persistence'
 import {
   SIDEBAR_HIDDEN_SKILLS_STORAGE_KEY,
@@ -21,6 +22,7 @@ import {
   settingsWorkspaceTitleKey,
   viewFromLocation,
 } from './app-shell-constants.ts'
+import { CHAT_WORKSPACE_CLEARED_EVENT } from '../app-events'
 import { defaultThreadTitleSet, getInitialLocale, translate, useI18n } from '../i18n/i18n'
 import { IconInline } from '../icon-inline'
 import type { HomePluginRunItem, HomePluginTaskEvent } from '../desktop-types'
@@ -63,6 +65,7 @@ export function AppShell() {
     readHiddenSkillPathsMap(),
   )
   const [homeModeResetKey, setHomeModeResetKey] = useState(0)
+  const workspaceClearedRef = useRef(false)
 
   const chatRef = useRef<ChatPageHandle>(null)
   const workspaceSaveTimerRef = useRef<number | null>(null)
@@ -352,6 +355,10 @@ export function AppShell() {
 
   useEffect(() => {
     if (!chatWorkspace) return
+    if (workspaceClearedRef.current && isEmptyChatWorkspace(chatWorkspace)) {
+      return
+    }
+    workspaceClearedRef.current = false
     pendingWorkspaceSaveRef.current = chatWorkspace
     if (workspaceSaveTimerRef.current != null) {
       window.clearTimeout(workspaceSaveTimerRef.current)
@@ -377,6 +384,22 @@ export function AppShell() {
   const goHome = useCallback(() => {
     window.location.hash = ''
   }, [])
+
+  const handleWorkspaceCleared = useCallback(() => {
+    workspaceClearedRef.current = true
+    if (workspaceSaveTimerRef.current != null) {
+      window.clearTimeout(workspaceSaveTimerRef.current)
+      workspaceSaveTimerRef.current = null
+    }
+    pendingWorkspaceSaveRef.current = null
+    setChatWorkspace(createDefaultChatWorkspaceState())
+    setProjectSkillStates({})
+    setThreadRunStates({})
+    setSelectedProjectSkill(null)
+    setHomeModeResetKey((value) => value + 1)
+    setHeaderStatus(t('shell.headerDefault'))
+    window.location.hash = ''
+  }, [t])
 
   // --- Chat/workspace reducers: merge transcript updates and CRUD threads/projects / 归约器：合并聊天内容并增删改线程与项目 ---
 
@@ -624,6 +647,14 @@ export function AppShell() {
   useEffect(() => {
     void window.desktop?.syncTrayLocale?.(getInitialLocale())
   }, [])
+
+  useEffect(() => {
+    const onWorkspaceCleared = () => {
+      handleWorkspaceCleared()
+    }
+    window.addEventListener(CHAT_WORKSPACE_CLEARED_EVENT, onWorkspaceCleared)
+    return () => window.removeEventListener(CHAT_WORKSPACE_CLEARED_EVENT, onWorkspaceCleared)
+  }, [handleWorkspaceCleared])
 
   useEffect(() => {
     const subscribe = window.desktop?.onTrayMenuAction
@@ -1256,4 +1287,13 @@ function writeHiddenSkillPathsMap(map: Record<string, string[]>): void {
   } catch {
     /* ignore */
   }
+}
+
+function isEmptyChatWorkspace(state: ChatWorkspaceState): boolean {
+  return (
+    state.activeProjectId === '' &&
+    state.activeThreadId === '' &&
+    state.projects.length === 0 &&
+    state.threads.length === 0
+  )
 }
