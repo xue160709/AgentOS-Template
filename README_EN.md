@@ -8,6 +8,21 @@ The backend runtime is powered by **Claude Agent SDK** inside the Electron main 
 
 The vision is simple: every project should be able to grow its own Agent operating system. You choose a local folder, and AgentOS helps the Agent understand that folder, remember project context, run Skills, render interactive dashboards, and collaborate with you over time.
 
+## Contents
+
+- [Vision](#vision)
+- [Branches](#branches)
+- [What Makes AgentOS Different](#what-makes-agentos-different)
+- [Current Features](#current-features)
+- [Download and Install](#download-and-install)
+- [Development](#development)
+- [Project Convention](#project-convention)
+- [Tech Stack](#tech-stack)
+- [Future Direction](#future-direction)
+- [Contact](#contact)
+- [Acknowledgements](#acknowledgements)
+- [License](#license)
+
 ## Preview
 
 ![Preview 1](image1.png)
@@ -267,6 +282,7 @@ For discussion, feedback, or co-creation, add WeChat:
 - Thanks to Anthropic for providing the Claude Code binary. Without it, it would be much harder to bring the local Agent runtime into a desktop workspace like this.
 - Thanks to 歸藏 for sharing the interactive UI approach inside chat, [https://x.com/op7418/status/2033113845120807170](https://x.com/op7418/status/2033113845120807170). Without that, it would be much harder to make the in-chat interaction feel this smooth.
 - Thanks to OpenClaw for inspiring `SOUL.md`, `USER.md`, and `Identify.md`, [https://openclaw.ai/](https://openclaw.ai/). Without that, it would be much harder to shape the project identity, user model, and boundaries so clearly.
+- Thanks to the Codex app for giving so much reference and inspiration on the UI framework. Without that, it would be much harder to shape the desktop shell and interaction structure this smoothly.
 
 ## License
 
