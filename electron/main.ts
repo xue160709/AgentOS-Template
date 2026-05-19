@@ -28,6 +28,7 @@ import { runProjectHomePlugin, saveProjectHomePluginLayout, saveProjectHomePlugi
 import { installSafeStdStreamHandlers } from './safe-console'
 import { TaskHomePluginManager } from './task-home-plugin-manager'
 import { normalizeUiLocale } from './ui-locale'
+import { installApplicationMenu } from './app-menu'
 import { formatProjectPathError, resolveProjectPath, validateProjectPaths } from './project-path'
 import type {
   ActiveChatPickPayload,
@@ -82,6 +83,9 @@ let desktopPreferencesStore: DesktopPreferencesStore | null = null
 let taskHomePluginManager: TaskHomePluginManager | null = null
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
+
+/** 与 VITE 开发服务器一致：打包产物无开发菜单 / Matches Vite dev server; packaged builds omit dev menu */
+const isDevRuntime = Boolean(VITE_DEV_SERVER_URL) || !app.isPackaged
 
 app.setName(APP_NAME)
 
@@ -148,6 +152,7 @@ function createWindow() {
     title: APP_NAME,
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
+      devTools: isDevRuntime,
     },
     ...(isMac
       ? {
@@ -398,6 +403,7 @@ if (gotSingleInstanceLock) {
 
   app.whenReady().then(() => {
     nativeTheme.themeSource = 'system'
+    installApplicationMenu({ isDev: isDevRuntime })
     applyDockBranding()
     const userDataPath = app.getPath('userData')
     desktopPreferencesStore = new DesktopPreferencesStore(userDataPath)
