@@ -9,6 +9,7 @@ import { useI18n } from '../i18n/i18n'
 import type {
   AppViewId,
   ChatState,
+  FileTreeNode,
   SettingsCategoryId,
   ThreadRunState,
   WorkspaceProject,
@@ -19,6 +20,7 @@ import { AppFileTreePane, type AppFileTreePaneHandle } from './AppFileTreePane'
 import { AppWorkspaceSidePanel, type WorkspaceSidePanelTab } from './AppWorkspaceSidePanel'
 import { ChatPage, type ChatPageHandle } from './chat/ChatPage'
 import { DocsPage } from './DocsPage'
+import { ProjectFilePreviewOverlay, type ProjectFilePreviewOverlayState } from './ProjectFilePreviewOverlay'
 import { SettingsPage } from './setting/SettingsPage'
 import { useWorkspaceAgentMode } from './useWorkspaceAgentMode'
 import type { HomePluginRunItem } from '../desktop-types'
@@ -81,7 +83,9 @@ export function AppShellWorkspace({
   const { t } = useI18n()
   const isSettingsChromeHidden = activeViewId === 'settings'
   const [sidePanel, setSidePanel] = useState<SidePanelState>(() => ({ open: false, tab: 'files' }))
+  const [filePreview, setFilePreview] = useState<ProjectFilePreviewOverlayState | null>(null)
   const filePaneRef = useRef<AppFileTreePaneHandle>(null)
+  const filePreviewRequestRef = useRef(0)
   const agentMode = useWorkspaceAgentMode(activeProject)
 
   /** 与 ChatPage.showThreadView 一致：有消息或插件定制线程时视为对话流，否则为项目首页 / Mirrors ChatPage.showThreadView */
@@ -100,6 +104,18 @@ export function AppShellWorkspace({
     if (activeViewId === 'settings') setSidePanel((prev) => ({ ...prev, open: false }))
   }, [activeViewId])
 
+  useEffect(() => {
+    filePreviewRequestRef.current += 1
+    setFilePreview(null)
+  }, [activeProject.path])
+
+  useEffect(() => {
+    if (activeViewId !== 'home') {
+      filePreviewRequestRef.current += 1
+      setFilePreview(null)
+    }
+  }, [activeViewId])
+
   // --- Side panel: single-tab toggle (second click closes) / 侧栏：单标签切换（再点同按钮则关闭）---
 
   const toggleSidePanelTab = useCallback((tab: WorkspaceSidePanelTab) => {
@@ -111,7 +127,59 @@ export function AppShellWorkspace({
     })
   }, [])
 
+  const openProjectFilePreview = useCallback(
+    async (node: FileTreeNode) => {
+      const requestId = filePreviewRequestRef.current + 1
+      filePreviewRequestRef.current = requestId
+      setFilePreview({
+        status: 'loading',
+        path: node.path,
+        relativePath: node.relativePath,
+        name: node.name,
+      })
+
+      const readProjectFile = window.desktop?.readProjectFile
+      if (!readProjectFile) {
+        setFilePreview({
+          status: 'error',
+          path: node.path,
+          relativePath: node.relativePath,
+          name: node.name,
+          message: t('filePanel.previewUnsupported'),
+        })
+        return
+      }
+
+      try {
+        const result = await readProjectFile(activeProject.path, node.path)
+        if (filePreviewRequestRef.current !== requestId) return
+        if (result.ok) {
+          setFilePreview({ status: 'ready', file: result })
+          return
+        }
+        setFilePreview({
+          status: 'error',
+          path: result.path || node.path,
+          relativePath: result.relativePath || node.relativePath,
+          name: result.name || node.name,
+          message: result.message,
+        })
+      } catch (error) {
+        if (filePreviewRequestRef.current !== requestId) return
+        setFilePreview({
+          status: 'error',
+          path: node.path,
+          relativePath: node.relativePath,
+          name: node.name,
+          message: error instanceof Error ? error.message : t('filePanel.previewUnavailable'),
+        })
+      }
+    },
+    [activeProject.path, t],
+  )
+
   const folderToolbarActive = sidePanel.open && sidePanel.tab === 'files'
+  const activePreviewPath = filePreview?.status === 'ready' ? filePreview.file.path : filePreview?.path ?? null
 
   // --- Layout: title bar (hidden in settings), routed `<main>`, right drawer / 布局：标题栏（设置页隐藏）、路由主区、右侧抽屉 ---
 
@@ -173,6 +241,9 @@ export function AppShellWorkspace({
             showProjectSkillsInSidebar={showProjectSkillsInSidebar}
             onShowProjectSkillsInSidebarChange={onShowProjectSkillsInSidebarChange}
           />
+          {activeViewId === 'home' && filePreview ? (
+            <ProjectFilePreviewOverlay preview={filePreview} onClose={() => setFilePreview(null)} />
+          ) : null}
         </main>
         <AppWorkspaceSidePanel
           open={sidePanel.open}
@@ -180,7 +251,15 @@ export function AppShellWorkspace({
           onActiveTabChange={(tab) => setSidePanel((prev) => ({ ...prev, open: true, tab }))}
           onClose={() => setSidePanel((prev) => ({ ...prev, open: false }))}
           filePaneRef={filePaneRef}
-          filesPane={<AppFileTreePane ref={filePaneRef} project={activeProject} isVisible={sidePanel.open && sidePanel.tab === 'files'} />}
+          filesPane={
+            <AppFileTreePane
+              ref={filePaneRef}
+              project={activeProject}
+              isVisible={sidePanel.open && sidePanel.tab === 'files'}
+              activeFilePath={activePreviewPath}
+              onOpenFile={openProjectFilePreview}
+            />
+          }
         />
       </div>
     </div>

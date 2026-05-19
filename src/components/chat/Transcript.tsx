@@ -208,6 +208,34 @@ function getProcessItemKey(item: ProcessTranscriptItem): string {
   return `activity:${item.id}`
 }
 
+/** ChatPage ResizeObserver listens for this to skip stick-to-bottom during local expand/collapse. */
+const TRANSCRIPT_LAYOUT_TOGGLE_EVENT = 'chat-process-trace:toggle'
+
+function getChatScrollRegion(node: EventTarget | null): HTMLElement | null {
+  if (!node || !(node instanceof Element)) return null
+  return node.closest('.chat-scroll-region') as HTMLElement | null
+}
+
+/** Keep scroll position stable when transcript blocks change height (details, process group, file diff). */
+function handleTranscriptLayoutToggle(
+  event: { currentTarget: EventTarget | null },
+  applyToggle: () => void,
+) {
+  const scrollRegion = getChatScrollRegion(event.currentTarget)
+  const scrollTop = scrollRegion?.scrollTop
+  window.dispatchEvent(new CustomEvent(TRANSCRIPT_LAYOUT_TOGGLE_EVENT))
+  applyToggle()
+  if (!scrollRegion || scrollTop === undefined) return
+  const restoreScroll = () => {
+    const maxTop = Math.max(0, scrollRegion.scrollHeight - scrollRegion.clientHeight)
+    scrollRegion.scrollTop = Math.min(scrollTop, maxTop)
+  }
+  window.requestAnimationFrame(() => {
+    restoreScroll()
+    window.requestAnimationFrame(restoreScroll)
+  })
+}
+
 function ProcessTraceBlock({
   durationMs,
   processItems,
@@ -231,17 +259,7 @@ function ProcessTraceBlock({
         title={t('chat.responseDurationTitle')}
         aria-label={t('chat.responseDurationTitle')}
         aria-expanded={isOpen}
-        onClick={(event) => {
-          const scrollRegion = event.currentTarget.closest('.chat-scroll-region') as HTMLElement | null
-          const scrollTop = scrollRegion?.scrollTop
-          window.dispatchEvent(new CustomEvent('chat-process-trace:toggle'))
-          setIsOpen((value) => !value)
-          if (scrollRegion && scrollTop !== undefined) {
-            window.requestAnimationFrame(() => {
-              scrollRegion.scrollTop = Math.min(scrollTop, Math.max(0, scrollRegion.scrollHeight - scrollRegion.clientHeight))
-            })
-          }
-        }}
+        onClick={(event) => handleTranscriptLayoutToggle(event, () => setIsOpen((value) => !value))}
       >
         <span>{t('chat.responseProcessed')}</span>
         <span>{durationLabel}</span>
@@ -487,7 +505,11 @@ const ToolRow = memo(function ToolRow({ item }: { item: ChatToolItem }) {
   }
 
   return (
-    <details className={`tool-row tool-row--${item.status}`} open={isOpen} onToggle={(event) => setIsOpen(event.currentTarget.open)}>
+    <details
+      className={`tool-row tool-row--${item.status}`}
+      open={isOpen}
+      onToggle={(event) => handleTranscriptLayoutToggle(event, () => setIsOpen(event.currentTarget.open))}
+    >
       <summary className="status-row__summary">{summary}</summary>
       <div className="status-row__body">{item.inputPreview ? <code>{item.inputPreview}</code> : null}</div>
     </details>
@@ -521,7 +543,11 @@ const ThinkingRow = memo(function ThinkingRow({ item }: { item: ChatThinkingItem
   }
 
   return (
-    <details className={`thinking-row thinking-row--${item.status}`} open={isOpen} onToggle={(event) => setIsOpen(event.currentTarget.open)}>
+    <details
+      className={`thinking-row thinking-row--${item.status}`}
+      open={isOpen}
+      onToggle={(event) => handleTranscriptLayoutToggle(event, () => setIsOpen(event.currentTarget.open))}
+    >
       <summary className="thinking-row__header">{summary}</summary>
       {item.content ? <pre>{item.content}</pre> : null}
     </details>
@@ -562,7 +588,11 @@ const ActivityRow = memo(function ActivityRow({ item }: { item: ChatActivityItem
   }
 
   return (
-    <details className={`activity-row activity-row--${item.status}`} open={isOpen} onToggle={(event) => setIsOpen(event.currentTarget.open)}>
+    <details
+      className={`activity-row activity-row--${item.status}`}
+      open={isOpen}
+      onToggle={(event) => handleTranscriptLayoutToggle(event, () => setIsOpen(event.currentTarget.open))}
+    >
       <summary className="activity-row__main">{summary}</summary>
       {item.preview ? <pre>{item.preview}</pre> : null}
     </details>
@@ -597,7 +627,11 @@ const FileDiffRow = memo(function FileDiffRow({
         </span>
         <div className="file-diff-row__copy">
           <strong>{t('chat.fileDiffTitle', { count: item.files.length })}</strong>
-          <button type="button" className="file-diff-row__link" onClick={() => setIsOpen((value) => !value)}>
+          <button
+            type="button"
+            className="file-diff-row__link"
+            onClick={(event) => handleTranscriptLayoutToggle(event, () => setIsOpen((value) => !value))}
+          >
             {isOpen ? t('chat.fileDiffHide') : t('chat.fileDiffView')}
           </button>
           {item.detail ? <span className="file-diff-row__detail">{item.detail}</span> : null}

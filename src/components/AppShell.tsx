@@ -697,10 +697,24 @@ export function AppShell() {
   }, [ensureTaskRunThread])
 
   const archiveThread = useCallback(
-    (threadId: string) => {
+    async (threadId: string) => {
+      const target = chatWorkspace?.threads.find((thread) => thread.id === threadId)
+      if (!target || target.archivedAt) return
+
+      if (target.purpose === 'task-run' && target.homePluginSlug) {
+        const project = chatWorkspace?.projects.find((item) => item.id === target.projectId)
+        if (project?.path && window.desktop?.stopTaskHomePlugin) {
+          try {
+            await window.desktop.stopTaskHomePlugin(project.path, target.homePluginSlug)
+          } catch {
+            /* stop is best-effort when archiving a running task */
+          }
+        }
+      }
+
       updateChatWorkspace((prev) => {
-        const target = prev.threads.find((thread) => thread.id === threadId)
-        if (!target || target.archivedAt) return prev
+        const current = prev.threads.find((thread) => thread.id === threadId)
+        if (!current || current.archivedAt) return prev
 
         const now = Date.now()
         const nextThreads = prev.threads.map((thread) =>
@@ -711,7 +725,7 @@ export function AppShell() {
         }
 
         const nextState: ChatWorkspaceState = { ...prev, threads: nextThreads }
-        const nextActive = latestVisibleThreadForProject(nextState, target.projectId)
+        const nextActive = latestVisibleThreadForProject(nextState, current.projectId)
 
         if (nextActive) {
           return {
@@ -723,14 +737,14 @@ export function AppShell() {
 
         return {
           ...nextState,
-          activeProjectId: target.projectId,
+          activeProjectId: current.projectId,
           activeThreadId: '',
         }
       })
       setSelectedProjectSkill(null)
       goHome()
     },
-    [goHome, updateChatWorkspace],
+    [chatWorkspace, goHome, updateChatWorkspace],
   )
 
   const toggleThreadPinned = useCallback((threadId: string) => {

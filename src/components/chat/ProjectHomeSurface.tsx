@@ -856,7 +856,7 @@ function TaskCardDialog({
           <label className="agent-mode-switch project-home-task-switch">
             <span className="agent-mode-switch__copy">
               <span>{t('workspace.taskScheduleToggle')}</span>
-              <span>{t('workspace.taskScheduleToggleDesc')}</span>
+              {/* <span>{t('workspace.taskScheduleToggleDesc')}</span> */}
             </span>
             <span className="settings-switch-control">
               <input

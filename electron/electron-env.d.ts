@@ -30,7 +30,7 @@ import type {
   HomePluginTaskStopResult,
   TrayMenuAction,
 } from '../src/desktop-types'
-import type { ChatWorkspaceState, FileTreeResult } from '../src/components/types'
+import type { ChatWorkspaceState, FileTreeResult, ProjectFilePreviewResult } from '../src/components/types'
 
 declare global {
   namespace NodeJS {
@@ -67,6 +67,7 @@ declare global {
       pickProjectDirectory?: () => Promise<string | null>
       pickChatAttachments?: (options?: { allowImages?: boolean }) => Promise<ClaudeChatAttachmentPickerResult>
       listProjectFiles?: (rootPath: string) => Promise<FileTreeResult>
+      readProjectFile?: (rootPath: string, filePath: string) => Promise<ProjectFilePreviewResult>
       searchProjectFiles?: (rootPath: string, query: string) => Promise<ProjectFileSearchResult>
       listAgentContext?: (rootPath: string) => Promise<AgentContextResult>
       validateProjectPaths?: (projectPaths: string[]) => Promise<Record<string, boolean>>

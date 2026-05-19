@@ -290,13 +290,28 @@ export function AppShellSidebar({
 
   // --- Context menu factories (project / skill / thread rows) / 右键菜单构造（项目、技能、线程）---
 
-  const requestArchive = (threadId: string) => {
-    if (confirmingArchiveThreadId === threadId) {
-      onArchiveThread(threadId)
+  const requestArchive = (thread: WorkspaceThread, source: 'button' | 'menu') => {
+    const isRunningTask = thread.purpose === 'task-run' && Boolean(threadRunStates[thread.id])
+    if (isRunningTask) {
+      const confirmed = window.confirm(t('sidebar.confirmRemoveRunningTask', { title: thread.title }))
+      if (!confirmed) return
+      setConfirmingArchiveThreadId(null)
+      void onArchiveThread(thread.id)
+      return
+    }
+
+    if (source === 'menu') {
+      setConfirmingArchiveThreadId(null)
+      void onArchiveThread(thread.id)
+      return
+    }
+
+    if (confirmingArchiveThreadId === thread.id) {
+      void onArchiveThread(thread.id)
       setConfirmingArchiveThreadId(null)
       return
     }
-    setConfirmingArchiveThreadId(threadId)
+    setConfirmingArchiveThreadId(thread.id)
   }
 
   const openProjectMenu = (event: ReactMouseEvent, project: WorkspaceProject) => {
@@ -407,7 +422,7 @@ export function AppShellSidebar({
           onSelect: () => {
             closeContextMenu()
             setConfirmingArchiveThreadId(null)
-            onArchiveThread(thread.id)
+            requestArchive(thread, 'menu')
           },
         },
       ],
@@ -780,7 +795,7 @@ export function AppShellSidebar({
                                         }
                                         onClick={(event) => {
                                           event.stopPropagation()
-                                          requestArchive(thread.id)
+                                          requestArchive(thread, 'button')
                                         }}
                                       >
                                         {isConfirming ? <span>{t('sidebar.confirm')}</span> : <IconInline name="trash" />}

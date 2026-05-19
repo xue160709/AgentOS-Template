@@ -43,6 +43,9 @@ contextBridge.exposeInMainWorld('desktop', {
   listProjectFiles(rootPath: string) {
     return ipcRenderer.invoke('desktop:list-project-files', rootPath)
   },
+  readProjectFile(rootPath: string, filePath: string) {
+    return ipcRenderer.invoke('desktop:read-project-file', rootPath, filePath)
+  },
   searchProjectFiles(rootPath: string, query: string) {
     return ipcRenderer.invoke('desktop:search-project-files', rootPath, query)
   },
