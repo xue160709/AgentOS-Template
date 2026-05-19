@@ -278,6 +278,7 @@ your-project/
 - 感谢 Anthropic 提供 Claude Code 的二进制文件，不然这个项目很难把本地 Agent 运行层真正落到桌面工作台里。
 - 感谢 歸藏 分享 chat 里交互式 UI 的技术方案，https://x.com/op7418/status/2033113845120807170，不然我们很难把对话里的互动体验做得这么顺。
 - 感谢 OpenClaw 提供 SOUL.md、USER.md、Identify.md 的灵感，https://openclaw.ai/，不然我们很难把项目的身份、用户和边界梳理得这么清楚。
+- 感谢 Codex APP 在 UI 框架设计上给了很多参考和启发，让这个桌面壳的布局、层级和交互更顺手。
 
 ## 许可证
 
