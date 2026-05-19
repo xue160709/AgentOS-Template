@@ -385,7 +385,7 @@ function TaskHomeCardView({ task, projectPath }: { task: TaskHomeCardViewModel; 
           <h3>{task.title}</h3>
           {task.modeLabel ? <span>{task.modeLabel}</span> : null}
         </span>
-        {task.statusTone !== 'idle' ? <span className={`task-home-card__status task-home-card__status--${task.statusTone}`}>{task.statusLabel}</span> : null}
+        {/* {task.statusTone !== 'idle' ? <span className={`task-home-card__status task-home-card__status--${task.statusTone}`}>{task.statusLabel}</span> : null} */}
       </header>
 
       <div className="task-home-card__body">

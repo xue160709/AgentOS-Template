@@ -25,6 +25,7 @@ import { ChatWorkspaceStore } from './chat-workspace-store'
 import { DesktopPreferencesStore } from './desktop-preferences-store'
 import { loadMainProcessEnv } from './env-loader'
 import { runProjectHomePlugin, saveProjectHomePluginLayout, saveProjectHomePluginOrder } from './home-plugin-runner'
+import { installSafeStdStreamHandlers } from './safe-console'
 import { TaskHomePluginManager } from './task-home-plugin-manager'
 import { normalizeUiLocale } from './ui-locale'
 import { formatProjectPathError, resolveProjectPath, validateProjectPaths } from './project-path'
@@ -52,6 +53,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // │
 process.env.APP_ROOT = path.join(__dirname, '..')
 loadMainProcessEnv(process.env.APP_ROOT)
+installSafeStdStreamHandlers()
 
 // 🚧 使用 process.env['KEY'] 避免被 vite:define 内联；见 Vite 2.x 插件行为 /
 // 🚧 Use bracket notation so vite:define does not replace env keys (Vite@2.x plugin behavior).

@@ -175,7 +175,7 @@ export async function resolvePromptWithContext(
 }
 
 function findHostSkill(catalog: AgentContextCatalog, command: string): AgentContextSlashItem | undefined {
-  return catalog.skills.find((candidate) => !candidate.native && (candidate.command === command || candidate.name === command))
+  return catalog.skills.find((candidate) => candidate.command === command || candidate.name === command)
 }
 
 async function expandSkillInvocation(
@@ -539,7 +539,7 @@ async function buildAppendSystemPrompt(
 ): Promise<string | undefined> {
   const promptCopy = electronAgentCatalog(uiLocale).prompt
   const hostInstructionFiles = catalog.instructionFiles.filter((file) => file.loadMode === 'host')
-  const hostSkills = catalog.skills.filter((skill) => !skill.native)
+  const hostSkills = catalog.skills
   const hasAgentModeSettings =
     agentModeSettings?.enabled === true &&
     (Boolean(agentModeSettings.user.trim()) || Boolean(agentModeSettings.identity.trim()))

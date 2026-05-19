@@ -1079,6 +1079,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
         const requestStartedAt = requestStartedAtRef.current.get(event.requestId) ?? completedAt
         if (activeThreadIdRef.current === eventThreadId) scrollIntentRef.current = 'force-bottom'
         const expectedId = `assistant-${event.requestId}`
+        const shouldClearSession =
+          event.code === 'sdk_error' && event.message.includes('No conversation found with session ID')
         flushSync(() => {
           setThreadChatState(eventThreadId, (prev) => {
             const pendingId = requestAssistantMessageIdsRef.current.get(event.requestId)
@@ -1114,7 +1116,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
                     durationMs: Math.max(0, completedAt - requestStartedAt),
                   },
                 ]
-            return { ...prev, items: itemsOut }
+            return { ...prev, sessionId: shouldClearSession ? undefined : prev.sessionId, items: itemsOut }
           })
         })
         finishRequest(
@@ -1193,6 +1195,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     if (!text && attachmentsForSubmit.length === 0) return
     const projectForSubmit =
       target?.project ?? (activeThread ? projects.find((project) => project.id === activeThread.projectId) : undefined) ?? activeProject
+
     if (projectForSubmit.pathMissing) {
       onStatusChange(t('shell.projectPathMissingSubmitBlocked'))
       return
@@ -1320,6 +1323,15 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
           },
         ],
       }))
+      if (
+        error instanceof Error &&
+        error.message.includes('No conversation found with session ID')
+      ) {
+        setThreadChatState(submittingThreadId, (prev) => ({
+          ...prev,
+          sessionId: undefined,
+        }))
+      }
       setThreadRunState(submittingThreadId, null)
       onStatusChange(t('chat.sendFailedStatus'))
     }
