@@ -228,7 +228,7 @@ export class TaskHomePluginManager {
     )
 
     await fs.mkdir(pluginPath, { recursive: true })
-    await fs.writeFile(entryPath, `${buildTaskExtractorSource()}\n`, 'utf8')
+    await fs.writeFile(entryPath, `${buildTaskExtractorSource(slug)}\n`, 'utf8')
     await writeJson(manifestPath, manifest)
     await writeJson(taskPath, task)
     await writeJson(runtimePath, runtime)
@@ -712,7 +712,7 @@ export class TaskHomePluginManager {
       readJsonIfExists(runtimePath),
     ])
     if (!manifestRaw || !taskRaw || !await exists(entryPath)) return null
-    await fs.writeFile(entryPath, `${buildTaskExtractorSource()}\n`, 'utf8')
+    await fs.writeFile(entryPath, `${buildTaskExtractorSource(slug)}\n`, 'utf8')
     const manifest = normalizeTaskManifest(manifestRaw, slug)
     const task = normalizeTaskConfig(taskRaw, slug)
     const runtime = normalizeTaskRuntime(runtimeRaw, resolvedProjectPath, slug)
@@ -731,12 +731,14 @@ export class TaskHomePluginManager {
   }
 }
 
-function buildTaskExtractorSource(): string {
+function buildTaskExtractorSource(slug: string): string {
+  const taskPluginRoot = `.agents/home-plugins/${slug}`
   return `async function run(host) {
   const diagnostics = []
-  const task = (await readJsonIfExists(host, 'task.json')) || {}
-  const runtime = (await readJsonIfExists(host, 'runtime.json')) || {}
-  const manifest = (await readJsonIfExists(host, 'manifest.json')) || {}
+  const taskRoot = ${JSON.stringify(taskPluginRoot)}
+  const task = (await readJsonIfExists(host, taskRoot + '/task.json')) || {}
+  const runtime = (await readJsonIfExists(host, taskRoot + '/runtime.json')) || {}
+  const manifest = (await readJsonIfExists(host, taskRoot + '/manifest.json')) || {}
   const title = normalizeText(task.title || manifest.name || 'Task')
   const mode = task.mode === 'skills' ? 'skills' : 'agent'
   const modeLabel = mode === 'skills' ? '编排Skills' : '基于当前Agent.md运行'
