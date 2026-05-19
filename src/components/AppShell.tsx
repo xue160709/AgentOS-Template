@@ -3,7 +3,15 @@
  * Root shell owning workspace persistence, sidebar sizing, chat routing, and hash-synced settings.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent as ReactFormEvent,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
 import {
   createEmptyChatState,
   createId,
@@ -22,10 +30,11 @@ import {
   settingsWorkspaceTitleKey,
   viewFromLocation,
 } from './app-shell-constants.ts'
-import { CHAT_WORKSPACE_CLEARED_EVENT } from '../app-events'
+import { CHAT_WORKSPACE_CLEARED_EVENT, CLAUDE_AGENT_SETTINGS_CHANGED_EVENT } from '../app-events'
 import { defaultThreadTitleSet, getInitialLocale, translate, useI18n } from '../i18n/i18n'
 import { IconInline } from '../icon-inline'
 import type { HomePluginRunItem, HomePluginTaskEvent } from '../desktop-types'
+import type { ClaudeAgentModelProvider, ClaudeAgentSettingsSnapshot } from '../claude-chat-types'
 import type {
   AppViewId,
   ChatState,
@@ -43,6 +52,14 @@ import { type ChatPageHandle } from './chat/ChatPage'
 import { projectIdsForSidebar } from './project-order'
 
 const CHAT_WORKSPACE_SAVE_DEBOUNCE_MS = 750
+
+type InitialModelFormState = {
+  name: string
+  apiKey: string
+  baseUrl: string
+  sonnetModel: string
+  supportsImages: boolean
+}
 
 /** 组合侧栏 + 工作区 + 聊天页顶栏 / Composes sidebar rail, workspace chrome, and chat surfaces */
 export function AppShell() {
@@ -65,6 +82,10 @@ export function AppShell() {
     readHiddenSkillPathsMap(),
   )
   const [homeModeResetKey, setHomeModeResetKey] = useState(0)
+  const [initialModelForm, setInitialModelForm] = useState<InitialModelFormState>(() => createInitialModelFormState())
+  const [initialModelStatus, setInitialModelStatus] = useState('')
+  const [initialModelBusy, setInitialModelBusy] = useState(false)
+  const [initialProjectPath, setInitialProjectPath] = useState('')
   const workspaceClearedRef = useRef(false)
 
   const chatRef = useRef<ChatPageHandle>(null)
@@ -198,6 +219,47 @@ export function AppShell() {
       cancelled = true
     }
   }, [])
+
+  const applyInitialModelSnapshot = useCallback(
+    (snapshot: ClaudeAgentSettingsSnapshot) => {
+      const provider = selectInitialModelProvider(snapshot)
+      setInitialModelForm({
+        name: provider?.name ?? '',
+        apiKey: provider?.apiKey ?? '',
+        baseUrl: provider?.baseUrl ?? snapshot.env.baseUrl ?? '',
+        sonnetModel:
+          provider?.defaultSonnetModel ?? snapshot.env.defaultSonnetModel ?? provider?.model ?? snapshot.env.model ?? '',
+        supportsImages: provider?.defaultSonnetSupportsImages ?? provider?.modelSupportsImages ?? snapshot.env.supportsImages ?? false,
+      })
+      setInitialModelStatus(t('shell.initModelLoaded'))
+    },
+    [t],
+  )
+
+  useEffect(() => {
+    if (!chatWorkspace || chatWorkspace.projects.length > 0) return
+    if (!window.claudeChat) {
+      setInitialModelStatus(t('shell.initModelBridgeUnavailable'))
+      return
+    }
+
+    let cancelled = false
+    setInitialModelStatus(t('shell.initModelLoading'))
+    void window.claudeChat
+      .getSettings()
+      .then((snapshot) => {
+        if (cancelled) return
+        applyInitialModelSnapshot(snapshot)
+      })
+      .catch((error) => {
+        if (cancelled) return
+        setInitialModelStatus(error instanceof Error ? error.message : String(error))
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [applyInitialModelSnapshot, chatWorkspace, t])
 
   // --- Watch active project folder on disk (`pathMissing` badge in UI) / 监视当前项目目录是否存在（侧栏 pathMissing 标记）---
 
@@ -600,26 +662,18 @@ export function AppShell() {
     [goHome, updateChatWorkspace],
   )
 
-  const createProject = useCallback(
-    async (mode: 'scratch' | 'existing') => {
-      let value: string | undefined
-      if (mode === 'scratch') {
-        value = window.prompt(t('project.promptNewName'), t('project.scratchDefaultName'))?.trim()
-      } else if (window.desktop?.pickProjectDirectory) {
-        value = (await window.desktop.pickProjectDirectory())?.trim()
-      } else {
-        value = window.prompt(t('project.promptExistingPath'), '')?.trim()
-      }
+  const createProjectFromExistingPath = useCallback(
+    (projectPath: string) => {
+      const value = projectPath.trim()
       if (!value) return
 
       const now = Date.now()
       const projectId = createId('project')
       const scratchDefault = t('project.scratchDefaultName')
-      const name = mode === 'existing' ? pathBasename(value, scratchDefault) : value
       const project: WorkspaceProject = {
         id: projectId,
-        name,
-        path: mode === 'existing' ? value : `~/Projects/${name}`,
+        name: pathBasename(value, scratchDefault),
+        path: value,
         createdAt: now,
         updatedAt: now,
       }
@@ -639,7 +693,142 @@ export function AppShell() {
       goHome()
       requestAnimationFrame(() => void chatRef.current?.focusComposer())
     },
-    [goHome, updateChatWorkspace, t],
+    [goHome, t, updateChatWorkspace],
+  )
+
+  const createProject = useCallback(
+    async (mode: 'scratch' | 'existing') => {
+      let value: string | undefined
+      if (mode === 'scratch') {
+        value = window.prompt(t('project.promptNewName'), t('project.scratchDefaultName'))?.trim()
+      } else if (window.desktop?.pickProjectDirectory) {
+        value = (await window.desktop.pickProjectDirectory())?.trim()
+      } else {
+        value = window.prompt(t('project.promptExistingPath'), '')?.trim()
+      }
+      if (!value) return
+
+      if (mode === 'existing') {
+        createProjectFromExistingPath(value)
+        return
+      }
+
+      const now = Date.now()
+      const projectId = createId('project')
+      const name = value
+      const project: WorkspaceProject = {
+        id: projectId,
+        name,
+        path: `~/Projects/${name}`,
+        createdAt: now,
+        updatedAt: now,
+      }
+
+      setSelectedProjectSkill(null)
+      updateChatWorkspace((prev) => ({
+        ...prev,
+        activeProjectId: projectId,
+        activeThreadId: '',
+        projects: [project, ...prev.projects],
+        threads: prev.threads,
+        sidebarPrefs: {
+          ...prev.sidebarPrefs,
+          projectOrderIds: [projectId, ...projectIdsForSidebar(prev.projects, prev.sidebarPrefs.projectOrderIds)],
+        },
+      }))
+      goHome()
+      requestAnimationFrame(() => void chatRef.current?.focusComposer())
+    },
+    [createProjectFromExistingPath, goHome, updateChatWorkspace, t],
+  )
+
+  const updateInitialModelField = useCallback(
+    <K extends keyof InitialModelFormState>(field: K, value: InitialModelFormState[K]) => {
+      setInitialModelForm((current) => ({ ...current, [field]: value }))
+    },
+    [],
+  )
+
+  const pickInitialProjectFolder = useCallback(async () => {
+    let value: string | undefined
+    if (window.desktop?.pickProjectDirectory) {
+      value = (await window.desktop.pickProjectDirectory())?.trim()
+    } else {
+      value = window.prompt(t('project.promptExistingPath'), '')?.trim()
+    }
+    if (!value) return
+    setInitialProjectPath(value)
+    setInitialModelStatus(t('shell.initProjectSelected'))
+  }, [t])
+
+  const saveInitialModelSettings = useCallback(async () => {
+    if (!window.claudeChat) {
+      setInitialModelStatus(t('shell.initModelBridgeUnavailable'))
+      return false
+    }
+
+    const sonnetModel = initialModelForm.sonnetModel.trim()
+    if (!sonnetModel) {
+      setInitialModelStatus(t('shell.initModelRequired'))
+      return false
+    }
+
+    setInitialModelBusy(true)
+    setInitialModelStatus(t('shell.initModelSaving'))
+
+    try {
+      const snapshot = await window.claudeChat.getSettings()
+      const providers = snapshot.settings.providers.length
+        ? snapshot.settings.providers.map((provider) => ({ ...provider }))
+        : [createInitialModelProvider()]
+      const activeId = providers.some((provider) => provider.id === snapshot.settings.activeProviderId)
+        ? snapshot.settings.activeProviderId
+        : providers[0].id
+
+      const nextProviders = providers.map((provider) =>
+        provider.id === activeId
+          ? {
+              ...provider,
+              name: initialModelForm.name.trim(),
+              apiKey: initialModelForm.apiKey.trim(),
+              authToken: '',
+              baseUrl: initialModelForm.baseUrl.trim(),
+              defaultSonnetModel: sonnetModel,
+              defaultSonnetSupportsImages: initialModelForm.supportsImages,
+            }
+          : provider,
+      )
+
+      const nextSnapshot = await window.claudeChat.saveSettings({
+        configSource: 'settings',
+        activeProviderId: activeId,
+        activeAnthropicModel: sonnetModel,
+        providers: nextProviders,
+      })
+      window.dispatchEvent(new CustomEvent(CLAUDE_AGENT_SETTINGS_CHANGED_EVENT, { detail: nextSnapshot }))
+      applyInitialModelSnapshot(nextSnapshot)
+      setInitialModelStatus(t('shell.initModelSaved'))
+      return true
+    } catch (error) {
+      setInitialModelStatus(error instanceof Error ? error.message : String(error))
+      return false
+    } finally {
+      setInitialModelBusy(false)
+    }
+  }, [applyInitialModelSnapshot, initialModelForm, t])
+
+  const startInitialSetup = useCallback(
+    async (event: ReactFormEvent<HTMLFormElement>) => {
+      event.preventDefault()
+      if (!initialProjectPath.trim()) {
+        setInitialModelStatus(t('shell.initProjectRequired'))
+        return
+      }
+      const saved = await saveInitialModelSettings()
+      if (!saved) return
+      createProjectFromExistingPath(initialProjectPath)
+    },
+    [createProjectFromExistingPath, initialProjectPath, saveInitialModelSettings, t],
   )
 
   // --- OS tray: default locale once + wire menu actions (new thread / open project) / 系统托盘：初始化语言并绑定新建会话与打开项目 ---
@@ -1102,17 +1291,121 @@ export function AppShell() {
     return null
   }
 
+  const initialModelComplete = Boolean(initialModelForm.sonnetModel.trim())
+  const initialProjectComplete = Boolean(initialProjectPath.trim())
+  const initialSetupReady = initialModelComplete && initialProjectComplete && !initialModelBusy
+  const initialProjectName = initialProjectPath ? pathBasename(initialProjectPath, t('shell.initProjectFolderTitle')) : ''
+
   if (chatWorkspace.projects.length === 0) {
     return (
       <div className="app-shell app-shell-empty" id="app-shell">
-        <div className="app-shell-empty__card">
-          <h1>{t('shell.emptyWorkspaceHeading')}</h1>
-          <p>{t('shell.emptyWorkspaceBody')}</p>
-          <button type="button" className="app-shell-empty__action" onClick={() => void createProject('existing')}>
-            <IconInline name="plus" />
-            <span>{t('shell.emptyWorkspaceAction')}</span>
-          </button>
-        </div>
+        <form className="app-shell-empty__panel no-drag" onSubmit={(event) => void startInitialSetup(event)}>
+          <header className="app-shell-empty__header">
+            <span className="app-shell-empty__eyebrow">{t('shell.initEyebrow')}</span>
+            <h1>{t('shell.emptyWorkspaceHeading')}</h1>
+            <p>{t('shell.emptyWorkspaceBody')}</p>
+          </header>
+
+          <div className="app-shell-empty__flow" aria-label={t('shell.initFlowAria')}>
+            <section className="app-shell-empty__step" aria-labelledby="init-model-title">
+              <div className="app-shell-empty__step-heading">
+                <span className="app-shell-empty__step-index">1</span>
+                <div>
+                  <h2 id="init-model-title">{t('shell.initModelTitle')}</h2>
+                  <p>{t('shell.initModelBody')}</p>
+                </div>
+              </div>
+
+              <div className="app-shell-empty__fields">
+                <label className="app-shell-empty__field">
+                  <span>{t('shell.initModelNameLabel')}</span>
+                  <input
+                    value={initialModelForm.name}
+                    onChange={(event) => updateInitialModelField('name', event.target.value)}
+                    placeholder={t('shell.initModelNamePlaceholder')}
+                    disabled={initialModelBusy}
+                  />
+                </label>
+                <label className="app-shell-empty__field">
+                  <span>{t('shell.initModelIdLabel')}</span>
+                  <input
+                    value={initialModelForm.sonnetModel}
+                    onChange={(event) => updateInitialModelField('sonnetModel', event.target.value)}
+                    placeholder={t('shell.initModelIdPlaceholder')}
+                    disabled={initialModelBusy}
+                  />
+                </label>
+                <label className="app-shell-empty__field">
+                  <span>{t('shell.initModelApiKeyLabel')}</span>
+                  <input
+                    value={initialModelForm.apiKey}
+                    onChange={(event) => updateInitialModelField('apiKey', event.target.value)}
+                    placeholder={t('shell.initModelApiKeyPlaceholder')}
+                    type="password"
+                    autoComplete="off"
+                    disabled={initialModelBusy}
+                  />
+                </label>
+                <label className="app-shell-empty__field">
+                  <span>{t('shell.initModelBaseUrlLabel')}</span>
+                  <input
+                    value={initialModelForm.baseUrl}
+                    onChange={(event) => updateInitialModelField('baseUrl', event.target.value)}
+                    placeholder={t('shell.initModelBaseUrlPlaceholder')}
+                    disabled={initialModelBusy}
+                  />
+                </label>
+                <label className="app-shell-empty__switch">
+                  <span className="app-shell-empty__switch-copy">
+                    <strong>{t('shell.initModelImagesLabel')}</strong>
+                    <span>{t('shell.initModelImagesHint')}</span>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={initialModelForm.supportsImages}
+                    onChange={(event) => updateInitialModelField('supportsImages', event.target.checked)}
+                    disabled={initialModelBusy}
+                  />
+                  <span className="app-shell-empty__switch-track" aria-hidden="true">
+                    <span />
+                  </span>
+                </label>
+              </div>
+            </section>
+
+            <section className="app-shell-empty__step" aria-labelledby="init-project-title">
+              <div className="app-shell-empty__step-heading">
+                <span className="app-shell-empty__step-index">2</span>
+                <div>
+                  <h2 id="init-project-title">{t('shell.initProjectTitle')}</h2>
+                  <p>{t('shell.initProjectBody')}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className={`app-shell-empty__project-preview${initialProjectComplete ? ' is-selected' : ''}`}
+                onClick={() => void pickInitialProjectFolder()}
+                disabled={initialModelBusy}
+              >
+                <IconInline name="folder" />
+                <div>
+                  <strong>{t('shell.initProjectFolderTitle')}</strong>
+                  <span>{initialProjectName ? initialProjectPath : t('shell.initProjectFolderHint')}</span>
+                </div>
+              </button>
+            </section>
+          </div>
+
+          <footer className="app-shell-empty__footer">
+            <p className="app-shell-empty__status" role="status">
+              {initialModelStatus || t('shell.initModelIdle')}
+            </p>
+            <button type="submit" className="btn btn-primary app-shell-empty__submit" disabled={!initialSetupReady}>
+              <IconInline name="check" />
+              <span>{initialModelBusy ? t('shell.initModelSaving') : t('shell.initSubmit')}</span>
+            </button>
+          </footer>
+        </form>
       </div>
     )
   }
@@ -1242,6 +1535,41 @@ function sameProjectPath(a: string, b: string): boolean {
 
 function normalizeComparablePath(value: string): string {
   return value.replace(/\\/g, '/').replace(/\/+$/, '')
+}
+
+function createInitialModelFormState(): InitialModelFormState {
+  return {
+    name: '',
+    apiKey: '',
+    baseUrl: '',
+    sonnetModel: '',
+    supportsImages: false,
+  }
+}
+
+function createInitialModelProvider(): ClaudeAgentModelProvider {
+  return {
+    id: createId('provider'),
+    name: '',
+    apiKey: '',
+    authToken: '',
+    baseUrl: '',
+    model: '',
+    modelSupportsImages: false,
+    defaultHaikuModel: '',
+    defaultHaikuSupportsImages: false,
+    defaultOpusModel: '',
+    defaultOpusSupportsImages: false,
+    defaultSonnetModel: '',
+    defaultSonnetSupportsImages: false,
+  }
+}
+
+function selectInitialModelProvider(snapshot: ClaudeAgentSettingsSnapshot): ClaudeAgentModelProvider | undefined {
+  return (
+    snapshot.settings.providers.find((provider) => provider.id === snapshot.settings.activeProviderId) ??
+    snapshot.settings.providers[0]
+  )
 }
 
 function readStoredBoolean(key: string, fallback: boolean): boolean {
