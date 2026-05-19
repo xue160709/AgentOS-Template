@@ -10,8 +10,14 @@ import { AppShell } from './components/AppShell'
 import { I18nProvider } from './i18n/i18n'
 import { applySafeAreaToDocument, installWindowSafeAreaListeners } from './window-safe-area'
 
-if (window.desktop?.windowEffects?.macVibrancy) {
+const windowEffects = window.desktop?.windowEffects
+
+if (windowEffects?.macVibrancy) {
   document.documentElement.dataset.windowEffects = 'mac-vibrancy'
+}
+
+if (windowEffects?.windowsTitlebarOverlay) {
+  document.documentElement.dataset.windowsTitlebarOverlay = 'true'
 }
 
 const appRoot = document.querySelector<HTMLDivElement>('#app')

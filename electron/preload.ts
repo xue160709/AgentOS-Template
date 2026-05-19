@@ -35,6 +35,7 @@ contextBridge.exposeInMainWorld('desktop', {
   platform: process.platform,
   windowEffects: {
     macVibrancy: process.platform === 'darwin',
+    windowsTitlebarOverlay: process.platform === 'win32',
   },
   pickProjectDirectory() {
     return ipcRenderer.invoke('desktop:pick-project-directory') as Promise<string | null>

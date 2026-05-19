@@ -30,6 +30,45 @@ body {
   overflow: hidden;
 }
 
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+*:hover,
+*:focus,
+*:focus-within {
+  scrollbar-color: color-mix(in oklab, var(--color-token-text-tertiary) 58%, transparent) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  min-height: 44px;
+  border: 3px solid transparent;
+  border-radius: var(--radius-full);
+  background-color: transparent;
+  background-clip: padding-box;
+}
+
+*:hover::-webkit-scrollbar-thumb,
+*:focus::-webkit-scrollbar-thumb,
+*:focus-within::-webkit-scrollbar-thumb {
+  background-color: color-mix(in oklab, var(--color-token-text-tertiary) 58%, transparent);
+}
+
+*:hover::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in oklab, var(--color-token-text-secondary) 72%, transparent);
+}
+
 html[data-window-effects='mac-vibrancy'] body {
   background-color: transparent;
 }
@@ -186,6 +225,10 @@ html[data-window-effects='mac-vibrancy'] .app-shell {
   -webkit-app-region: no-drag;
 }
 
+html[data-windows-titlebar-overlay='true'] .app-chrome-toolbar {
+  height: var(--spacing-token-safe-header-top);
+}
+
 /** 设置页：与 Codex 一致去掉左侧三键与右侧顶栏标题行 */
 .app-shell.is-shell-settings .app-chrome-toolbar {
   display: none !important;
@@ -243,6 +286,10 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
   overflow-y: auto;
   overflow-x: hidden;
   padding: 50px 10px;
+}
+
+.app-shell.is-platform-win32.is-shell-settings .app-sidebar-scroll {
+  padding-top: calc(var(--spacing) * 3);
 }
 
 .app-sidebar-inner {
@@ -1113,6 +1160,15 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
   min-height: var(--height-toolbar-pane);
   padding: 0 calc(var(--spacing) * 3);
   background: var(--color-token-main-surface-primary);
+}
+
+html[data-windows-titlebar-overlay='true'] .app-workspace-header {
+  height: var(--spacing-token-safe-header-top);
+  min-height: var(--spacing-token-safe-header-top);
+  padding-right: max(
+    calc(var(--spacing) * 3),
+    calc(var(--spacing-token-safe-header-right) + var(--spacing) * 2)
+  );
 }
 
 /** 无顶栏时用透明带保留拖拽（macOS hiddenInset） */
