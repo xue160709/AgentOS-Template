@@ -186,6 +186,31 @@ export type FileTreeResult =
       message: string
     }
 
+export type ProjectFilePreviewKind = 'markdown' | 'json' | 'text' | 'image'
+
+/** 项目内文件预览结果 / Project-scoped file preview payload */
+export type ProjectFilePreviewResult =
+  | {
+      ok: true
+      rootPath: string
+      path: string
+      relativePath: string
+      name: string
+      kind: ProjectFilePreviewKind
+      mimeType: string
+      size: number
+      content?: string
+      dataUrl?: string
+    }
+  | {
+      ok: false
+      rootPath: string
+      path: string
+      relativePath?: string
+      name?: string
+      message: string
+    }
+
 /** 完整聊天工作区状态（活动项目/线程与列表）/ Full chat workspace snapshot */
 export type ChatWorkspaceState = {
   activeProjectId: string

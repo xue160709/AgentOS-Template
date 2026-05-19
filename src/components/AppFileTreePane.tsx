@@ -17,11 +17,13 @@ type AppFileTreePaneProps = {
   project: WorkspaceProject
   /** 侧栏可见性：隐藏时保留展开状态 / Visibility toggle keeps expansion memory */
   isVisible: boolean
+  activeFilePath?: string | null
+  onOpenFile?: (node: FileTreeNode) => void
 }
 
 /** `forwardRef` 文件树面板，暴露 `refresh()` / File tree pane exposing imperative refresh */
 export const AppFileTreePane = forwardRef<AppFileTreePaneHandle, AppFileTreePaneProps>(function AppFileTreePane(
-  { project, isVisible },
+  { project, isVisible, activeFilePath = null, onOpenFile },
   ref,
 ) {
   const { t } = useI18n()
@@ -127,7 +129,14 @@ export const AppFileTreePane = forwardRef<AppFileTreePaneHandle, AppFileTreePane
         {result?.ok && result.nodes.length > 0 ? (
           <>
             <div className="app-file-tree" role="tree" aria-label={t('filePanel.treeAria', { name: result.rootName })}>
-              <FileTreeRows nodes={result.nodes} expandedPaths={expandedPaths} onToggle={toggleExpanded} />
+              <FileTreeRows
+                nodes={result.nodes}
+                expandedPaths={expandedPaths}
+                activeFilePath={activeFilePath}
+                onToggle={toggleExpanded}
+                onOpenFile={onOpenFile}
+                openFileLabel={(name) => t('filePanel.openFileAria', { name })}
+              />
             </div>
             {result.truncated ? <div className="app-file-panel-state is-subtle">{t('filePanel.truncated')}</div> : null}
           </>
@@ -140,20 +149,30 @@ export const AppFileTreePane = forwardRef<AppFileTreePaneHandle, AppFileTreePane
 type FileTreeRowsProps = {
   nodes: FileTreeNode[]
   expandedPaths: Set<string>
+  activeFilePath: string | null
   onToggle: (path: string) => void
+  onOpenFile?: (node: FileTreeNode) => void
+  openFileLabel: (name: string) => string
   depth?: number
 }
 
-function FileTreeRows({ nodes, expandedPaths, onToggle, depth = 0 }: FileTreeRowsProps) {
+function FileTreeRows({ nodes, expandedPaths, activeFilePath, onToggle, onOpenFile, openFileLabel, depth = 0 }: FileTreeRowsProps) {
   return (
     <>
       {nodes.map((node) => {
         const isDirectory = node.type === 'directory'
         const isExpanded = isDirectory && expandedPaths.has(node.path)
+        const isActiveFile = !isDirectory && activeFilePath === node.path
         const style = { '--file-depth': depth } as CSSProperties
 
         return (
-          <div key={node.path} className="app-file-tree-item" role="treeitem" aria-expanded={isDirectory ? isExpanded : undefined}>
+          <div
+            key={node.path}
+            className="app-file-tree-item"
+            role="treeitem"
+            aria-expanded={isDirectory ? isExpanded : undefined}
+            aria-selected={isActiveFile || undefined}
+          >
             {isDirectory ? (
               <button
                 type="button"
@@ -169,15 +188,30 @@ function FileTreeRows({ nodes, expandedPaths, onToggle, depth = 0 }: FileTreeRow
                 <span className="app-file-tree-name">{node.name}</span>
               </button>
             ) : (
-              <div className="app-file-tree-row is-file" style={style} title={node.relativePath}>
+              <button
+                type="button"
+                className={`app-file-tree-row is-file${isActiveFile ? ' is-selected' : ''}`}
+                style={style}
+                title={node.relativePath}
+                aria-label={openFileLabel(node.name)}
+                onClick={() => onOpenFile?.(node)}
+              >
                 <span className="app-file-tree-spacer" />
-                <IconInline name="file" />
+                <IconInline name={isImagePreviewFile(node.name) ? 'image' : 'file'} />
                 <span className="app-file-tree-name">{node.name}</span>
-              </div>
+              </button>
             )}
             {isDirectory && isExpanded && node.children && node.children.length > 0 ? (
               <div role="group">
-                <FileTreeRows nodes={node.children} expandedPaths={expandedPaths} onToggle={onToggle} depth={depth + 1} />
+                <FileTreeRows
+                  nodes={node.children}
+                  expandedPaths={expandedPaths}
+                  activeFilePath={activeFilePath}
+                  onToggle={onToggle}
+                  onOpenFile={onOpenFile}
+                  openFileLabel={openFileLabel}
+                  depth={depth + 1}
+                />
               </div>
             ) : null}
           </div>
@@ -185,6 +219,10 @@ function FileTreeRows({ nodes, expandedPaths, onToggle, depth = 0 }: FileTreeRow
       })}
     </>
   )
+}
+
+function isImagePreviewFile(name: string): boolean {
+  return /\.(gif|jpe?g|png|webp)$/i.test(name)
 }
 
 function countTreeNodes(nodes: FileTreeNode[]) {

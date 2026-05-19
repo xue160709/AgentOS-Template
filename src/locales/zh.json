@@ -187,7 +187,18 @@
     "loading": "正在读取文件树...",
     "empty": "没有可显示的文件",
     "treeAria": "{{name}} 文件树",
-    "truncated": "文件较多，已显示前 1200 项"
+    "truncated": "文件较多，已显示前 1200 项",
+    "openFileAria": "打开 {{name}}",
+    "previewTitle": "文件预览",
+    "previewLoading": "正在打开文件...",
+    "previewUnsupported": "当前运行环境不支持文件预览",
+    "previewUnavailable": "无法预览此文件",
+    "previewCloseTitle": "关闭预览",
+    "previewCloseAria": "关闭文件预览",
+    "previewMarkdown": "Markdown",
+    "previewJson": "JSON",
+    "previewText": "文本",
+    "previewImage": "图片"
   },
   "settings": {
     "general": {

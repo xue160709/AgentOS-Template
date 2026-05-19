@@ -39,7 +39,7 @@ import type {
   ClaudeFileRewindPayload,
   ClaudePermissionResponsePayload,
 } from '../src/claude-chat-types'
-import type { FileTreeNode, FileTreeResult } from '../src/components/types'
+import type { FileTreeNode, FileTreeResult, ProjectFilePreviewKind, ProjectFilePreviewResult } from '../src/components/types'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -70,6 +70,7 @@ const TASK_HOME_PLUGIN_EVENT_CHANNEL = 'desktop:task-home-plugin-event'
 
 const TRAY_LOCALE_BUNDLE = { zh, en } as const
 type TrayLocale = keyof typeof TRAY_LOCALE_BUNDLE
+type ProjectFilePreviewTextKind = Exclude<ProjectFilePreviewKind, 'image'>
 
 let win: BrowserWindow | null
 let tray: Tray | null = null
@@ -89,16 +90,111 @@ const isDevRuntime = Boolean(VITE_DEV_SERVER_URL) || !app.isPackaged
 
 app.setName(APP_NAME)
 
-const FILE_TREE_MAX_DEPTH = 8
-const FILE_TREE_MAX_ENTRIES = 1200
-const FILE_TREE_MAX_CHILDREN_PER_DIRECTORY = 200
 const CHAT_ATTACHMENT_MAX_FILES = 8
 const CHAT_TEXT_ATTACHMENT_MAX_BYTES = 512 * 1024
+const PROJECT_FILE_PREVIEW_TEXT_MAX_BYTES = 5 * 1024 * 1024
+const PROJECT_FILE_PREVIEW_TEXT_SAMPLE_BYTES = 8192
 const CLIPBOARD_PNG_MAX_DATA_URL_LENGTH = 25_000_000
 const CLIPBOARD_SVG_MAX_CHARS = 4_000_000
 const CLIPBOARD_SVG_MAX_DIMENSION = 4096
 const CHAT_IMAGE_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024
 const CHAT_TEXT_EXTENSIONS = new Set(['.md', '.markdown', '.txt'])
+const PROJECT_FILE_PREVIEW_TEXT_EXTENSIONS = new Set([
+  '.astro',
+  '.bat',
+  '.bash',
+  '.c',
+  '.cc',
+  '.cjs',
+  '.cfg',
+  '.cmd',
+  '.conf',
+  '.cpp',
+  '.cs',
+  '.css',
+  '.cts',
+  '.csv',
+  '.cxx',
+  '.dart',
+  '.diff',
+  '.dockerfile',
+  '.env',
+  '.fish',
+  '.go',
+  '.gql',
+  '.graphql',
+  '.h',
+  '.hpp',
+  '.htm',
+  '.html',
+  '.ini',
+  '.java',
+  '.js',
+  '.json',
+  '.json5',
+  '.jsonc',
+  '.jsx',
+  '.kt',
+  '.kts',
+  '.less',
+  '.log',
+  '.lua',
+  '.md',
+  '.markdown',
+  '.mdx',
+  '.mjs',
+  '.mts',
+  '.php',
+  '.pl',
+  '.properties',
+  '.ps1',
+  '.py',
+  '.r',
+  '.rb',
+  '.rs',
+  '.sass',
+  '.scala',
+  '.scss',
+  '.sh',
+  '.sql',
+  '.svelte',
+  '.svg',
+  '.swift',
+  '.toml',
+  '.ts',
+  '.tsv',
+  '.tsx',
+  '.txt',
+  '.vue',
+  '.xml',
+  '.yaml',
+  '.yml',
+  '.zsh',
+])
+const PROJECT_FILE_PREVIEW_TEXT_FILENAMES = new Set([
+  '.dockerignore',
+  '.editorconfig',
+  '.env',
+  '.eslintignore',
+  '.eslintrc',
+  '.gitattributes',
+  '.gitignore',
+  '.npmrc',
+  '.prettierignore',
+  '.prettierrc',
+  '.stylelintrc',
+  '.yarnrc',
+  'brewfile',
+  'changelog',
+  'dockerfile',
+  'gemfile',
+  'license',
+  'makefile',
+  'procfile',
+  'rakefile',
+  'readme',
+  'vagrantfile',
+])
 const CHAT_IMAGE_MEDIA_TYPES = new Map<string, 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'>([
   ['.gif', 'image/gif'],
   ['.jpeg', 'image/jpeg'],
@@ -518,6 +614,17 @@ if (gotSingleInstanceLock) {
     ipcMain.handle('desktop:list-project-files', (_event, rootPath: string) => {
       return readProjectFileTree(rootPath)
     })
+    ipcMain.handle('desktop:read-project-file', (_event, rootPath: unknown, filePath: unknown) => {
+      if (typeof rootPath !== 'string' || typeof filePath !== 'string') {
+        return {
+          ok: false,
+          rootPath: '',
+          path: '',
+          message: '文件路径无效',
+        } satisfies ProjectFilePreviewResult
+      }
+      return readProjectFilePreview(rootPath, filePath)
+    })
     ipcMain.handle('desktop:validate-project-paths', async (_event, paths: unknown) => {
       if (!Array.isArray(paths)) return {}
       return validateProjectPaths(paths.filter((path): path is string => typeof path === 'string'))
@@ -833,15 +940,7 @@ async function readProjectFileTree(rootPath: string): Promise<FileTreeResult> {
       }
     }
 
-    let entriesRead = 0
-    let truncated = false
-
-    const readDirectory = async (directoryPath: string, relativeBase: string, depth: number): Promise<FileTreeNode[]> => {
-      if (depth > FILE_TREE_MAX_DEPTH) {
-        truncated = true
-        return []
-      }
-
+    const readDirectory = async (directoryPath: string, relativeBase: string): Promise<FileTreeNode[]> => {
       let entries = await fs.readdir(directoryPath, { withFileTypes: true })
       entries = entries
         .filter((entry) => !shouldIgnoreFileTreeEntry(entry))
@@ -850,21 +949,10 @@ async function readProjectFileTree(rootPath: string): Promise<FileTreeResult> {
           return typeDiff || a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
         })
 
-      if (entries.length > FILE_TREE_MAX_CHILDREN_PER_DIRECTORY) {
-        entries = entries.slice(0, FILE_TREE_MAX_CHILDREN_PER_DIRECTORY)
-        truncated = true
-      }
-
       const nodes: FileTreeNode[] = []
       for (const entry of entries) {
-        if (entriesRead >= FILE_TREE_MAX_ENTRIES) {
-          truncated = true
-          break
-        }
-
         const entryPath = path.join(directoryPath, entry.name)
         const relativePath = normalizeRelativePath(path.join(relativeBase, entry.name))
-        entriesRead += 1
 
         if (entry.isDirectory()) {
           nodes.push({
@@ -872,7 +960,7 @@ async function readProjectFileTree(rootPath: string): Promise<FileTreeResult> {
             path: entryPath,
             relativePath,
             type: 'directory',
-            children: await readChildDirectory(entryPath, relativePath, depth + 1),
+            children: await readChildDirectory(entryPath, relativePath),
           })
           continue
         }
@@ -890,11 +978,10 @@ async function readProjectFileTree(rootPath: string): Promise<FileTreeResult> {
       return nodes
     }
 
-    const readChildDirectory = async (directoryPath: string, relativePath: string, depth: number) => {
+    const readChildDirectory = async (directoryPath: string, relativePath: string) => {
       try {
-        return await readDirectory(directoryPath, relativePath, depth)
+        return await readDirectory(directoryPath, relativePath)
       } catch {
-        truncated = true
         return []
       }
     }
@@ -903,8 +990,8 @@ async function readProjectFileTree(rootPath: string): Promise<FileTreeResult> {
       ok: true,
       rootPath: resolvedRootPath,
       rootName: path.basename(resolvedRootPath) || resolvedRootPath,
-      nodes: await readDirectory(resolvedRootPath, '', 0),
-      truncated,
+      nodes: await readDirectory(resolvedRootPath, ''),
+      truncated: false,
     }
   } catch (error) {
     return {
@@ -913,6 +1000,133 @@ async function readProjectFileTree(rootPath: string): Promise<FileTreeResult> {
       message: formatProjectPathError(error),
     }
   }
+}
+
+async function readProjectFilePreview(rootPath: string, filePath: string): Promise<ProjectFilePreviewResult> {
+  const resolvedRootPath = resolveProjectPath(rootPath)
+  const trimmedFilePath = filePath.trim()
+  const requestedPath = path.isAbsolute(trimmedFilePath)
+    ? path.resolve(trimmedFilePath)
+    : path.resolve(resolvedRootPath, trimmedFilePath)
+  const relativePath = normalizeRelativePath(path.relative(resolvedRootPath, requestedPath))
+  const name = path.basename(requestedPath)
+
+  const fail = (message: string): ProjectFilePreviewResult => ({
+    ok: false,
+    rootPath: resolvedRootPath,
+    path: requestedPath,
+    relativePath,
+    name,
+    message,
+  })
+
+  try {
+    const rootStat = await fs.stat(resolvedRootPath)
+    if (!rootStat.isDirectory()) return fail('当前项目路径不是文件夹')
+
+    const rootRealPath = await fs.realpath(resolvedRootPath)
+    const targetRealPath = await fs.realpath(requestedPath)
+    const realRelativePath = path.relative(rootRealPath, targetRealPath)
+    if (realRelativePath === '..' || realRelativePath.startsWith(`..${path.sep}`) || path.isAbsolute(realRelativePath)) {
+      return fail('只能预览当前项目内的文件')
+    }
+
+    const stat = await fs.stat(targetRealPath)
+    if (!stat.isFile()) return fail('只能预览文件')
+
+    const extension = path.extname(name).toLowerCase()
+    const imageMimeType = CHAT_IMAGE_MEDIA_TYPES.get(extension)
+    const textKind = await getProjectFilePreviewTextKind(targetRealPath, name, stat.size)
+
+    if (!textKind && !imageMimeType) {
+      return fail('仅支持预览纯文本文件或 PNG、JPG、GIF、WEBP 图片')
+    }
+
+    if (textKind) {
+      if (stat.size > PROJECT_FILE_PREVIEW_TEXT_MAX_BYTES) {
+        return fail('文本文件超过 5MB，暂不在应用内预览')
+      }
+      const content = await fs.readFile(targetRealPath, 'utf8')
+      return {
+        ok: true,
+        rootPath: resolvedRootPath,
+        path: requestedPath,
+        relativePath,
+        name,
+        kind: textKind,
+        mimeType: getProjectFilePreviewTextMimeType(textKind),
+        size: stat.size,
+        content,
+      }
+    }
+
+    if (!imageMimeType) return fail('仅支持预览纯文本文件或 PNG、JPG、GIF、WEBP 图片')
+    if (stat.size > CHAT_IMAGE_ATTACHMENT_MAX_BYTES) {
+      return fail('图片超过 10MB，暂不在应用内预览')
+    }
+    const data = await fs.readFile(targetRealPath)
+    return {
+      ok: true,
+      rootPath: resolvedRootPath,
+      path: requestedPath,
+      relativePath,
+      name,
+      kind: 'image',
+      mimeType: imageMimeType,
+      size: stat.size,
+      dataUrl: `data:${imageMimeType};base64,${data.toString('base64')}`,
+    }
+  } catch (error) {
+    return fail(formatProjectPathError(error))
+  }
+}
+
+async function getProjectFilePreviewTextKind(filePath: string, name: string, size: number): Promise<ProjectFilePreviewTextKind | null> {
+  const lowerName = name.toLowerCase()
+  const extension = path.extname(lowerName)
+  if (extension === '.md' || extension === '.markdown' || extension === '.mdx') return 'markdown'
+  if (extension === '.json' || extension === '.jsonc' || extension === '.json5') return 'json'
+  if (
+    PROJECT_FILE_PREVIEW_TEXT_EXTENSIONS.has(extension) ||
+    PROJECT_FILE_PREVIEW_TEXT_FILENAMES.has(lowerName) ||
+    lowerName.startsWith('.env.') ||
+    lowerName.endsWith('rc') ||
+    lowerName.endsWith('.lock')
+  ) {
+    return 'text'
+  }
+  return (await isProbablyTextFile(filePath, size)) ? 'text' : null
+}
+
+function getProjectFilePreviewTextMimeType(kind: ProjectFilePreviewTextKind): string {
+  if (kind === 'markdown') return 'text/markdown'
+  if (kind === 'json') return 'application/json'
+  return 'text/plain'
+}
+
+async function isProbablyTextFile(filePath: string, size: number): Promise<boolean> {
+  const sampleSize = Math.min(Math.max(size, 0), PROJECT_FILE_PREVIEW_TEXT_SAMPLE_BYTES)
+  if (sampleSize === 0) return true
+
+  const handle = await fs.open(filePath, 'r')
+  try {
+    const sample = Buffer.alloc(sampleSize)
+    const { bytesRead } = await handle.read(sample, 0, sampleSize, 0)
+    return isProbablyTextBuffer(sample.subarray(0, bytesRead))
+  } finally {
+    await handle.close()
+  }
+}
+
+function isProbablyTextBuffer(buffer: Buffer): boolean {
+  if (buffer.length === 0) return true
+  let suspiciousBytes = 0
+  for (const byte of buffer) {
+    if (byte === 0) return false
+    const isAllowedControl = byte === 7 || byte === 8 || byte === 9 || byte === 10 || byte === 12 || byte === 13
+    if ((byte < 32 && !isAllowedControl) || byte === 127) suspiciousBytes += 1
+  }
+  return suspiciousBytes / buffer.length < 0.01
 }
 
 function normalizeRelativePath(relativePath: string): string {

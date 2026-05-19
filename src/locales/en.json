@@ -187,7 +187,18 @@
     "loading": "Loading file tree…",
     "empty": "No files to show",
     "treeAria": "{{name}} file tree",
-    "truncated": "Many files; showing the first 1200 entries"
+    "truncated": "Many files; showing the first 1200 entries",
+    "openFileAria": "Open {{name}}",
+    "previewTitle": "File preview",
+    "previewLoading": "Opening file…",
+    "previewUnsupported": "This environment cannot preview files",
+    "previewUnavailable": "Unable to preview this file",
+    "previewCloseTitle": "Close preview",
+    "previewCloseAria": "Close file preview",
+    "previewMarkdown": "Markdown",
+    "previewJson": "JSON",
+    "previewText": "Text",
+    "previewImage": "Image"
   },
   "settings": {
     "general": {
