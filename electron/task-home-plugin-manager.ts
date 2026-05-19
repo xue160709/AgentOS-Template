@@ -227,9 +227,7 @@ export class TaskHomePluginManager {
     )
 
     await fs.mkdir(pluginPath, { recursive: true })
-    if (!(await exists(entryPath))) {
-      await fs.writeFile(entryPath, `${buildTaskExtractorSource()}\n`, 'utf8')
-    }
+    await fs.writeFile(entryPath, `${buildTaskExtractorSource()}\n`, 'utf8')
     await writeJson(manifestPath, manifest)
     await writeJson(taskPath, task)
     await writeJson(runtimePath, runtime)
@@ -713,6 +711,7 @@ export class TaskHomePluginManager {
       readJsonIfExists(runtimePath),
     ])
     if (!manifestRaw || !taskRaw || !await exists(entryPath)) return null
+    await fs.writeFile(entryPath, `${buildTaskExtractorSource()}\n`, 'utf8')
     const manifest = normalizeTaskManifest(manifestRaw, slug)
     const task = normalizeTaskConfig(taskRaw, slug)
     const runtime = normalizeTaskRuntime(runtimeRaw, resolvedProjectPath, slug)
@@ -742,6 +741,7 @@ function buildTaskExtractorSource(): string {
   const modeLabel = mode === 'skills' ? '编排Skills' : '基于当前Agent.md运行'
   const status = normalizeText(runtime.status || 'idle')
   const statusLabel = statusLabelFor(status)
+  const isActive = status === 'running' || status === 'queued' || status === 'waiting'
   const summary = normalizeText(runtime.summary || runtime.detail || '')
   const detail = normalizeText(runtime.detail || '')
   const scheduleLabel = buildScheduleLabel(task.schedule)
@@ -790,7 +790,7 @@ function buildTaskExtractorSource(): string {
       version: 'v0.9',
       updateComponents: {
         surfaceId: 'project-home',
-        components: buildComponents(runAction, stopAction),
+        components: buildComponents(runAction, stopAction, isActive),
       },
     },
     {
@@ -810,51 +810,52 @@ function buildTaskExtractorSource(): string {
   return { version: 1, messages, diagnostics }
 }
 
-function buildComponents(runAction, stopAction) {
+function buildComponents(runAction, stopAction, isActive) {
+  const actionChildren = isActive ? ['action-stop'] : ['action-run']
   return [
-    { id: 'root', component: 'Card', child: 'root-body' },
     {
-      id: 'root-body',
+      id: 'root',
       component: 'Column',
       children: ['header-row', 'summary-text', 'detail-text', 'meta-row', 'action-row'],
     },
     {
       id: 'header-row',
       component: 'Row',
-      alignment: 'center',
-      children: ['header-icon', 'header-copy', 'header-status'],
+      align: 'center',
+      justify: 'spaceBetween',
+      children: ['header-copy', 'header-status'],
     },
-    { id: 'header-icon', component: 'Icon', name: 'play' },
     {
       id: 'header-copy',
       component: 'Column',
       children: ['task-title', 'task-mode'],
     },
     { id: 'task-title', component: 'Text', variant: 'h2', text: { path: '/task/title' } },
-    { id: 'task-mode', component: 'Text', variant: 'caption', text: { path: '/task/modeLabel' } },
-    { id: 'header-status', component: 'Text', variant: 'caption', text: { path: '/task/statusLabel' } },
+    { id: 'task-mode', component: 'Text', variant: 'body', text: { path: '/task/modeLabel' } },
+    { id: 'header-status', component: 'Text', variant: 'body', text: { path: '/task/statusLabel' } },
     { id: 'summary-text', component: 'Text', variant: 'body', text: { path: '/task/summary' } },
-    { id: 'detail-text', component: 'Text', variant: 'caption', text: { path: '/task/detail' } },
+    { id: 'detail-text', component: 'Text', variant: 'body', text: { path: '/task/detail' } },
     {
       id: 'meta-row',
       component: 'Row',
-      alignment: 'center',
+      align: 'center',
       children: ['task-schedule', 'task-todo', 'task-run-count', 'task-thread-title'],
     },
-    { id: 'task-schedule', component: 'Text', variant: 'caption', text: { path: '/task/scheduleLabel' } },
-    { id: 'task-todo', component: 'Text', variant: 'caption', text: { path: '/task/todoLabel' } },
+    { id: 'task-schedule', component: 'Text', variant: 'body', text: { path: '/task/scheduleLabel' } },
+    { id: 'task-todo', component: 'Text', variant: 'body', text: { path: '/task/todoLabel' } },
     {
       id: 'task-run-count',
       component: 'Text',
-      variant: 'caption',
+      variant: 'body',
       text: { path: '/task/runCountLabel' },
     },
-    { id: 'task-thread-title', component: 'Text', variant: 'caption', text: { path: '/task/threadTitle' } },
+    { id: 'task-thread-title', component: 'Text', variant: 'body', text: { path: '/task/threadTitle' } },
     {
       id: 'action-row',
       component: 'Row',
-      alignment: 'center',
-      children: ['action-stop', 'action-run'],
+      align: 'center',
+      justify: 'end',
+      children: actionChildren,
     },
     { id: 'action-stop', component: 'Button', variant: 'borderless', child: 'action-stop-label', action: stopAction },
     { id: 'action-stop-label', component: 'Text', text: '终止' },

@@ -288,6 +288,7 @@ function HomePluginCard({
   const { t } = useI18n()
   const size = item.manifest.preferredSize
   const messages = messagesForSize(item, size)
+  const taskCard = item.manifest.kind === 'task' ? taskCardViewModelFromMessages(item, messages) : null
   const [menuOpen, setMenuOpen] = useState(false)
   const cardRef = useRef<HTMLDivElement>(null)
 
@@ -296,7 +297,7 @@ function HomePluginCard({
   return (
     <div
       ref={cardRef}
-      className={`project-home-card project-home-card--${size}`}
+      className={`project-home-card project-home-card--${size} project-home-card--${item.manifest.kind}`}
       style={{ '--home-card-span': sizeToColumnSpan(size) } as CSSProperties}
     >
       <div className="project-home-card__menu">
@@ -328,12 +329,91 @@ function HomePluginCard({
       </div>
       <div className="project-home-card__measure">
         <div className="project-home-card__surface">
-          <MarkdownContext.Provider value={(text) => Promise.resolve(renderMarkdown(text))}>
-            <A2uiCardSurface messages={messages} projectPath={projectPath} onEdit={onEdit} />
-          </MarkdownContext.Provider>
+          {taskCard ? (
+            <TaskHomeCardView task={taskCard} projectPath={projectPath} />
+          ) : (
+            <MarkdownContext.Provider value={(text) => Promise.resolve(renderMarkdown(text))}>
+              <A2uiCardSurface messages={messages} projectPath={projectPath} onEdit={onEdit} />
+            </MarkdownContext.Provider>
+          )}
         </div>
       </div>
     </div>
+  )
+}
+
+type TaskHomeCardTone = 'idle' | 'active' | 'done' | 'error' | 'cancelled'
+
+type TaskHomeCardViewModel = {
+  slug: string
+  title: string
+  modeLabel: string
+  statusLabel: string
+  statusTone: TaskHomeCardTone
+  summary: string
+  detail: string
+  meta: string[]
+  threadTitle: string
+  active: boolean
+}
+
+function TaskHomeCardView({ task, projectPath }: { task: TaskHomeCardViewModel; projectPath: string }) {
+  const [busy, setBusy] = useState(false)
+  const iconName = task.active ? 'stop' : 'play'
+  const actionLabel = task.active ? '终止' : '执行'
+
+  const runAction = useCallback(async () => {
+    if (busy) return
+    const action = task.active ? window.desktop?.stopTaskHomePlugin : window.desktop?.runTaskHomePlugin
+    if (!action) return
+    setBusy(true)
+    try {
+      await action(projectPath, task.slug)
+    } finally {
+      setBusy(false)
+      window.dispatchEvent(new CustomEvent('project-home:refresh'))
+    }
+  }, [busy, projectPath, task.active, task.slug])
+
+  return (
+    <article className="task-home-card" aria-label={task.title}>
+      <header className="task-home-card__header">
+        <span className="task-home-card__glyph" aria-hidden="true">
+          <IconInline name="checklist" />
+        </span>
+        <span className="task-home-card__heading">
+          <h3>{task.title}</h3>
+          {task.modeLabel ? <span>{task.modeLabel}</span> : null}
+        </span>
+        {task.statusTone !== 'idle' ? <span className={`task-home-card__status task-home-card__status--${task.statusTone}`}>{task.statusLabel}</span> : null}
+      </header>
+
+      <div className="task-home-card__body">
+        <p className="task-home-card__summary">{task.summary}</p>
+        {task.detail ? <p className="task-home-card__detail">{task.detail}</p> : null}
+      </div>
+
+      {task.meta.length > 0 || task.threadTitle ? (
+        <div className="task-home-card__meta">
+          {task.meta.map((label) => (
+            <span key={label}>{label}</span>
+          ))}
+          {task.threadTitle ? (
+            <span>
+              <IconInline name="branch" />
+              {task.threadTitle}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+
+      <footer className="task-home-card__footer">
+        <button type="button" className={`task-home-card__action${task.active ? ' task-home-card__action--stop' : ''}`} disabled={busy} onClick={() => void runAction()}>
+          <IconInline name={iconName} />
+          <span>{busy ? '处理中' : actionLabel}</span>
+        </button>
+      </footer>
+    </article>
   )
 }
 
@@ -972,6 +1052,56 @@ function useMasonrySpan(ref: RefObject<HTMLElement | null>, deps: unknown[]) {
 
 function messagesForSize(item: HomePluginRunItem, size: HomePluginCardSize): A2uiMessage[] {
   return ((item.variants?.[size] ?? item.variants?.medium ?? item.variants?.large ?? item.variants?.small ?? item.messages ?? []) as A2uiMessage[])
+}
+
+function taskCardViewModelFromMessages(item: HomePluginRunItem, messages: A2uiMessage[]): TaskHomeCardViewModel | null {
+  const data = messages
+    .map((message) => {
+      if (!isRecord(message) || !isRecord(message.updateDataModel)) return null
+      const value = message.updateDataModel.value
+      return isRecord(value) && isRecord(value.task) ? value.task : null
+    })
+    .find((task): task is Record<string, unknown> => Boolean(task))
+
+  if (!data) return null
+
+  const scheduleLabel = readTaskText(data.scheduleLabel)
+  const todoLabel = readTaskText(data.todoLabel)
+  const runCountLabel = readTaskText(data.runCountLabel)
+  const threadTitle = readTaskText(data.threadTitle)
+  const statusLabel = readTaskText(data.statusLabel) || '待执行'
+  const summary = readTaskText(data.summary) || '等待执行'
+  const rawDetail = readTaskText(data.detail)
+  const detail = [scheduleLabel, todoLabel].includes(rawDetail) ? '' : rawDetail
+  const statusTone = taskStatusTone(statusLabel)
+
+  return {
+    slug: readTaskText(data.slug) || item.slug,
+    title: readTaskText(data.title) || item.manifest.name,
+    modeLabel: readTaskText(data.modeLabel),
+    statusLabel,
+    statusTone,
+    summary,
+    detail,
+    meta: [scheduleLabel, todoLabel, runCountLabel].filter(Boolean),
+    threadTitle,
+    active: statusTone === 'active',
+  }
+}
+
+function readTaskText(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function taskStatusTone(label: string): TaskHomeCardTone {
+  const normalized = label.toLowerCase()
+  if (normalized.includes('失败') || normalized.includes('error')) return 'error'
+  if (normalized.includes('完成') || normalized.includes('done')) return 'done'
+  if (normalized.includes('终止') || normalized.includes('cancel')) return 'cancelled'
+  if (normalized.includes('正在执行') || normalized.includes('等待中') || normalized.includes('running') || normalized.includes('queued') || normalized.includes('waiting')) {
+    return 'active'
+  }
+  return 'idle'
 }
 
 function hasRenderableMessages(item: HomePluginRunItem): boolean {
