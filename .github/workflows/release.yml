@@ -54,29 +54,23 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
         run: npm run release
 
-      - name: Validate Windows signing secret
-        if: runner.os == 'Windows' && secrets.WIN_CSC_LINK != ''
+      # Windows: secrets cannot be used in step `if` — branch inside the script instead.
+      - name: Build and publish (Windows)
+        if: runner.os == 'Windows'
         shell: pwsh
-        env:
-          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
-        run: |
-          if ($env:WIN_CSC_LINK -match '^[A-Za-z]:\\') {
-            Write-Error "WIN_CSC_LINK must be Base64 of the .pfx file, not a path like $env:WIN_CSC_LINK. Delete the secret to build unsigned, or re-encode the certificate."
-          }
-
-      # Windows (signed): WIN_CSC_LINK must be the .pfx file as Base64, not a filesystem path.
-      - name: Build and publish (Windows, signed)
-        if: runner.os == 'Windows' && secrets.WIN_CSC_LINK != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
-        run: npm run release
-
-      # Windows (unsigned): skip code signing when no Windows cert secret is configured.
-      - name: Build and publish (Windows, unsigned)
-        if: runner.os == 'Windows' && secrets.WIN_CSC_LINK == ''
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: npm run release
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WIN_CSC_LINK)) {
+            Write-Host "WIN_CSC_LINK not set — building unsigned Windows package."
+            Remove-Item Env:WIN_CSC_LINK -ErrorAction SilentlyContinue
+            Remove-Item Env:WIN_CSC_KEY_PASSWORD -ErrorAction SilentlyContinue
+            $env:CSC_IDENTITY_AUTO_DISCOVERY = 'false'
+          } elseif ($env:WIN_CSC_LINK -match '^[A-Za-z]:\\') {
+            Write-Error "WIN_CSC_LINK must be Base64 of the .pfx file, not a path like $($env:WIN_CSC_LINK). Delete the secret to build unsigned, or re-encode the certificate."
+          } else {
+            Write-Host "WIN_CSC_LINK set — building signed Windows package."
+          }
+          npm run release
