@@ -245,6 +245,11 @@ For discussion, feedback, or co-creation, add WeChat:
 
 **xuezhirong233**
 
+## Acknowledgements
+
+- Thanks to Anthropic for providing the Claude Code binary. Without it, it would be much harder to bring the local Agent runtime into a desktop workspace like this.
+- Thanks to 歸藏 for sharing the interactive UI approach inside chat, [https://x.com/op7418/status/2033113845120807170](https://x.com/op7418/status/2033113845120807170). Without that, it would be much harder to make the in-chat interaction feel this smooth.
+
 ## License
 
 [MIT](LICENSE)
