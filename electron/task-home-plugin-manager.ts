@@ -291,23 +291,19 @@ export class TaskHomePluginManager {
       return { ok: false, rootPath: resolvedProjectPath, slug: record.task.slug, message: 'Claude runner is not ready' }
     }
 
-    const threadId = record.runtime.threadId || createThreadId(record.task.slug)
+    const threadId = createThreadId(record.task.slug)
     const threadTitle = deriveTaskThreadTitle(record.task)
-    const threadSeed = record.runtime.threadId
-      ? undefined
-      : {
-          id: threadId,
-          projectId: project.id,
-          title: threadTitle,
-          purpose: TASK_THREAD_PURPOSE,
-          homePluginSlug: record.task.slug,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        }
-
-    if (!record.runtime.threadId) {
-      record.runtime.threadId = threadId
+    const threadSeed = {
+      id: threadId,
+      projectId: project.id,
+      title: threadTitle,
+      purpose: TASK_THREAD_PURPOSE,
+      homePluginSlug: record.task.slug,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
     }
+
+    record.runtime.threadId = threadId
     record.runtime.threadTitle = threadTitle
     record.runtime.projectPath = resolvedProjectPath
     record.runtime.slug = record.task.slug
@@ -568,16 +564,27 @@ export class TaskHomePluginManager {
     session.record.runtime.status = 'running'
     session.record.runtime.updatedAt = new Date().toISOString()
     this.requestToTaskKey.set(requestId, key)
-    await this.flushRuntime(session.record, session.threadSeed)
+    const outcomePromise = new Promise<TaskRequestOutcome>((resolve) => {
+      session.settleWaiters.set(requestId, resolve)
+    })
     if (session.started) {
       session.resolveStarted({ requestId })
       session.started = Promise.resolve({ requestId })
     }
+    await this.flushRuntime(session.record, session.threadSeed)
+    if (session.cancelled) {
+      session.settleWaiters.delete(requestId)
+      this.requestToTaskKey.delete(requestId)
+      try {
+        await runner.cancel(requestId)
+      } catch {
+        /* best-effort cancellation */
+      }
+      session.activeRequestId = undefined
+      return { ok: false, requestId, status: 'cancelled', message: '已终止' }
+    }
 
-    const outcome = await new Promise<TaskRequestOutcome>((resolve) => {
-      session.settleWaiters.set(requestId, resolve)
-    })
-
+    const outcome = await outcomePromise
     session.settleWaiters.delete(requestId)
     session.activeRequestId = undefined
     await delay(0)

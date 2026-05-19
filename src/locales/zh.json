@@ -72,6 +72,7 @@
     "archive": "归档",
     "confirmArchiveAria": "确认归档 {{title}}",
     "archiveAria": "归档 {{title}}",
+    "confirmRemoveRunningTask": "该任务正在运行。移除后会先终止当前运行并归档这段对话：{{title}}。继续吗？",
     "confirm": "确认",
     "settings": "设置",
     "resizeSidebar": "调整侧栏宽度",

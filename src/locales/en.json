@@ -72,6 +72,7 @@
     "archive": "Archive",
     "confirmArchiveAria": "Confirm archive {{title}}",
     "archiveAria": "Archive {{title}}",
+    "confirmRemoveRunningTask": "This task is still running. Removing it will stop the current run and archive this chat: {{title}}. Continue?",
     "confirm": "Confirm",
     "settings": "Settings",
     "resizeSidebar": "Resize sidebar",
