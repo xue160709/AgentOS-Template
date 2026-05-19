@@ -4,6 +4,7 @@
  */
 
 import { AgentModeSettingsPage } from './AgentModeSettingsPage'
+import { AppUpdateSettingsPage } from './AppUpdateSettingsPage'
 import { ClaudeAgentSettingsPage } from './ClaudeAgentSettingsPage'
 import { ProjectSkillsSettingsPage } from './ProjectSkillsSettingsPage'
 import type { SettingsCategoryId, WorkspaceProject } from '../types'
@@ -39,6 +40,10 @@ export function SettingsPage({
 
   if (settingsCategory === 'agent') {
     return <AgentModeSettingsPage project={activeProject} />
+  }
+
+  if (settingsCategory === 'updates') {
+    return <AppUpdateSettingsPage />
   }
 
   return <ClaudeAgentSettingsPage />

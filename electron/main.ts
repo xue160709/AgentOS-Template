@@ -28,6 +28,7 @@ import { runProjectHomePlugin, saveProjectHomePluginLayout, saveProjectHomePlugi
 import { installSafeStdStreamHandlers } from './safe-console'
 import { TaskHomePluginManager } from './task-home-plugin-manager'
 import { normalizeUiLocale } from './ui-locale'
+import { appUpdaterService, registerAppUpdaterIpc } from './app-updater'
 import { installApplicationMenu } from './app-menu'
 import { formatProjectPathError, resolveProjectPath, validateProjectPaths } from './project-path'
 import type {
@@ -511,6 +512,8 @@ if (gotSingleInstanceLock) {
 
     // --- IPC handlers / IPC 注册 ---
 
+    registerAppUpdaterIpc(() => win)
+
     ipcMain.handle('desktop-preferences:get', () => {
       return getDesktopPreferencesStore().read()
     })
@@ -694,6 +697,7 @@ if (gotSingleInstanceLock) {
     })
     createWindow()
     ensureTray()
+    appUpdaterService.scheduleStartupCheck()
   })
 } else {
   app.quit()

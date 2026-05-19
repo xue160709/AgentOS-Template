@@ -346,3 +346,28 @@ export type HomePluginTaskEvent = {
     updatedAt: number
   }
 }
+
+/** 应用更新阶段 / In-app update lifecycle phase */
+export type AppUpdaterPhase =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'not-available'
+  | 'downloading'
+  | 'downloaded'
+  | 'error'
+
+/** 应用更新状态（主进程 → 渲染进程）/ App update state pushed to the renderer */
+export type AppUpdaterState = {
+  phase: AppUpdaterPhase
+  /** 打包应用为 true；开发模式为 false / true when packaged production build */
+  updatesSupported: boolean
+  currentVersion: string
+  availableVersion?: string
+  releaseNotes?: string
+  percent?: number
+  bytesPerSecond?: number
+  transferred?: number
+  total?: number
+  errorMessage?: string
+}

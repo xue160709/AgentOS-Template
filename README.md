@@ -191,7 +191,9 @@ cp .env.example .env.local
 
 1. 在 `electron-builder.json5` 中修改 **`appId`**、**`productName`** 等与品牌一致的字段。
 2. 按需调整各平台 `mac` / `win` / `linux` 的 `target` 与签名、公证等（详见 [electron-builder 文档](https://www.electron.build/)）。
-3. 执行 `npm run build`。
+3. 本地打包：`npm run build:local`；推 tag `v*` 后由 GitHub Actions 发布到 [Releases](https://github.com/xue160709/AgentOS/releases)。
+
+发布与应用内更新见 **[docs/RELEASE.md](docs/RELEASE.md)**。
 
 主进程依赖里将 `@anthropic-ai/claude-agent-sdk` 标为 **external**（见 `vite.config.ts`），以便在 Electron 运行时从 `node_modules` 加载；发布前请确认打包配置包含该依赖。
 

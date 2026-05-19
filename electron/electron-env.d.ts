@@ -16,6 +16,7 @@ import type {
   AgentModeProjectSettings,
   AgentModeSettingsResult,
   AgentModeStatusResult,
+  AppUpdaterState,
   AppUiLocale,
   DesktopPreferences,
   HomePluginOrderSaveResult,
@@ -115,6 +116,12 @@ declare global {
       syncTrayLocale?: (locale: 'zh' | 'en') => Promise<void>
       onTrayMenuAction?: (handler: (action: TrayMenuAction) => void) => () => void
       onHomePluginTaskEvent?: (handler: (event: HomePluginTaskEvent) => void) => () => void
+      getAppVersion?: () => Promise<string>
+      getAppUpdaterState?: () => Promise<AppUpdaterState>
+      checkForAppUpdates?: () => Promise<AppUpdaterState>
+      downloadAppUpdate?: () => Promise<AppUpdaterState>
+      quitAndInstallAppUpdate?: () => Promise<void>
+      onAppUpdaterState?: (handler: (state: AppUpdaterState) => void) => () => void
     }
   }
 }

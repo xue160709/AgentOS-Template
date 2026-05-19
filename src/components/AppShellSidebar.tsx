@@ -5,6 +5,7 @@
 
 import {
   useEffect,
+  useCallback,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -15,6 +16,7 @@ import {
   type RefObject,
 } from 'react'
 import { IconInline } from '../icon-inline'
+import type { AppUpdaterState } from '../desktop-types'
 import type { AppLocale } from '../i18n/i18n'
 import { useI18n } from '../i18n/i18n'
 import type {
@@ -140,6 +142,11 @@ export function AppShellSidebar({
   const menuPanelRef = useRef<HTMLDivElement>(null)
   const skillTipPanelRef = useRef<HTMLDivElement>(null)
   const isDarwin = typeof window !== 'undefined' && window.desktop?.platform === 'darwin'
+  const [appUpdaterState, setAppUpdaterState] = useState<AppUpdaterState | null>(null)
+  const desktopUpdaterReady =
+    typeof window !== 'undefined' &&
+    typeof window.desktop?.getAppUpdaterState === 'function' &&
+    typeof window.desktop?.onAppUpdaterState === 'function'
 
   // --- Sorted project list (manual order > pin > recency) / 已排序项目列表（手工顺序优先于置顶与时间）---
 
@@ -271,6 +278,43 @@ export function AppShellSidebar({
   const goLeaveSettings = () => {
     window.location.hash = ''
   }
+
+  // --- App update CTA: mirror updater state into the sidebar footer / 应用更新入口：将更新状态映射到侧栏页脚 ---
+
+  useEffect(() => {
+    if (!desktopUpdaterReady) return
+    let cancelled = false
+    void window.desktop?.getAppUpdaterState?.().then((next) => {
+      if (!cancelled) setAppUpdaterState(next)
+    })
+    const unsubscribe = window.desktop?.onAppUpdaterState?.((next) => {
+      setAppUpdaterState(next)
+    })
+    return () => {
+      cancelled = true
+      unsubscribe?.()
+    }
+  }, [desktopUpdaterReady])
+
+  const hasSidebarUpdate =
+    appUpdaterState?.updatesSupported === true &&
+    (appUpdaterState.phase === 'available' ||
+      appUpdaterState.phase === 'downloading' ||
+      appUpdaterState.phase === 'downloaded' ||
+      (appUpdaterState.phase === 'error' && Boolean(appUpdaterState.availableVersion)))
+  const sidebarUpdatePercent = Math.max(0, Math.min(100, Math.round(appUpdaterState?.percent ?? 0)))
+  const sidebarUpdateLabel =
+    appUpdaterState?.phase === 'downloading'
+      ? t('sidebar.versionUpdateDownloading', { percent: sidebarUpdatePercent })
+      : t('sidebar.versionUpdate')
+
+  const handleSidebarUpdate = useCallback(() => {
+    if (appUpdaterState?.phase === 'downloaded') {
+      void window.desktop?.quitAndInstallAppUpdate?.()
+      return
+    }
+    window.location.hash = 'settings/updates'
+  }, [appUpdaterState])
 
   // --- Data prep: visible threads grouped & sorted per project / 数据准备：按项目分组并排序未归档线程 ---
 
@@ -855,6 +899,17 @@ export function AppShellSidebar({
             >
               <IconInline name="settings" />
             </button>
+            {hasSidebarUpdate ? (
+              <button
+                type="button"
+                className={`app-sidebar-update-button${appUpdaterState?.phase === 'downloading' ? ' is-downloading' : ''}`}
+                title={t('sidebar.versionUpdateTitle')}
+                aria-label={t('sidebar.versionUpdateTitle')}
+                onClick={handleSidebarUpdate}
+              >
+                {sidebarUpdateLabel}
+              </button>
+            ) : null}
           </footer>
         )}
       </aside>
