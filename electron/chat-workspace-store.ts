@@ -8,6 +8,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { mkdir, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { normalizeChatWorkspaceState } from '../src/chat-workspace-persistence'
+import { migrateLegacySeedProjects } from '../src/project-path'
 import type { ChatState, ChatWorkspaceState, TranscriptItem, WorkspaceProject, WorkspaceThread } from '../src/components/types'
 
 const WORKSPACE_FILE_NAME = 'chat-workspace.json'
@@ -66,12 +67,12 @@ export class ChatWorkspaceStore {
 
   read(): ChatWorkspaceState | null {
     const fromDb = this.readFromDatabase()
-    if (fromDb) return fromDb
+    if (fromDb) return migrateLegacySeedProjects(fromDb)
 
     if (!existsSync(this.filePath)) return null
     try {
       const raw = JSON.parse(readFileSync(this.filePath, 'utf8')) as unknown
-      return normalizeChatWorkspaceState(raw)
+      return migrateLegacySeedProjects(normalizeChatWorkspaceState(raw))
     } catch {
       return null
     }

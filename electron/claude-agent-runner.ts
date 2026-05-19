@@ -1,3 +1,8 @@
+/**
+ * 主进程内封装 Claude Agent SDK `query`：会话恢复、权限闸门与事件转发。
+ * Main-process facade for Claude Agent SDK `query`: resume, permission gating, and IPC streaming.
+ */
+
 import type { WebContents } from 'electron'
 import { randomUUID } from 'node:crypto'
 import {
@@ -39,11 +44,7 @@ import {
   HOME_PLUGIN_CUSTOMIZATION_SYSTEM_PROMPT,
   HOME_PLUGIN_TASK_RUN_SYSTEM_PROMPT,
 } from './home-plugin-customization-prompt'
-
-/**
- * 主进程内封装 Claude Agent SDK `query`：会话恢复、权限闸门与事件转发。
- * Main-process facade for Claude Agent SDK `query`: resume, permission gating, and IPC streaming.
- */
+import { safeConsoleError, safeConsoleInfo, safeConsoleWarn } from './safe-console'
 
 /** 渲染进程订阅聊天事件的 IPC 信道 / IPC channel for streamed chat events to renderer */
 export const CLAUDE_CHAT_EVENT_CHANNEL = 'claude-chat:event'
@@ -414,79 +415,118 @@ export class ClaudeAgentRunner {
           attachments.map((attachment) => `${attachment.kind}: ${attachment.name}`).join('\n'),
         )
       }
-      console.info('[ClaudeAgentRunner] starting SDK query', {
-        requestId: activeRequest.requestId,
-        threadId: activeRequest.threadId,
-        cwd: activeRequest.cwd,
-        permissionMode: activeRequest.permissionMode,
-        attachmentCount: attachments.length,
-        imageAttachmentCount,
-        config: summarizeConfigForLog(config),
-        sdkEnv: summarizeSdkEnvForLog(sdkEnv),
-      })
-      const response = query({
-        prompt: promptInput,
-        options: {
-          abortController: activeRequest.abortController,
-          agents: runtimeContext.agents,
-          allowDangerouslySkipPermissions: activeRequest.permissionMode === 'bypassPermissions' ? true : undefined,
-          allowedTools: READ_ONLY_AUTO_ALLOWED_TOOLS,
-          canUseTool: (toolName, input, options) => this.handleCanUseTool(activeRequest, toolName, input, options),
-          cwd: activeRequest.cwd,
-          enableFileCheckpointing: true,
-          env: sdkEnv,
-          extraArgs: { 'replay-user-messages': null },
-          forwardSubagentText: true,
-          hooks: {
-            PostToolUse: [
-              {
-                hooks: [async (input) => this.handlePostToolUseHook(activeRequest, input)],
+
+      let resumeSessionId = threadState.sessionId?.trim() || undefined
+      let retriedWithoutResume = false
+
+      while (true) {
+        let response: Query | undefined
+        try {
+          safeConsoleInfo('[ClaudeAgentRunner] starting SDK query', {
+            requestId: activeRequest.requestId,
+            threadId: activeRequest.threadId,
+            cwd: activeRequest.cwd,
+            permissionMode: activeRequest.permissionMode,
+            attachmentCount: attachments.length,
+            imageAttachmentCount,
+            resumeSessionIdPresent: Boolean(resumeSessionId),
+            config: summarizeConfigForLog(config),
+            sdkEnv: summarizeSdkEnvForLog(sdkEnv),
+          })
+          response = query({
+            prompt: promptInput,
+            options: {
+              abortController: activeRequest.abortController,
+              agents: runtimeContext.agents,
+              allowDangerouslySkipPermissions: activeRequest.permissionMode === 'bypassPermissions' ? true : undefined,
+              allowedTools: READ_ONLY_AUTO_ALLOWED_TOOLS,
+              canUseTool: (toolName, input, options) => this.handleCanUseTool(activeRequest, toolName, input, options),
+              cwd: activeRequest.cwd,
+              enableFileCheckpointing: true,
+              env: sdkEnv,
+              extraArgs: { 'replay-user-messages': null },
+              forwardSubagentText: true,
+              hooks: {
+                PostToolUse: [
+                  {
+                    hooks: [async (input) => this.handlePostToolUseHook(activeRequest, input)],
+                  },
+                ],
               },
-            ],
-          },
-          includeHookEvents: false,
-          includePartialMessages: true,
-          // Third-party Anthropic-compatible endpoints such as SiliconFlow expect
-          // custom models through ANTHROPIC_MODEL. Passing options.model makes
-          // Claude Code treat the value as its own model flag and can trigger
-          // false "model does not exist" errors.
-          permissionMode: toSdkPermissionMode(activeRequest.permissionMode),
-          resume: threadState.sessionId,
-          // Keep this app's provider settings authoritative. Claude Code user or
-          // project settings may contain another model (for example glm-5.1) and
-          // otherwise override the model shown in this UI.
-          settingSources: [],
-          skills: 'all',
-          systemPrompt: appendSystemPrompt
-            ? { type: 'preset', preset: 'claude_code', append: appendSystemPrompt }
-            : undefined,
-          toolConfig: {
-            askUserQuestion: { previewFormat: 'markdown' },
-          },
-          tools: DEFAULT_AGENT_TOOLS,
-        },
-      })
+              includeHookEvents: false,
+              includePartialMessages: true,
+              // Third-party Anthropic-compatible endpoints such as SiliconFlow expect
+              // custom models through ANTHROPIC_MODEL. Passing options.model makes
+              // Claude Code treat the value as its own model flag and can trigger
+              // false "model does not exist" errors.
+              permissionMode: toSdkPermissionMode(activeRequest.permissionMode),
+              resume: resumeSessionId,
+              // Keep this app's provider settings authoritative. Claude Code user or
+              // project settings may contain another model (for example glm-5.1) and
+              // otherwise override the model shown in this UI.
+              settingSources: [],
+              skills: 'all',
+              systemPrompt: appendSystemPrompt
+                ? { type: 'preset', preset: 'claude_code', append: appendSystemPrompt }
+                : undefined,
+              toolConfig: {
+                askUserQuestion: { previewFormat: 'markdown' },
+              },
+              tools: DEFAULT_AGENT_TOOLS,
+            },
+          })
 
-      activeRequest.query = response
+          activeRequest.query = response
 
-      for await (const message of response) {
-        if (activeRequest.cancelled) break
-        this.captureCheckpointFromSdkMessage(message, activeRequest)
-        this.messageRouter.handleSdkMessage(message, activeRequest)
-      }
-    } catch (error) {
-      if (!activeRequest.cancelled) {
-        console.error('[ClaudeAgentRunner] SDK query failed', {
-          requestId: activeRequest.requestId,
-          config: summarizeConfigForLog(config),
-          error: summarizeErrorForLog(error),
-        })
-        this.emit({
-          type: 'error',
-          requestId: activeRequest.requestId,
-          code: 'sdk_error',
-          message: error instanceof Error ? error.message : String(error),
-        })
+          for await (const message of response) {
+            if (activeRequest.cancelled) break
+            this.captureCheckpointFromSdkMessage(message, activeRequest)
+            this.messageRouter.handleSdkMessage(message, activeRequest)
+          }
+          return
+        } catch (error) {
+          if (
+            !activeRequest.cancelled &&
+            isMissingConversationSessionError(error) &&
+            resumeSessionId &&
+            !retriedWithoutResume &&
+            !activeRequest.didEmitText &&
+            !activeRequest.didEmitThinking
+          ) {
+            safeConsoleWarn('[ClaudeAgentRunner] session missing, retrying without resume', {
+              requestId: activeRequest.requestId,
+              threadId: activeRequest.threadId,
+              sessionIdPresent: Boolean(resumeSessionId),
+              error: summarizeErrorForLog(error),
+            })
+            threadState.sessionId = undefined
+            resumeSessionId = undefined
+            retriedWithoutResume = true
+            continue
+          }
+
+          if (!activeRequest.cancelled) {
+            safeConsoleError('[ClaudeAgentRunner] SDK query failed', {
+              requestId: activeRequest.requestId,
+              config: summarizeConfigForLog(config),
+              error: summarizeErrorForLog(error),
+            })
+            this.emit({
+              type: 'error',
+              requestId: activeRequest.requestId,
+              code: 'sdk_error',
+              message: error instanceof Error ? error.message : String(error),
+            })
+          }
+          return
+        } finally {
+          activeRequest.query = undefined
+          try {
+            response?.close()
+          } catch {
+            // best-effort close
+          }
+        }
       }
     } finally {
       this.finish(activeRequest)
@@ -528,7 +568,7 @@ export class ClaudeAgentRunner {
         })
       }
     } catch (error) {
-      console.warn('[ClaudeAgentRunner] failed to collect file diff', {
+      safeConsoleWarn('[ClaudeAgentRunner] failed to collect file diff', {
         requestId: activeRequest.requestId,
         error: summarizeErrorForLog(error),
       })
@@ -693,6 +733,19 @@ export class ClaudeAgentRunner {
 function joinDetails(parts: Array<string | undefined | null | false>): string | undefined {
   const text = parts.filter((part): part is string => typeof part === 'string' && part.trim().length > 0).join(' · ')
   return text || undefined
+}
+
+function isMissingConversationSessionError(error: unknown): boolean {
+  if (typeof error === 'string') {
+    return error.includes('No conversation found with session ID')
+  }
+  if (error instanceof Error) {
+    if (error.message.includes('No conversation found with session ID')) return true
+    return isMissingConversationSessionError((error as Error & { cause?: unknown }).cause)
+  }
+  if (!isRecord(error)) return false
+  if (typeof error.message === 'string' && error.message.includes('No conversation found with session ID')) return true
+  return isMissingConversationSessionError(error.cause)
 }
 
 function buildRequestAppendSystemPrompt(activeRequest: ActiveRequest, basePrompt?: string): string | undefined {

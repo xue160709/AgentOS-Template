@@ -8,6 +8,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { formatProjectPathError, resolveProjectPath } from './project-path'
 import type {
   AgentContextAgentItem,
   AgentContextCatalog,
@@ -119,7 +120,7 @@ export async function discoverAgentContext(
     return {
       ok: false,
       rootPath: resolvedRootPath,
-      message: error instanceof Error ? error.message : '无法读取 Agent 上下文',
+      message: formatProjectPathError(error),
     }
   }
 }
@@ -174,7 +175,7 @@ export async function resolvePromptWithContext(
 }
 
 function findHostSkill(catalog: AgentContextCatalog, command: string): AgentContextSlashItem | undefined {
-  return catalog.skills.find((candidate) => !candidate.native && (candidate.command === command || candidate.name === command))
+  return catalog.skills.find((candidate) => candidate.command === command || candidate.name === command)
 }
 
 async function expandSkillInvocation(
@@ -268,7 +269,7 @@ export async function searchProjectFiles(rootPath: string, query: string): Promi
     return {
       ok: false,
       rootPath: resolvedRootPath,
-      message: error instanceof Error ? error.message : '无法搜索项目文件',
+      message: formatProjectPathError(error),
     }
   }
 }
@@ -538,7 +539,7 @@ async function buildAppendSystemPrompt(
 ): Promise<string | undefined> {
   const promptCopy = electronAgentCatalog(uiLocale).prompt
   const hostInstructionFiles = catalog.instructionFiles.filter((file) => file.loadMode === 'host')
-  const hostSkills = catalog.skills.filter((skill) => !skill.native)
+  const hostSkills = catalog.skills
   const hasAgentModeSettings =
     agentModeSettings?.enabled === true &&
     (Boolean(agentModeSettings.user.trim()) || Boolean(agentModeSettings.identity.trim()))
@@ -898,15 +899,6 @@ async function exists(filePath: string): Promise<boolean> {
   } catch {
     return false
   }
-}
-
-function resolveProjectPath(projectPath: string): string {
-  const trimmedPath = projectPath.trim()
-  if (trimmedPath === '~') return os.homedir()
-  if (trimmedPath.startsWith(`~${path.sep}`) || trimmedPath.startsWith('~/')) {
-    return path.resolve(os.homedir(), trimmedPath.slice(2))
-  }
-  return path.resolve(trimmedPath)
 }
 
 function normalizeRelativePath(relativePath: string): string {

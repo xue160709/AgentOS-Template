@@ -49,6 +49,9 @@ contextBridge.exposeInMainWorld('desktop', {
   listAgentContext(rootPath: string) {
     return ipcRenderer.invoke('desktop:list-agent-context', rootPath)
   },
+  validateProjectPaths(projectPaths: string[]) {
+    return ipcRenderer.invoke('desktop:validate-project-paths', projectPaths) as Promise<Record<string, boolean>>
+  },
   pathExistsUnderProject(rootPath: string, relativePath: string) {
     return ipcRenderer.invoke('desktop:path-exists-under-project', rootPath, relativePath) as Promise<boolean>
   },

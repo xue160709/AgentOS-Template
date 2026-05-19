@@ -1,10 +1,11 @@
+/**
+ * 侧栏项目排序：默认按置顶与时间；若存在手工顺序则优先沿用。
+ * Sidebar project order: pinned-first + recency by default; manual `projectOrderIds` wins when present.
+ */
+
 import type { WorkspaceProject } from './types'
 
-/**
- * Sidebar project order:
- * - default is pin rank, then creation time descending;
- * - once a manual order exists, it becomes the stable visual order.
- */
+/** 按侧栏规则排序后的项目列表 / Projects sorted for the sidebar list */
 export function sortProjectsForSidebar(
   projects: readonly WorkspaceProject[],
   projectOrderIds: readonly string[] = [],
@@ -25,6 +26,7 @@ export function sortProjectsForSidebar(
   })
 }
 
+/** 与 `sortProjectsForSidebar` 一致的 id 序列（用于持久化顺序等）/ Stable id list matching sidebar sort */
 export function projectIdsForSidebar(
   projects: readonly WorkspaceProject[],
   projectOrderIds: readonly string[] = [],

@@ -14,6 +14,7 @@ import type {
   ClaudeAgentSettings,
   ClaudeAgentSettingsSnapshot,
 } from '../src/claude-chat-types'
+import { safeConsoleInfo } from './safe-console'
 
 const SETTINGS_FILE_NAME = 'claude-agent-settings.json'
 const DEFAULT_PROVIDER_ID = 'default-provider'
@@ -24,7 +25,7 @@ export class ClaudeAgentSettingsStore {
 
   constructor(userDataPath: string) {
     this.settingsFilePath = path.join(userDataPath, SETTINGS_FILE_NAME)
-    console.info('[ClaudeAgentSettingsStore] using settings file', this.settingsFilePath)
+    safeConsoleInfo('[ClaudeAgentSettingsStore] using settings file', this.settingsFilePath)
   }
 
   getSnapshot(): ClaudeAgentSettingsSnapshot {
@@ -49,7 +50,7 @@ export class ClaudeAgentSettingsStore {
     const normalized = normalizeSettings(settings)
     mkdirSync(path.dirname(this.settingsFilePath), { recursive: true })
     writeFileSync(this.settingsFilePath, `${JSON.stringify(normalized, null, 2)}\n`, 'utf8')
-    console.info('[ClaudeAgentSettingsStore] saved settings', summarizeSettingsForLog(normalized))
+    safeConsoleInfo('[ClaudeAgentSettingsStore] saved settings', summarizeSettingsForLog(normalized))
     return this.getSnapshot()
   }
 
@@ -86,7 +87,7 @@ export class ClaudeAgentSettingsStore {
         defaultOpusModel: env.defaultOpusModel,
         defaultSonnetModel: env.defaultSonnetModel,
       }
-      console.info('[ClaudeAgentSettingsStore] resolved env config', summarizeResolvedConfigForLog(resolved))
+      safeConsoleInfo('[ClaudeAgentSettingsStore] resolved env config', summarizeResolvedConfigForLog(resolved))
       return resolved
     }
 
@@ -113,7 +114,7 @@ export class ClaudeAgentSettingsStore {
       defaultOpusModel: provider?.defaultOpusModel || env.defaultOpusModel,
       defaultSonnetModel: provider?.defaultSonnetModel || env.defaultSonnetModel,
     }
-    console.info('[ClaudeAgentSettingsStore] resolved settings config', {
+    safeConsoleInfo('[ClaudeAgentSettingsStore] resolved settings config', {
       settingsFilePath: this.settingsFilePath,
       activeProviderId: settings.activeProviderId,
       activeProviderName: provider?.name || '',

@@ -9,7 +9,13 @@
     "headerDefault": "Claude Agent",
     "headerProcessingThread": "Current conversation is busy",
     "projectSkillUnavailable": "This environment cannot read project skills",
-    "projectSkillReadError": "Unable to read project skills"
+    "projectSkillReadError": "Unable to read project skills",
+    "emptyWorkspaceHeading": "Add your first project",
+    "emptyWorkspaceBody": "Choose a local folder as your Agent workspace to start chatting and running tasks.",
+    "emptyWorkspaceAction": "Choose project folder",
+    "projectPathMissing": "Project folder does not exist or was removed",
+    "projectPathMissingHint": "Relocate the folder from the sidebar, or remove this project.",
+    "projectPathMissingSubmitBlocked": "Project folder is unavailable; message not sent"
   },
   "nav": {
     "home": "Chat",
@@ -37,6 +43,8 @@
     "notImplemented": "Not available yet",
     "newThread": "New thread",
     "addProject": "Add project",
+    "menuRelocateProject": "Relocate folder…",
+    "projectPathMissingBadge": "Unavailable",
     "projectsSection": "Projects",
     "newThreadInProject": "New thread in this project",
     "newThreadInProjectAria": "New thread in {{name}}",

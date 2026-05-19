@@ -1,4 +1,9 @@
 #!/usr/bin/env node
+/**
+ * 在沙箱内校验 project-home Home Plugin（A2UI v0.9）：白名单组件、资源上限与超时。
+ * Sandboxed validator for the project-home A2UI plugin: allowlisted widgets, budgets, and timeouts.
+ */
+
 import { execFile } from 'node:child_process'
 import fs from 'node:fs/promises'
 import path from 'node:path'

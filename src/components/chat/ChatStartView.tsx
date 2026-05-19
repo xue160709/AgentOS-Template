@@ -36,6 +36,12 @@ export function ChatStartView({
 
   return (
     <div className="chat-start-view">
+      {project.pathMissing ? (
+        <div className="project-path-missing-banner" role="status">
+          <strong>{t('shell.projectPathMissing')}</strong>
+          <p>{t('shell.projectPathMissingHint')}</p>
+        </div>
+      ) : null}
       <div className="chat-start-view__hero" id="chat-project-home">
         <h1>{heading ?? t('chat.emptyHeading')}</h1>
       </div>

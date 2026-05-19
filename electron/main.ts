@@ -1,7 +1,11 @@
+/**
+ * Electron 主进程入口：BrowserWindow、托盘、IPC 与 Claude Agent。
+ * Electron main entry: window lifecycle, tray menu, IPC bridges, and Claude Agent runner.
+ */
+
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, shell, Tray } from 'electron'
 import { fileURLToPath } from 'node:url'
 import fs from 'node:fs/promises'
-import os from 'node:os'
 import path from 'node:path'
 import zh from '../src/locales/zh.json'
 import en from '../src/locales/en.json'
@@ -21,8 +25,10 @@ import { ChatWorkspaceStore } from './chat-workspace-store'
 import { DesktopPreferencesStore } from './desktop-preferences-store'
 import { loadMainProcessEnv } from './env-loader'
 import { runProjectHomePlugin, saveProjectHomePluginLayout, saveProjectHomePluginOrder } from './home-plugin-runner'
+import { installSafeStdStreamHandlers } from './safe-console'
 import { TaskHomePluginManager } from './task-home-plugin-manager'
 import { normalizeUiLocale } from './ui-locale'
+import { formatProjectPathError, resolveProjectPath, validateProjectPaths } from './project-path'
 import type {
   ActiveChatPickPayload,
   ClaudeChatAttachment,
@@ -34,14 +40,9 @@ import type {
 } from '../src/claude-chat-types'
 import type { FileTreeNode, FileTreeResult } from '../src/components/types'
 
-/**
- * Electron 主进程入口：BrowserWindow、托盘、IPC 与 Claude Agent。
- * Electron main entry: window lifecycle, tray menu, IPC bridges, and Claude Agent runner.
- */
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-// The built directory structure
+// 构建产物目录示意 / Built output layout (for orientation when reading paths)
 //
 // ├─┬─┬ dist
 // │ │ └── index.html
@@ -52,8 +53,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // │
 process.env.APP_ROOT = path.join(__dirname, '..')
 loadMainProcessEnv(process.env.APP_ROOT)
+installSafeStdStreamHandlers()
 
-// 🚧 Use ['ENV_NAME'] avoid vite:define plugin - Vite@2.x
+// 🚧 使用 process.env['KEY'] 避免被 vite:define 内联；见 Vite 2.x 插件行为 /
+// 🚧 Use bracket notation so vite:define does not replace env keys (Vite@2.x plugin behavior).
 export const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
 export const MAIN_DIST = path.join(process.env.APP_ROOT, 'dist-electron')
 export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
@@ -201,7 +204,8 @@ function createWindow() {
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL)
   } else {
-    // win.loadFile('dist/index.html')
+    // 生产环境从磁盘加载打包后的 index.html（非直连 dist 根路径）/
+    // Production: load packaged `index.html` from disk (not the dev-server URL).
     win.loadFile(path.join(RENDERER_DIST, 'index.html'))
   }
 }
@@ -507,6 +511,10 @@ if (gotSingleInstanceLock) {
     })
     ipcMain.handle('desktop:list-project-files', (_event, rootPath: string) => {
       return readProjectFileTree(rootPath)
+    })
+    ipcMain.handle('desktop:validate-project-paths', async (_event, paths: unknown) => {
+      if (!Array.isArray(paths)) return {}
+      return validateProjectPaths(paths.filter((path): path is string => typeof path === 'string'))
     })
     ipcMain.handle('desktop:search-project-files', (_event, rootPath: string, query: string) => {
       return searchProjectFiles(rootPath, query)
@@ -896,18 +904,9 @@ async function readProjectFileTree(rootPath: string): Promise<FileTreeResult> {
     return {
       ok: false,
       rootPath: resolvedRootPath,
-      message: error instanceof Error ? error.message : '无法读取文件树',
+      message: formatProjectPathError(error),
     }
   }
-}
-
-function resolveProjectPath(projectPath: string): string {
-  const trimmedPath = projectPath.trim()
-  if (trimmedPath === '~') return os.homedir()
-  if (trimmedPath.startsWith(`~${path.sep}`) || trimmedPath.startsWith('~/')) {
-    return path.resolve(os.homedir(), trimmedPath.slice(2))
-  }
-  return path.resolve(trimmedPath)
 }
 
 function normalizeRelativePath(relativePath: string): string {

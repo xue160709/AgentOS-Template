@@ -1,3 +1,8 @@
+/**
+ * 聊天工作区 localStorage + Electron 双写与迁移归一化逻辑。
+ * Dual-write chat workspace state (localStorage + Electron) with normalization helpers.
+ */
+
 import type {
   ClaudeFileChangeSetStatus,
   ClaudeFileDiffFile,
@@ -14,17 +19,16 @@ import type {
   WorkspaceSidebarPrefs,
   WorkspaceThread,
 } from './components/types'
-
-/**
- * 聊天工作区 localStorage + Electron 双写与迁移归一化逻辑。
- * Dual-write chat workspace state (localStorage + Electron) with normalization helpers.
- */
+import {
+  migrateLegacySeedProjects,
+  reconcileActiveProject,
+  stripRuntimeProjectFields,
+} from './project-path'
 
 // --- Factories & selectors / 默认值与查询 ---
 
 /** localStorage 主键（桌面端另有 JSON 文件）/ Primary storage key; Electron mirrors JSON file */
 export const CHAT_WORKSPACE_STORAGE_KEY = 'CodeX-UI-Template-chat-workspace-v1'
-const LEGACY_CHAT_STATE_STORAGE_KEY = 'CodeX-UI-Template-chat-state-v1'
 
 /** 新建空 ChatState / Fresh chat transcript shell */
 export function createEmptyChatState(): ChatState {
@@ -61,24 +65,73 @@ export async function loadChatWorkspaceState(): Promise<ChatWorkspaceState> {
     try {
       const raw = await window.desktop.getChatWorkspace()
       if (raw != null) {
-        return normalizeChatWorkspaceState(raw)
+        return finalizeChatWorkspaceState(normalizeChatWorkspaceState(raw))
       }
-      if (fromLocal && window.desktop.saveChatWorkspace) {
-        await window.desktop.saveChatWorkspace(fromLocal)
-        return fromLocal
+      if (fromLocal) {
+        const finalized = await finalizeChatWorkspaceState(fromLocal)
+        if (window.desktop.saveChatWorkspace) {
+          await window.desktop.saveChatWorkspace(finalized)
+        }
+        return finalized
       }
     } catch {
       /* ignore */
     }
   }
 
-  return fromLocal ?? createDefaultChatWorkspaceState()
+  return finalizeChatWorkspaceState(fromLocal ?? createDefaultChatWorkspaceState())
+}
+
+/** 迁移旧种子项目、校验路径并修正活动项目 / Migrate legacy seeds, validate paths, fix active project */
+export async function finalizeChatWorkspaceState(state: ChatWorkspaceState): Promise<ChatWorkspaceState> {
+  let next = migrateLegacySeedProjects(state)
+  next = await annotateProjectPathAvailability(next)
+  next = reconcileActiveProject(next)
+
+  const changed =
+    JSON.stringify(stripRuntimeProjectFields(next)) !== JSON.stringify(stripRuntimeProjectFields(state))
+  if (changed && typeof window !== 'undefined' && window.desktop?.saveChatWorkspace) {
+    try {
+      await window.desktop.saveChatWorkspace(next)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return next
+}
+
+async function annotateProjectPathAvailability(state: ChatWorkspaceState): Promise<ChatWorkspaceState> {
+  const validate = typeof window !== 'undefined' ? window.desktop?.validateProjectPaths : undefined
+  if (!validate || state.projects.length === 0) {
+    return {
+      ...state,
+      projects: state.projects.map(({ pathMissing: _pathMissing, ...project }) => project),
+    }
+  }
+
+  try {
+    const availability = await validate(state.projects.map((project) => project.path))
+    return {
+      ...state,
+      projects: state.projects.map((project) => ({
+        ...project,
+        pathMissing: availability[project.path] === false ? true : undefined,
+      })),
+    }
+  } catch {
+    return {
+      ...state,
+      projects: state.projects.map(({ pathMissing: _pathMissing, ...project }) => project),
+    }
+  }
 }
 
 /** 写入 localStorage 并尽力同步主进程 / Persist locally and best-effort mirror to main */
 export async function persistChatWorkspaceState(state: ChatWorkspaceState): Promise<void> {
+  const toSave = stripRuntimeProjectFields(state)
   try {
-    localStorage.setItem(CHAT_WORKSPACE_STORAGE_KEY, JSON.stringify(state))
+    localStorage.setItem(CHAT_WORKSPACE_STORAGE_KEY, JSON.stringify(toSave))
   } catch {
     /* ignore */
   }
@@ -86,7 +139,7 @@ export async function persistChatWorkspaceState(state: ChatWorkspaceState): Prom
   const save = typeof window !== 'undefined' ? window.desktop?.saveChatWorkspace : undefined
   if (save) {
     try {
-      await save(state)
+      await save(toSave)
     } catch {
       /* ignore */
     }
@@ -103,37 +156,13 @@ function loadChatWorkspaceFromLocalStorage(): ChatWorkspaceState | null {
   return null
 }
 
-/** 首次启动默认项目与欢迎线程 / Seed workspace for first launch */
+/** 首次启动空工作区 / Empty workspace for first launch */
 export function createDefaultChatWorkspaceState(): ChatWorkspaceState {
-  const now = Date.now()
-  const activeProjectId = 'project-codex-ui-template'
-  const legacyChatState = loadLegacyChatState()
-  const hasLegacyConversation = legacyChatState.items.length > 0
-  const activeThreadId = hasLegacyConversation ? 'thread-welcome' : ''
   return {
-    activeProjectId,
-    activeThreadId,
-    projects: [
-      {
-        id: activeProjectId,
-        name: 'AgentOS',
-        path: '/Volumes/macOS/Github/CodeX-UI-Template',
-        createdAt: now - 1000 * 60 * 60,
-        updatedAt: now,
-      },
-    ],
-    threads: hasLegacyConversation
-      ? [
-          {
-            id: activeThreadId,
-            projectId: activeProjectId,
-            title: '最近对话',
-            createdAt: now,
-            updatedAt: now,
-            chatState: legacyChatState,
-          },
-        ]
-      : [],
+    activeProjectId: '',
+    activeThreadId: '',
+    projects: [],
+    threads: [],
     sidebarPrefs: createDefaultSidebarPrefs(),
   }
 }
@@ -188,7 +217,9 @@ export function normalizeChatWorkspaceState(value: unknown): ChatWorkspaceState 
     ]
   })
 
-  if (projects.length === 0) return createDefaultChatWorkspaceState()
+  if (projects.length === 0) {
+    return migrateLegacySeedProjects(createDefaultChatWorkspaceState())
+  }
   const projectIds = new Set(projects.map((project) => project.id))
   const threads = value.threads.flatMap((thread): WorkspaceThread[] => {
     if (!isRecord(thread) || typeof thread.id !== 'string' || typeof thread.projectId !== 'string') return []
@@ -236,16 +267,6 @@ export function normalizeChatWorkspaceState(value: unknown): ChatWorkspaceState 
     projects,
     threads,
     sidebarPrefs,
-  }
-}
-
-function loadLegacyChatState(): ChatState {
-  try {
-    const raw = localStorage.getItem(LEGACY_CHAT_STATE_STORAGE_KEY)
-    if (!raw) return createEmptyChatState()
-    return normalizeStoredChatState(JSON.parse(raw))
-  } catch {
-    return createEmptyChatState()
   }
 }
 

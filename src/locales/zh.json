@@ -9,7 +9,13 @@
     "headerDefault": "Claude Agent",
     "headerProcessingThread": "当前对话处理中",
     "projectSkillUnavailable": "当前运行环境无法读取项目 skills",
-    "projectSkillReadError": "无法读取项目 skills"
+    "projectSkillReadError": "无法读取项目 skills",
+    "emptyWorkspaceHeading": "添加你的第一个项目",
+    "emptyWorkspaceBody": "选择一个本地文件夹作为 Agent 工作区，开始对话与自动化任务。",
+    "emptyWorkspaceAction": "选择项目文件夹",
+    "projectPathMissing": "项目文件夹不存在或已被删除",
+    "projectPathMissingHint": "请在侧边栏重新选择文件夹，或移除该项目。",
+    "projectPathMissingSubmitBlocked": "项目文件夹不可用，无法发送消息"
   },
   "nav": {
     "home": "聊天",
@@ -37,6 +43,8 @@
     "notImplemented": "尚未实现",
     "newThread": "新对话",
     "addProject": "新增项目",
+    "menuRelocateProject": "重新选择文件夹",
+    "projectPathMissingBadge": "路径不可用",
     "projectsSection": "项目",
     "newThreadInProject": "在此项目中新建对话",
     "newThreadInProjectAria": "在 {{name}} 中新建对话",
