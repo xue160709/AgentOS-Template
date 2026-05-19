@@ -10,7 +10,9 @@
     {
       "provider": "github",
       "owner": "xue160709",
-      "repo": "AgentOS"
+      "repo": "AgentOS",
+      // CI 下默认会建 Draft；mac 失败时 Windows 包会一直藏在草稿里。改为直接发布。
+      "releaseType": "release"
     }
   ],
   "directories": {
