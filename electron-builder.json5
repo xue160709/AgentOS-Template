@@ -9,6 +9,7 @@
     "node_modules/@anthropic-ai/claude-agent-sdk-*/**"
   ],
   "productName": "AgentOS",
+  "copyright": "Copyright © 2026 xuezhirong",
   "publish": [
     {
       "provider": "github",

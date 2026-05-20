@@ -258,11 +258,16 @@ your-project/
 
 - Rebuild all UI components to support intent understanding.
 
+## Author
+
+- **Author**: xuezhirong
+- **Email**: [xue160709@gmail.com](mailto:xue160709@gmail.com)
+- **GitHub**: [@xue160709](https://github.com/xue160709)
+- **WeChat**: xuezhirong233
+
 ## Contact
 
-For discussion, feedback, or co-creation, add WeChat:
-
-**xuezhirong233**
+For discussion, feedback, or co-creation, reach out via the author details above, or add WeChat: **xuezhirong233**.
 
 ## Acknowledgements
 

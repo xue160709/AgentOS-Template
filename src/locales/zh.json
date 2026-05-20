@@ -287,6 +287,18 @@
       "pageTitle": "版本更新",
       "pageLede": "应用会在后台检查并下载新版本。安装包准备完成后，这里会显示“版本更新”按钮。"
     },
+    "about": {
+      "heading": "关于",
+      "caption": "作者联系方式与开源许可信息。",
+      "appName": "应用名称",
+      "version": "版本",
+      "author": "作者",
+      "email": "邮箱",
+      "wechat": "微信",
+      "github": "仓库",
+      "license": "许可证",
+      "copyright": "版权"
+    },
     "developer": {
       "pageTitle": "开发者模式",
       "pageLede": "仅在开发版可见，只清理测试需要的用户数据，不会删除项目目录里的文件。",

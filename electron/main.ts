@@ -29,6 +29,7 @@ import { installSafeStdStreamHandlers } from './safe-console'
 import { TaskHomePluginManager } from './task-home-plugin-manager'
 import { normalizeUiLocale } from './ui-locale'
 import { appUpdaterService, registerAppUpdaterIpc } from './app-updater'
+import { installAboutPanel } from './about-panel'
 import { installApplicationMenu } from './app-menu'
 import { formatProjectPathError, resolveProjectPath, validateProjectPaths } from './project-path'
 import { getMainWindowBackgroundColor, getMainWindowChromeOptions } from './window-chrome'
@@ -597,6 +598,7 @@ if (gotSingleInstanceLock) {
 
   app.whenReady().then(() => {
     nativeTheme.themeSource = 'system'
+    installAboutPanel()
     installApplicationMenu({ isDev: isDevRuntime })
     applyDockBranding()
     const userDataPath = app.getPath('userData')

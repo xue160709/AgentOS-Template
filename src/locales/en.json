@@ -287,6 +287,18 @@
       "pageTitle": "Version Updates",
       "pageLede": "New versions are checked and downloaded in the background. The Update button appears here once the installer is ready."
     },
+    "about": {
+      "heading": "About",
+      "caption": "Author contact and open-source license.",
+      "appName": "Application",
+      "version": "Version",
+      "author": "Author",
+      "email": "Email",
+      "wechat": "WeChat",
+      "github": "Repository",
+      "license": "License",
+      "copyright": "Copyright"
+    },
     "developer": {
       "pageTitle": "Developer Mode",
       "pageLede": "Visible only in development builds. It clears only the user data needed for testing, and leaves project files untouched.",
