@@ -122,6 +122,9 @@ contextBridge.exposeInMainWorld('desktop', {
   openPath(targetPath: string) {
     return ipcRenderer.invoke('desktop:open-path', targetPath) as Promise<void>
   },
+  openExternal(url: string) {
+    return ipcRenderer.invoke('desktop:open-external', url) as Promise<void>
+  },
   getDesktopPreferences() {
     return ipcRenderer.invoke('desktop-preferences:get') as Promise<DesktopPreferences>
   },

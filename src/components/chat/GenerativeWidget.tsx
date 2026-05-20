@@ -92,7 +92,11 @@ export const GenerativeWidget = memo(function GenerativeWidget({
       if (event.data.type === 'generative-ui:link') {
         const href = String(event.data.href || '')
         if (href && !/^\s*(javascript|data)\s*:/i.test(href)) {
-          window.open(href, '_blank', 'noopener,noreferrer')
+          if (window.desktop?.openExternal) {
+            void window.desktop.openExternal(href)
+          } else {
+            window.open(href, '_blank', 'noopener,noreferrer')
+          }
         }
         return
       }

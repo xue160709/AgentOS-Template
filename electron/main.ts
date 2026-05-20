@@ -239,6 +239,37 @@ function applyDockBranding() {
   }
 }
 
+function isExternalHttpUrl(url: string): boolean {
+  return /^https?:\/\//i.test(url)
+}
+
+function isAppNavigationUrl(url: string): boolean {
+  if (VITE_DEV_SERVER_URL && url.startsWith(VITE_DEV_SERVER_URL)) return true
+  if (url.startsWith('file://')) {
+    try {
+      const normalized = path.normalize(fileURLToPath(url))
+      return normalized.startsWith(path.normalize(RENDERER_DIST))
+    } catch {
+      return false
+    }
+  }
+  return false
+}
+
+function attachExternalLinkHandlers(contents: Electron.WebContents) {
+  contents.setWindowOpenHandler(({ url }) => {
+    if (isExternalHttpUrl(url)) void shell.openExternal(url)
+    return { action: 'deny' }
+  })
+
+  contents.on('will-navigate', (event, url) => {
+    if (!isAppNavigationUrl(url) && isExternalHttpUrl(url)) {
+      event.preventDefault()
+      void shell.openExternal(url)
+    }
+  })
+}
+
 function createWindow() {
   const isMac = process.platform === 'darwin'
   const windowBackgroundColor = getWindowBackgroundColor()
@@ -267,6 +298,8 @@ function createWindow() {
       : {}),
     ...getMainWindowChromeOptions(process.platform, nativeTheme.shouldUseDarkColors),
   })
+
+  attachExternalLinkHandlers(win.webContents)
 
   claudeAgentRunner = new ClaudeAgentRunner(
     win.webContents,
@@ -784,6 +817,10 @@ if (gotSingleInstanceLock) {
       const resolved = resolveProjectPath(rawPath)
       const message = await shell.openPath(resolved)
       if (message) throw new Error(message)
+    })
+    ipcMain.handle('desktop:open-external', async (_event, rawUrl: unknown) => {
+      if (typeof rawUrl !== 'string' || !isExternalHttpUrl(rawUrl)) return
+      await shell.openExternal(rawUrl)
     })
     createWindow()
     ensureTray()
