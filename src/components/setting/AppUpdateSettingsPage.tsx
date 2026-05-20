@@ -4,6 +4,7 @@
  */
 
 import { useI18n } from '../../i18n/i18n'
+import { AboutSection } from './AboutSection'
 import { AppUpdateSection } from './AppUpdateSection'
 
 /** `#settings/updates` 应用更新设置页 / App update settings route */
@@ -19,6 +20,7 @@ export function AppUpdateSettingsPage() {
 
       <div className="settings-stack">
         <AppUpdateSection />
+        <AboutSection />
       </div>
     </section>
   )

@@ -28,11 +28,6 @@ scripts/release-env.local.sh
 *.njsproj
 *.sln
 *.sw?
-/.agents/*
-!/.agents/skills/
-/.agents/skills/*
-!/.agents/skills/a2ui-project-home-panel/
-!/.agents/skills/a2ui-project-home-panel/**
 AGENT.md
 codex-css-tokens.css
 codex-css-tokens.json
@@ -44,3 +39,5 @@ codex-ui-framework-notes.md
 package-lock.json
 .npmrc
 
+/.agents/rules
+/.agents/home-plugins
