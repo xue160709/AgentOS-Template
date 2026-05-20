@@ -2,20 +2,20 @@
 
 **默认中文 / English version: [README_EN.md](./README_EN.md)**
 
+![AgentOS 界面预览](images/introduction_cn.png)
+
 AgentOS 是一个面向本地项目与长期任务的桌面 Agent 工作台。它不是把大模型包装成一个聊天窗口，而是把「项目文件夹」变成 Agent 的运行空间：对话、技能、可视化卡片、任务编排、项目记忆和本地文件上下文，都围绕同一个文件夹组织起来。
 
 项目的后台运行层由 Electron 主进程中的 **Claude Agent SDK** 驱动，负责会话流式输出、会话恢复、权限请求、工具调用和任务执行；前端只负责呈现和交互。
 
 我们的愿景是让每个项目都拥有自己的 Agent 操作系统。用户不需要先理解复杂的 Agent 框架，也不需要把项目资料搬到云端；只要选择一个本地文件夹，AgentOS 就可以围绕这个文件夹建立上下文、沉淀记忆、运行 Skills、展示数据面板，并逐步形成一个可以长期协作的智能工作区。
 
-![AgentOS 界面预览](image1.png)
-
 ## 界面预览
-
-![界面预览 2](image2.png)
-![界面预览 3](image3.png)
-![界面预览 4](image4.png)
-![界面预览 5](image5.png)
+![AgentOS 界面预览](images/image1.png)
+![界面预览 2](images/image2.png)
+![界面预览 3](images/image3.png)
+![界面预览 4](images/image4.png)
+![界面预览 5](images/image5.png)
 
 ## 目录
 

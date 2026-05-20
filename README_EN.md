@@ -2,6 +2,8 @@
 
 **中文版本 / Chinese version: [README.md](./README.md)**
 
+![AgentOS 界面预览](images/introduction.png)
+
 AgentOS is a desktop Agent workspace for local projects and long-running tasks. It is not just another chat wrapper around a model. AgentOS turns a project folder into an Agent runtime where chat, skills, visual cards, task orchestration, project memory, and local file context live together.
 
 The backend runtime is powered by **Claude Agent SDK** inside the Electron main process, handling streaming chat, session resume, permission requests, tool calls, and task execution. The frontend focuses on presentation and interaction.
@@ -10,11 +12,11 @@ The vision is simple: every project should be able to grow its own Agent operati
 
 ## Preview
 
-![Preview 1](image1.png)
-![Preview 2](image2.png)
-![Preview 3](image3.png)
-![Preview 4](image4.png)
-![Preview 5](image5.png)
+![Preview 1](images/image1.png)
+![Preview 2](images/image2.png)
+![Preview 3](images/image3.png)
+![Preview 4](images/image4.png)
+![Preview 5](images/image5.png)
 
 ## Vision
 
