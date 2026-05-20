@@ -3477,6 +3477,131 @@ button.app-file-tree-row {
     0 18px 42px -28px color-mix(in oklab, var(--color-token-foreground) 52%, transparent);
 }
 
+.project-home-filler-card {
+  position: relative;
+  grid-column: span var(--home-card-span, 1);
+  min-width: 0;
+  min-height: 244px;
+  overflow: hidden;
+  border: 1px dashed color-mix(in oklab, var(--color-token-border-light) 64%, transparent);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(90deg, color-mix(in oklab, var(--color-token-border-light) 34%, transparent) 1px, transparent 1px),
+    linear-gradient(0deg, color-mix(in oklab, var(--color-token-border-light) 30%, transparent) 1px, transparent 1px),
+    color-mix(in oklab, var(--color-token-input-background) 72%, transparent);
+  background-size: 28px 28px;
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, var(--color-token-main-surface-primary) 78%, transparent),
+    0 12px 28px -30px color-mix(in oklab, var(--color-token-foreground) 38%, transparent);
+  opacity: 0.72;
+  pointer-events: none;
+  user-select: none;
+}
+
+.project-home-filler-card--span-1 {
+  min-height: 196px;
+}
+
+.project-home-filler-card::before {
+  content: '';
+  position: absolute;
+  inset: calc(var(--spacing) * 2.5);
+  border: 1px solid color-mix(in oklab, var(--color-token-border-light) 44%, transparent);
+  border-radius: calc(var(--radius-md) - 2px);
+}
+
+.project-home-filler-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(115deg, transparent 0 38%, color-mix(in oklab, var(--color-token-main-surface-primary) 54%, transparent) 38% 39%, transparent 39% 100%),
+    linear-gradient(115deg, transparent 0 66%, color-mix(in oklab, var(--color-token-main-surface-primary) 44%, transparent) 66% 67%, transparent 67% 100%);
+}
+
+.project-home-filler-card__rule {
+  position: absolute;
+  right: calc(var(--spacing) * 3);
+  bottom: calc(var(--spacing) * 3);
+  left: calc(var(--spacing) * 3);
+  z-index: 1;
+  height: 1px;
+  background: color-mix(in oklab, var(--color-token-border) 35%, transparent);
+}
+
+.project-home-filler-card__marks {
+  position: absolute;
+  z-index: 1;
+  inset: calc(var(--spacing) * 4);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: calc(var(--spacing) * 1.5);
+  align-content: center;
+}
+
+.project-home-filler-card__marks span {
+  display: block;
+  height: 2px;
+  border-radius: var(--radius-full);
+  background: color-mix(in oklab, var(--color-token-text-tertiary) 46%, transparent);
+}
+
+.project-home-filler-card__marks span:nth-child(3n + 1) {
+  opacity: 0.36;
+  transform: translateY(calc(var(--spacing) * -2));
+}
+
+.project-home-filler-card__marks span:nth-child(3n + 2) {
+  opacity: 0.58;
+}
+
+.project-home-filler-card__marks span:nth-child(3n) {
+  opacity: 0.24;
+  transform: translateY(calc(var(--spacing) * 2));
+}
+
+.project-home-filler-card--signal {
+  background:
+    repeating-linear-gradient(0deg, color-mix(in oklab, var(--color-token-border-light) 28%, transparent) 0 1px, transparent 1px 18px),
+    color-mix(in oklab, var(--color-token-input-background) 78%, transparent);
+}
+
+.project-home-filler-card--signal .project-home-filler-card__marks {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  align-items: end;
+}
+
+.project-home-filler-card--signal .project-home-filler-card__marks span {
+  width: 100%;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklab, var(--color-token-text-tertiary) 22%, transparent);
+  transform: none;
+}
+
+.project-home-filler-card--signal .project-home-filler-card__marks span:nth-child(2n) {
+  height: 58px;
+}
+
+.project-home-filler-card--signal .project-home-filler-card__marks span:nth-child(3n) {
+  height: 24px;
+}
+
+.project-home-filler-card--trace {
+  background:
+    repeating-linear-gradient(90deg, transparent 0 18px, color-mix(in oklab, var(--color-token-border-light) 26%, transparent) 18px 19px),
+    color-mix(in oklab, var(--color-token-input-background) 76%, transparent);
+}
+
+.project-home-filler-card--trace .project-home-filler-card__marks {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.project-home-filler-card--trace .project-home-filler-card__marks span {
+  height: 1px;
+  border-radius: 0;
+}
+
 .project-home-card__menu {
   position: absolute;
   z-index: 5;
@@ -3522,11 +3647,16 @@ button.app-file-tree-row {
   position: relative;
   display: block;
   width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: inherit;
 }
 
 .project-home-card__surface {
   width: 100%;
+  min-width: 0;
   padding: calc(var(--spacing) * 3);
+  overflow-wrap: anywhere;
 }
 
 .project-home-size-switch {
@@ -3607,6 +3737,7 @@ button.app-file-tree-row {
 
 .project-home-surface {
   width: 100%;
+  min-width: 0;
   overflow: visible;
   margin-top: 0;
   --a2ui-color-background: transparent;
@@ -3645,6 +3776,7 @@ button.app-file-tree-row {
 
 .project-home-surface > div {
   width: 100%;
+  min-width: 0;
 }
 
 .project-home-card .project-home-surface {
@@ -3653,6 +3785,16 @@ button.app-file-tree-row {
 
 .project-home-card .project-home-surface > div {
   width: 100%;
+}
+
+.project-home-surface :where(img, video, canvas) {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.project-home-surface :where(iframe, svg) {
+  max-width: 100%;
 }
 
 .project-home-surface :where(h1, h2, h3, h4, h5, h6, p, ul, ol) {
@@ -5090,6 +5232,14 @@ button.app-file-tree-row {
   background: transparent;
 }
 
+.markdown-body img,
+.markdown-body video,
+.markdown-body canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
 .markdown-body a {
   color: var(--color-token-link);
 }
@@ -5979,6 +6129,10 @@ button.app-file-tree-row {
 
   .project-home-card {
     grid-column: span 1;
+  }
+
+  .project-home-filler-card {
+    display: none;
   }
 
   .project-home-sort-row {
