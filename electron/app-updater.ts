@@ -137,7 +137,14 @@ class AppUpdaterService {
       return this.getState()
     }
     try {
-      this.patch({ phase: 'downloading', errorMessage: undefined, percent: 0 })
+      this.patch({
+        phase: 'downloading',
+        errorMessage: undefined,
+        percent: 0,
+        bytesPerSecond: undefined,
+        transferred: undefined,
+        total: undefined,
+      })
       await autoUpdater.downloadUpdate()
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)

@@ -7,6 +7,30 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { AppUpdaterState } from '../../desktop-types'
 import { useI18n } from '../../i18n/i18n'
 
+const DOWNLOAD_PROGRESS_MAX = 100
+
+function getProgressPercent(percent?: number): number | null {
+  if (typeof percent !== 'number' || !Number.isFinite(percent)) return null
+  return Math.min(DOWNLOAD_PROGRESS_MAX, Math.max(0, percent))
+}
+
+function formatPercent(percent: number): string {
+  return `${Math.round(percent)}%`
+}
+
+function formatBytes(bytes?: number): string | null {
+  if (typeof bytes !== 'number' || !Number.isFinite(bytes) || bytes < 0) return null
+  const units = ['B', 'KB', 'MB', 'GB']
+  let value = bytes
+  let unitIndex = 0
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024
+    unitIndex += 1
+  }
+  const maximumFractionDigits = unitIndex === 0 || value >= 10 ? 0 : 1
+  return `${value.toFixed(maximumFractionDigits)} ${units[unitIndex]}`
+}
+
 export function AppUpdateSection() {
   const { t } = useI18n()
   const [state, setState] = useState<AppUpdaterState | null>(null)
@@ -89,6 +113,24 @@ export function AppUpdateSection() {
     void window.desktop?.quitAndInstallAppUpdate?.()
   }, [])
 
+  const progressPercent = getProgressPercent(state?.percent)
+  const progressPercentLabel = progressPercent === null ? null : formatPercent(progressPercent)
+  const progressTransferred = formatBytes(state?.transferred)
+  const progressTotal = formatBytes(state?.total)
+  const progressSpeed = formatBytes(state?.bytesPerSecond)
+  const progressTitle = progressPercentLabel
+    ? t('settings.general.updateDownloadProgress', { percent: progressPercentLabel })
+    : t('settings.general.updateDownloadProgressUnknown')
+  const progressMeta = [
+    progressTransferred && progressTotal
+      ? t('settings.general.updateDownloadSize', { transferred: progressTransferred, total: progressTotal })
+      : progressTransferred
+        ? t('settings.general.updateDownloadTransferred', { transferred: progressTransferred })
+        : null,
+    progressSpeed ? t('settings.general.updateDownloadSpeed', { speed: progressSpeed }) : null,
+  ].filter(Boolean)
+  const showProgress = updaterAvailable && state?.phase === 'downloading'
+
   const showDownload = updaterAvailable && state?.phase === 'error' && Boolean(state.availableVersion)
   const showInstall = updaterAvailable && state?.phase === 'downloaded'
   const showCheck =
@@ -127,7 +169,33 @@ export function AppUpdateSection() {
           </div>
           <div className={`settings-update-status ${statusTone}`} role="status" aria-live="polite">
             <span className="settings-update-status-dot" aria-hidden="true" />
-            <p>{statusText}</p>
+            <div className="settings-update-status-content">
+              <p>{statusText}</p>
+              {showProgress ? (
+                <div
+                  className="settings-update-progress"
+                  role="progressbar"
+                  aria-label={progressTitle}
+                  aria-valuemin={0}
+                  aria-valuemax={DOWNLOAD_PROGRESS_MAX}
+                  aria-valuenow={progressPercent === null ? undefined : Math.round(progressPercent)}
+                >
+                  <div className="settings-update-progress-copy">
+                    <span>{progressTitle}</span>
+                    {progressMeta.length > 0 ? <span>{progressMeta.join(' - ')}</span> : null}
+                  </div>
+                  <div
+                    className={`settings-update-progress-track${progressPercent === null ? ' is-indeterminate' : ''}`}
+                    aria-hidden="true"
+                  >
+                    <span
+                      className="settings-update-progress-fill"
+                      style={progressPercent === null ? undefined : { width: `${progressPercent}%` }}
+                    />
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
 

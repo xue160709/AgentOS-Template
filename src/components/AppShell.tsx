@@ -874,6 +874,16 @@ export function AppShell() {
         const existing = prev.threads.find((thread) => thread.id === seed.id)
         const title = seed.title || (event.task.mode === 'agent' ? '执行agent' : `执行${event.task.title}`)
         if (existing) {
+          const nextUpdatedAt = Math.max(existing.updatedAt, seed.updatedAt || now)
+          if (
+            existing.projectId === project.id &&
+            existing.title === title &&
+            existing.purpose === 'task-run' &&
+            existing.homePluginSlug === event.slug &&
+            existing.updatedAt === nextUpdatedAt
+          ) {
+            return prev
+          }
           const nextThreads = prev.threads.map((thread) =>
             thread.id === seed.id
               ? {
@@ -882,7 +892,7 @@ export function AppShell() {
                   title,
                   purpose: 'task-run' as const,
                   homePluginSlug: event.slug,
-                  updatedAt: Math.max(thread.updatedAt, seed.updatedAt || now),
+                  updatedAt: nextUpdatedAt,
                 }
               : thread,
           )

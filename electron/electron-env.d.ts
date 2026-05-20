@@ -19,6 +19,7 @@ import type {
   AppUpdaterState,
   AppUiLocale,
   DesktopPreferences,
+  HomePluginDeleteResult,
   HomePluginOrderSaveResult,
   HomePluginLayoutSaveResult,
   HomePluginRunOptions,
@@ -83,6 +84,7 @@ declare global {
         order: string[],
         cards: Array<{ slug: string; preferredSize: import('../src/desktop-types').HomePluginCardSize }>,
       ) => Promise<HomePluginLayoutSaveResult>
+      deleteHomePlugin?: (rootPath: string, slug: string) => Promise<HomePluginDeleteResult>
       saveTaskHomePlugin?: (
         rootPath: string,
         payload: Omit<HomePluginTaskConfig, 'version' | 'slug' | 'createdAt' | 'updatedAt'> & { slug?: string },

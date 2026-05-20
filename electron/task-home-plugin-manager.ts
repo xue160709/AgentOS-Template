@@ -61,6 +61,7 @@ type TaskRunSession = {
   threadSeed: HomePluginTaskEvent['thread']
   activeRequestId?: string
   cancelled: boolean
+  deleted?: boolean
   started: Promise<{ requestId: string }>
   resolveStarted: (value: { requestId: string }) => void
   settleWaiters: Map<string, (outcome: TaskRequestOutcome) => void>
@@ -340,6 +341,7 @@ export class TaskHomePluginManager {
     this.activeSessions.set(key, session)
 
     void this.runTaskSession(session).catch((error) => {
+      if (session.deleted) return
       const message = error instanceof Error ? error.message : String(error)
       record.runtime.status = 'error'
       record.runtime.lastError = message
@@ -401,6 +403,45 @@ export class TaskHomePluginManager {
       this.finishSession(session, { ok: false, requestId: '', status: 'cancelled', message: '已终止' })
     }
     return { ok: true, rootPath: resolvedProjectPath, slug, stopped: true }
+  }
+
+  /** 删除卡片前清理任务调度与活动运行 / Clear task timers and active runs before deleting a card */
+  async prepareDeleteTask(projectPath: string, slug: string): Promise<void> {
+    const resolvedProjectPath = resolveProjectPath(projectPath)
+    const normalizedSlug = normalizeSlug(slug)
+    if (!normalizedSlug) return
+
+    const key = this.taskKey(resolvedProjectPath, normalizedSlug)
+    const timer = this.scheduleTimers.get(key)
+    if (timer) {
+      clearTimeout(timer)
+      this.scheduleTimers.delete(key)
+    }
+
+    const session = this.activeSessions.get(key)
+    if (session) {
+      session.cancelled = true
+      session.deleted = true
+      const activeRequestId = session.record.runtime.requestId || session.activeRequestId
+      if (activeRequestId && this.deps.getRunner()) {
+        try {
+          await this.deps.getRunner()!.cancel(activeRequestId)
+        } catch {
+          /* best-effort cancellation before removing the card files */
+        }
+      }
+      for (const [requestId, resolve] of session.settleWaiters.entries()) {
+        this.requestToTaskKey.delete(requestId)
+        resolve({ ok: false, requestId, status: 'cancelled', message: '任务卡片已删除' })
+      }
+      session.settleWaiters.clear()
+      this.activeSessions.delete(key)
+    }
+
+    for (const [requestId, taskKey] of this.requestToTaskKey.entries()) {
+      if (taskKey === key) this.requestToTaskKey.delete(requestId)
+    }
+    this.records.delete(key)
   }
 
   /** 处理 Claude 事件并推动任务运行态 / Mirror Claude events into task runtime state */
@@ -544,6 +585,7 @@ export class TaskHomePluginManager {
       record.runtime.detail = '任务完成'
       record.runtime.lastCompletedAt = new Date().toISOString()
     }
+    if (session.deleted) return
     record.runtime.updatedAt = new Date().toISOString()
     await this.flushRuntime(record, session.threadSeed)
     this.finishSession(session)
@@ -662,29 +704,32 @@ export class TaskHomePluginManager {
       const nextRunAt = record.task.enabled && record.task.schedule.enabled && record.runtime.status !== 'running'
         ? computeNextRunAt(record, Date.now())
         : undefined
-      record.runtime.nextRunAt = nextRunAt ? new Date(nextRunAt).toISOString() : undefined
-      void writeJson(record.runtimePath, record.runtime)
-      this.emitTaskEvent(record)
+      this.syncScheduledNextRun(record, nextRunAt)
       return
     }
 
     const nextRunAt = computeNextRunAt(record, Date.now())
     if (!nextRunAt) {
-      record.runtime.nextRunAt = undefined
-      void writeJson(record.runtimePath, record.runtime)
-      this.emitTaskEvent(record)
+      this.syncScheduledNextRun(record, undefined)
       return
     }
 
     const delay = Math.max(250, nextRunAt - Date.now())
-    record.runtime.nextRunAt = new Date(nextRunAt).toISOString()
-    void writeJson(record.runtimePath, record.runtime)
-    this.emitTaskEvent(record)
+    this.syncScheduledNextRun(record, nextRunAt)
     const timer = setTimeout(() => {
       this.scheduleTimers.delete(key)
       void this.startTask(record.projectPath, record.task.slug)
     }, delay)
     this.scheduleTimers.set(key, timer)
+  }
+
+  private syncScheduledNextRun(record: ManagedTaskRecord, nextRunAt: number | null | undefined): void {
+    const nextValue = nextRunAt ? new Date(nextRunAt).toISOString() : undefined
+    if (record.runtime.nextRunAt === nextValue) return
+    record.runtime.nextRunAt = nextValue
+    record.runtime.updatedAt = new Date().toISOString()
+    void writeJson(record.runtimePath, record.runtime)
+    this.emitTaskEvent(record)
   }
 
   private emitTaskEvent(record: ManagedTaskRecord, threadSeed?: HomePluginTaskEvent['thread']): void {

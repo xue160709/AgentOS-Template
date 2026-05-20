@@ -2908,6 +2908,13 @@ button.app-file-tree-row {
   line-height: 1.5;
 }
 
+.settings-update-status-content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: calc(var(--spacing) * 2);
+}
+
 .settings-update-status-dot {
   width: 8px;
   height: 8px;
@@ -2945,6 +2952,58 @@ button.app-file-tree-row {
   background: var(--color-token-error-foreground);
 }
 
+.settings-update-progress {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: calc(var(--spacing) * 1.5);
+}
+
+.settings-update-progress-copy {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--spacing) * 1) calc(var(--spacing) * 2);
+  align-items: baseline;
+  justify-content: space-between;
+  color: var(--color-token-description-foreground);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
+.settings-update-progress-copy span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.settings-update-progress-copy span:first-child {
+  font-weight: var(--font-weight-medium);
+  color: var(--color-token-text-primary);
+}
+
+.settings-update-progress-track {
+  position: relative;
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: color-mix(in oklab, var(--blue-500) 13%, var(--color-token-border-light));
+}
+
+.settings-update-progress-fill {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--blue-500);
+  transition: width 180ms ease;
+}
+
+.settings-update-progress-track.is-indeterminate .settings-update-progress-fill {
+  position: absolute;
+  width: 42%;
+  transform: translateX(-100%);
+  animation: settings-update-progress-indeterminate 1.1s ease-in-out infinite;
+}
+
 .settings-update-actions {
   display: flex;
   flex-wrap: wrap;
@@ -2967,6 +3026,26 @@ button.app-file-tree-row {
   font-size: var(--text-xs);
   line-height: 1.45;
   white-space: pre-wrap;
+}
+
+@keyframes settings-update-progress-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(240%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-update-progress-fill {
+    transition: none;
+  }
+
+  .settings-update-progress-track.is-indeterminate .settings-update-progress-fill {
+    animation: none;
+    transform: translateX(0);
+  }
 }
 
 .settings-editor-actions {
@@ -3480,6 +3559,15 @@ button.app-file-tree-row {
 .project-home-size-switch__button:hover:not(:disabled) {
   color: var(--color-token-text-primary);
   background: var(--color-token-list-hover-background);
+}
+
+.project-home-icon-button--danger {
+  color: var(--color-token-error-foreground);
+}
+
+.project-home-icon-button--danger:hover:not(:disabled) {
+  border-color: color-mix(in oklab, var(--color-token-error-foreground) 34%, transparent);
+  background: color-mix(in oklab, var(--color-token-error-foreground) 8%, transparent);
 }
 
 .project-home-card:hover .project-home-card__menu-button,
@@ -4035,7 +4123,7 @@ button.app-file-tree-row {
 
 .project-home-sort-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto auto auto;
   align-items: center;
   gap: calc(var(--spacing) * 1.5);
   padding: calc(var(--spacing) * 1.5);
@@ -5894,7 +5982,7 @@ button.app-file-tree-row {
   }
 
   .project-home-sort-row {
-    grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+    grid-template-columns: auto minmax(0, 1fr) auto auto auto auto;
   }
 
   .project-home-skill-picker,

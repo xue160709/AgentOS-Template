@@ -47,6 +47,7 @@ export function ProjectHomeSurface({
   const [sortDialogOpen, setSortDialogOpen] = useState(false)
   const [draftOrder, setDraftOrder] = useState<string[]>([])
   const [draftSizes, setDraftSizes] = useState<Record<string, HomePluginCardSize>>({})
+  const [deletingSlug, setDeletingSlug] = useState('')
   const addMenuRef = useRef<HTMLDivElement>(null)
 
   const loadHomePlugins = useCallback(async () => {
@@ -160,6 +161,46 @@ export function ProjectHomeSurface({
     }
   }
 
+  const deleteCard = async (item: HomePluginRunItem) => {
+    const deleteHomePlugin = window.desktop?.deleteHomePlugin
+    if (!deleteHomePlugin) {
+      setError(t('workspace.deleteAgentCardUnavailable'))
+      return
+    }
+    if (deletingSlug) return
+    const pluginPath = `${project.path}/.agents/home-plugins/${item.slug}`
+    const confirmed = window.confirm(t('workspace.deleteAgentCardConfirm', { name: item.manifest.name, path: pluginPath }))
+    if (!confirmed) return
+
+    setDeletingSlug(item.slug)
+    try {
+      const result = await deleteHomePlugin(project.path, item.slug)
+      if (!result.ok) {
+        setError(result.message)
+        return
+      }
+      const nextPlugins = plugins.filter((plugin) => plugin.slug !== item.slug)
+      const nextHashes: Record<string, string> = {}
+      for (const plugin of nextPlugins) {
+        if (plugin.outputHash) nextHashes[plugin.slug] = plugin.outputHash
+      }
+      outputHashesRef.current = nextHashes
+      pluginCache.set(cacheKey, { hashes: nextHashes, plugins: nextPlugins })
+      setPlugins(nextPlugins)
+      setDraftOrder((current) => current.filter((slug) => slug !== item.slug))
+      setDraftSizes((current) => {
+        const next = { ...current }
+        delete next[item.slug]
+        return next
+      })
+      window.dispatchEvent(new CustomEvent('project-home:refresh'))
+    } catch (error) {
+      setError(error instanceof Error ? error.message : t('workspace.deleteAgentCardFailed'))
+    } finally {
+      setDeletingSlug('')
+    }
+  }
+
   return (
     <div className="project-home-area">
       <div className="project-home-toolbar">
@@ -268,6 +309,8 @@ export function ProjectHomeSurface({
           draftSizes={draftSizes}
           onDraftOrderChange={setDraftOrder}
           onDraftSizeChange={(slug, preferredSize) => setDraftSizes((prev) => ({ ...prev, [slug]: preferredSize }))}
+          deletingSlug={deletingSlug}
+          onDelete={(item) => void deleteCard(item)}
           onClose={() => setSortDialogOpen(false)}
           onSave={() => void saveSortOrder()}
         />
@@ -919,6 +962,8 @@ function SortCardsDialog({
   draftSizes,
   onDraftOrderChange,
   onDraftSizeChange,
+  deletingSlug,
+  onDelete,
   onClose,
   onSave,
 }: {
@@ -927,6 +972,8 @@ function SortCardsDialog({
   draftSizes: Record<string, HomePluginCardSize>
   onDraftOrderChange: (order: string[]) => void
   onDraftSizeChange: (slug: string, preferredSize: HomePluginCardSize) => void
+  deletingSlug: string
+  onDelete: (item: HomePluginRunItem) => void
   onClose: () => void
   onSave: () => void
 }) {
@@ -1006,6 +1053,16 @@ function SortCardsDialog({
               </button>
               <button type="button" className="project-home-icon-button" disabled={index === ordered.length - 1} onClick={() => move(item.slug, 1)} aria-label={t('workspace.moveCardDown')}>
                 <IconInline name="arrowDown" />
+              </button>
+              <button
+                type="button"
+                className="project-home-icon-button project-home-icon-button--danger"
+                disabled={Boolean(deletingSlug)}
+                title={t('workspace.deleteAgentCard')}
+                onClick={() => onDelete(item)}
+                aria-label={t('workspace.deleteAgentCard')}
+              >
+                <IconInline name={deletingSlug === item.slug ? 'refresh' : 'trash'} />
               </button>
             </div>
           ))}

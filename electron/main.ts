@@ -24,7 +24,7 @@ import { ClaudeAgentSettingsStore } from './claude-agent-settings'
 import { ChatWorkspaceStore } from './chat-workspace-store'
 import { DesktopPreferencesStore } from './desktop-preferences-store'
 import { loadMainProcessEnv } from './env-loader'
-import { runProjectHomePlugin, saveProjectHomePluginLayout, saveProjectHomePluginOrder } from './home-plugin-runner'
+import { deleteProjectHomePlugin, runProjectHomePlugin, saveProjectHomePluginLayout, saveProjectHomePluginOrder } from './home-plugin-runner'
 import { installSafeStdStreamHandlers } from './safe-console'
 import { TaskHomePluginManager } from './task-home-plugin-manager'
 import { normalizeUiLocale } from './ui-locale'
@@ -728,6 +728,18 @@ if (gotSingleInstanceLock) {
     })
     ipcMain.handle('desktop:save-home-plugin-layout', (_event, rootPath: string, order: unknown, cards: unknown) => {
       return saveProjectHomePluginLayout(rootPath, order, cards)
+    })
+    ipcMain.handle('desktop:delete-home-plugin', async (_event, rootPath: string, slug: unknown) => {
+      if (typeof slug === 'string') {
+        try {
+          await taskHomePluginManager?.prepareDeleteTask(rootPath, slug)
+        } catch {
+          /* deletion below returns the user-facing path error */
+        }
+      }
+      const result = await deleteProjectHomePlugin(rootPath, slug)
+      if (result.ok) void taskHomePluginManager?.refreshFromWorkspace()
+      return result
     })
     ipcMain.handle('desktop:save-task-home-plugin', (_event, rootPath: string, payload: unknown) => {
       return getTaskHomePluginManager().saveTask(rootPath, payload as Parameters<TaskHomePluginManager['saveTask']>[1])
