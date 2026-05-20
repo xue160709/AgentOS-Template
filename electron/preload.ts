@@ -7,6 +7,7 @@ import { ipcRenderer, contextBridge, type IpcRendererEvent } from 'electron'
 import type {
   AppUpdaterState,
   DesktopPreferences,
+  HomePluginDeleteResult,
   HomePluginTaskEvent,
   HomePluginTaskReadResult,
   HomePluginTaskRunResult,
@@ -70,6 +71,9 @@ contextBridge.exposeInMainWorld('desktop', {
   saveHomePluginLayout(rootPath: string, order: unknown, cards: unknown) {
     return ipcRenderer.invoke('desktop:save-home-plugin-layout', rootPath, order, cards)
   },
+  deleteHomePlugin(rootPath: string, slug: string) {
+    return ipcRenderer.invoke('desktop:delete-home-plugin', rootPath, slug) as Promise<HomePluginDeleteResult>
+  },
   saveTaskHomePlugin(rootPath: string, payload: unknown) {
     return ipcRenderer.invoke('desktop:save-task-home-plugin', rootPath, payload) as Promise<HomePluginTaskSaveResult>
   },
@@ -117,6 +121,9 @@ contextBridge.exposeInMainWorld('desktop', {
   },
   openPath(targetPath: string) {
     return ipcRenderer.invoke('desktop:open-path', targetPath) as Promise<void>
+  },
+  openExternal(url: string) {
+    return ipcRenderer.invoke('desktop:open-external', url) as Promise<void>
   },
   getDesktopPreferences() {
     return ipcRenderer.invoke('desktop-preferences:get') as Promise<DesktopPreferences>

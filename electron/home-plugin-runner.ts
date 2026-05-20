@@ -13,6 +13,7 @@ import { formatProjectPathError, resolveProjectPath } from './project-path'
 import type {
   HomePluginCardSize,
   HomePluginCardLayoutItem,
+  HomePluginDeleteResult,
   HomePluginManifest,
   HomePluginLayoutSaveResult,
   HomePluginOrderSaveResult,
@@ -192,6 +193,50 @@ export async function saveProjectHomePluginLayout(
     return {
       ok: false,
       rootPath: resolvedRootPath,
+      message: formatProjectPathError(error),
+    }
+  }
+}
+
+/** 删除单张 Home Plugin 卡片及本地文件 / Delete one Home Plugin card and its local files */
+export async function deleteProjectHomePlugin(rootPath: string, rawSlug: unknown): Promise<HomePluginDeleteResult> {
+  const resolvedRootPath = resolveProjectPath(rootPath)
+  const slug = typeof rawSlug === 'string' ? normalizePluginSlug(rawSlug) : ''
+  const pluginRootPath = path.join(resolvedRootPath, HOME_PLUGIN_ROOT_DIR)
+  if (!slug) {
+    return { ok: false, rootPath: resolvedRootPath, message: '卡片标识无效' }
+  }
+
+  try {
+    const rootStat = await fs.stat(resolvedRootPath)
+    if (!rootStat.isDirectory()) {
+      return { ok: false, rootPath: resolvedRootPath, slug, message: '当前项目路径不是文件夹' }
+    }
+
+    const pluginPath = path.join(pluginRootPath, slug)
+    const relative = path.relative(pluginRootPath, pluginPath)
+    if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+      return { ok: false, rootPath: resolvedRootPath, slug, message: '卡片路径无效' }
+    }
+
+    const pluginStat = await fs.stat(pluginPath).catch(() => null)
+    if (!pluginStat?.isDirectory()) {
+      return { ok: false, rootPath: resolvedRootPath, slug, message: '卡片文件夹不存在或已被删除' }
+    }
+
+    await fs.rm(pluginPath, { recursive: true, force: true })
+
+    const order = (await readHomePluginOrder(pluginRootPath)).filter((item) => item !== slug)
+    await fs.mkdir(pluginRootPath, { recursive: true })
+    await fs.writeFile(path.join(pluginRootPath, HOME_PLUGIN_ORDER), `${JSON.stringify(order, null, 2)}\n`, 'utf8')
+    outputHashCache.delete(pluginCacheKey(resolvedRootPath, slug))
+
+    return { ok: true, rootPath: resolvedRootPath, pluginRootPath, slug, deletedPath: pluginPath, order }
+  } catch (error) {
+    return {
+      ok: false,
+      rootPath: resolvedRootPath,
+      slug,
       message: formatProjectPathError(error),
     }
   }

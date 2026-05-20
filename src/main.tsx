@@ -34,3 +34,25 @@ createRoot(appRoot).render(
 installWindowSafeAreaListeners((area) => {
   applySafeAreaToDocument(area)
 })
+
+installExternalLinkHandler()
+
+function installExternalLinkHandler() {
+  document.addEventListener('click', (event) => {
+    const anchor = (event.target as Element | null)?.closest?.('a[href]')
+    if (!anchor) return
+
+    const href = anchor.getAttribute('href') ?? ''
+    if (!/^https?:\/\//i.test(href)) return
+
+    event.preventDefault()
+    event.stopPropagation()
+
+    if (window.desktop?.openExternal) {
+      void window.desktop.openExternal(href)
+      return
+    }
+
+    window.open(href, '_blank', 'noopener,noreferrer')
+  })
+}

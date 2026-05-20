@@ -19,6 +19,7 @@ import type {
   AppUpdaterState,
   AppUiLocale,
   DesktopPreferences,
+  HomePluginDeleteResult,
   HomePluginOrderSaveResult,
   HomePluginLayoutSaveResult,
   HomePluginRunOptions,
@@ -83,6 +84,7 @@ declare global {
         order: string[],
         cards: Array<{ slug: string; preferredSize: import('../src/desktop-types').HomePluginCardSize }>,
       ) => Promise<HomePluginLayoutSaveResult>
+      deleteHomePlugin?: (rootPath: string, slug: string) => Promise<HomePluginDeleteResult>
       saveTaskHomePlugin?: (
         rootPath: string,
         payload: Omit<HomePluginTaskConfig, 'version' | 'slug' | 'createdAt' | 'updatedAt'> & { slug?: string },
@@ -111,6 +113,8 @@ declare global {
       showItemInFolder?: (targetPath: string) => Promise<void>
       /** 使用系统默认应用打开路径 / Open path with the system default app */
       openPath?: (targetPath: string) => Promise<void>
+      /** 在系统默认浏览器中打开 HTTP(S) 链接 / Open HTTP(S) links in the system default browser */
+      openExternal?: (url: string) => Promise<void>
       /** 可选的桌面端 PNG 剪贴板桥；不存在时渲染层回退浏览器 Clipboard API / Optional PNG clipboard bridge; renderer falls back when absent */
       copyPngToClipboard?: (dataUrl: string) => Promise<boolean>
       /** 桌面端 SVG 渲染到图片剪贴板 / Render SVG through Electron and write it as an image clipboard item */

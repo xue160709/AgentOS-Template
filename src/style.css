@@ -2908,6 +2908,13 @@ button.app-file-tree-row {
   line-height: 1.5;
 }
 
+.settings-update-status-content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: calc(var(--spacing) * 2);
+}
+
 .settings-update-status-dot {
   width: 8px;
   height: 8px;
@@ -2945,6 +2952,58 @@ button.app-file-tree-row {
   background: var(--color-token-error-foreground);
 }
 
+.settings-update-progress {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: calc(var(--spacing) * 1.5);
+}
+
+.settings-update-progress-copy {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--spacing) * 1) calc(var(--spacing) * 2);
+  align-items: baseline;
+  justify-content: space-between;
+  color: var(--color-token-description-foreground);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
+.settings-update-progress-copy span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.settings-update-progress-copy span:first-child {
+  font-weight: var(--font-weight-medium);
+  color: var(--color-token-text-primary);
+}
+
+.settings-update-progress-track {
+  position: relative;
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: color-mix(in oklab, var(--blue-500) 13%, var(--color-token-border-light));
+}
+
+.settings-update-progress-fill {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--blue-500);
+  transition: width 180ms ease;
+}
+
+.settings-update-progress-track.is-indeterminate .settings-update-progress-fill {
+  position: absolute;
+  width: 42%;
+  transform: translateX(-100%);
+  animation: settings-update-progress-indeterminate 1.1s ease-in-out infinite;
+}
+
 .settings-update-actions {
   display: flex;
   flex-wrap: wrap;
@@ -2967,6 +3026,26 @@ button.app-file-tree-row {
   font-size: var(--text-xs);
   line-height: 1.45;
   white-space: pre-wrap;
+}
+
+@keyframes settings-update-progress-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(240%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-update-progress-fill {
+    transition: none;
+  }
+
+  .settings-update-progress-track.is-indeterminate .settings-update-progress-fill {
+    animation: none;
+    transform: translateX(0);
+  }
 }
 
 .settings-editor-actions {
@@ -3374,6 +3453,7 @@ button.app-file-tree-row {
 }
 
 .project-home-card {
+  --project-home-card-compact-height: 292px;
   position: relative;
   grid-column: span var(--home-card-span, 1);
   min-width: 0;
@@ -3396,6 +3476,138 @@ button.app-file-tree-row {
   box-shadow:
     0 1px 2px rgb(0 0 0 / 0.05),
     0 18px 42px -28px color-mix(in oklab, var(--color-token-foreground) 52%, transparent);
+}
+
+.project-home-filler-card {
+  position: relative;
+  grid-column: span var(--home-card-span, 1);
+  min-width: 0;
+  min-height: var(--project-home-card-compact-height, 292px);
+  overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--color-token-border) 42%, transparent);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(90deg, color-mix(in oklab, var(--color-token-border-light) 28%, transparent) 1px, transparent 1px),
+    linear-gradient(0deg, color-mix(in oklab, var(--color-token-border-light) 24%, transparent) 1px, transparent 1px),
+    color-mix(in oklab, var(--color-token-input-background) 86%, var(--color-token-main-surface-primary));
+  background-size: 32px 32px;
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, var(--color-token-main-surface-primary) 88%, transparent),
+    0 10px 28px -30px color-mix(in oklab, var(--color-token-foreground) 38%, transparent);
+  opacity: 0.9;
+  pointer-events: none;
+  user-select: none;
+}
+
+.project-home-filler-card--span-1 {
+  min-height: var(--project-home-card-compact-height, 292px);
+}
+
+.project-home-filler-card::before {
+  content: '';
+  position: absolute;
+  inset: calc(var(--spacing) * 3);
+  border: 1px solid color-mix(in oklab, var(--color-token-border-light) 46%, transparent);
+  border-radius: calc(var(--radius-md) - 2px);
+}
+
+.project-home-filler-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(115deg, transparent 0 34%, color-mix(in oklab, var(--color-token-main-surface-primary) 62%, transparent) 34% 36%, transparent 36% 100%),
+    linear-gradient(115deg, transparent 0 70%, color-mix(in oklab, var(--color-token-main-surface-primary) 50%, transparent) 70% 71%, transparent 71% 100%);
+}
+
+.project-home-filler-card__rule {
+  position: absolute;
+  right: calc(var(--spacing) * 3);
+  bottom: calc(var(--spacing) * 3);
+  left: calc(var(--spacing) * 3);
+  z-index: 1;
+  height: 1px;
+  background: color-mix(in oklab, var(--color-token-border) 36%, transparent);
+}
+
+.project-home-filler-card__marks {
+  position: absolute;
+  z-index: 1;
+  inset: calc(var(--spacing) * 5);
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: calc(var(--spacing) * 2);
+  align-content: center;
+  opacity: 0.78;
+}
+
+.project-home-filler-card__marks span {
+  display: block;
+  width: 6px;
+  height: 6px;
+  justify-self: center;
+  border-radius: var(--radius-full);
+  background: color-mix(in oklab, var(--color-token-text-tertiary) 72%, transparent);
+}
+
+.project-home-filler-card__marks span:nth-child(3n + 1) {
+  opacity: 0.62;
+  transform: translateY(calc(var(--spacing) * -2));
+}
+
+.project-home-filler-card__marks span:nth-child(3n + 2) {
+  opacity: 0.86;
+  width: min(52px, 100%);
+  height: 2px;
+}
+
+.project-home-filler-card__marks span:nth-child(3n) {
+  opacity: 0.5;
+  transform: translateY(calc(var(--spacing) * 2));
+}
+
+.project-home-filler-card--signal {
+  background:
+    repeating-linear-gradient(0deg, color-mix(in oklab, var(--color-token-border-light) 24%, transparent) 0 1px, transparent 1px 20px),
+    color-mix(in oklab, var(--color-token-input-background) 86%, var(--color-token-main-surface-primary));
+}
+
+.project-home-filler-card--signal .project-home-filler-card__marks {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  align-items: end;
+  opacity: 0.68;
+}
+
+.project-home-filler-card--signal .project-home-filler-card__marks span {
+  width: 100%;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklab, var(--color-token-text-tertiary) 30%, transparent);
+  transform: none;
+}
+
+.project-home-filler-card--signal .project-home-filler-card__marks span:nth-child(2n) {
+  height: 44px;
+}
+
+.project-home-filler-card--signal .project-home-filler-card__marks span:nth-child(3n) {
+  height: 16px;
+}
+
+.project-home-filler-card--trace {
+  background:
+    repeating-linear-gradient(90deg, transparent 0 18px, color-mix(in oklab, var(--color-token-border-light) 24%, transparent) 18px 19px),
+    color-mix(in oklab, var(--color-token-input-background) 86%, var(--color-token-main-surface-primary));
+}
+
+.project-home-filler-card--trace .project-home-filler-card__marks {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  opacity: 0.62;
+}
+
+.project-home-filler-card--trace .project-home-filler-card__marks span {
+  height: 1px;
+  border-radius: 0;
 }
 
 .project-home-card__menu {
@@ -3443,11 +3655,21 @@ button.app-file-tree-row {
   position: relative;
   display: block;
   width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: inherit;
 }
 
 .project-home-card__surface {
   width: 100%;
+  min-width: 0;
   padding: calc(var(--spacing) * 3);
+  overflow-wrap: anywhere;
+}
+
+.project-home-card--small .project-home-card__surface,
+.project-home-card--medium .project-home-card__surface {
+  min-height: var(--project-home-card-compact-height);
 }
 
 .project-home-size-switch {
@@ -3480,6 +3702,15 @@ button.app-file-tree-row {
 .project-home-size-switch__button:hover:not(:disabled) {
   color: var(--color-token-text-primary);
   background: var(--color-token-list-hover-background);
+}
+
+.project-home-icon-button--danger {
+  color: var(--color-token-error-foreground);
+}
+
+.project-home-icon-button--danger:hover:not(:disabled) {
+  border-color: color-mix(in oklab, var(--color-token-error-foreground) 34%, transparent);
+  background: color-mix(in oklab, var(--color-token-error-foreground) 8%, transparent);
 }
 
 .project-home-card:hover .project-home-card__menu-button,
@@ -3519,6 +3750,7 @@ button.app-file-tree-row {
 
 .project-home-surface {
   width: 100%;
+  min-width: 0;
   overflow: visible;
   margin-top: 0;
   --a2ui-color-background: transparent;
@@ -3557,6 +3789,7 @@ button.app-file-tree-row {
 
 .project-home-surface > div {
   width: 100%;
+  min-width: 0;
 }
 
 .project-home-card .project-home-surface {
@@ -3565,6 +3798,16 @@ button.app-file-tree-row {
 
 .project-home-card .project-home-surface > div {
   width: 100%;
+}
+
+.project-home-surface :where(img, video, canvas) {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.project-home-surface :where(iframe, svg) {
+  max-width: 100%;
 }
 
 .project-home-surface :where(h1, h2, h3, h4, h5, h6, p, ul, ol) {
@@ -4035,7 +4278,7 @@ button.app-file-tree-row {
 
 .project-home-sort-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto auto auto;
   align-items: center;
   gap: calc(var(--spacing) * 1.5);
   padding: calc(var(--spacing) * 1.5);
@@ -5002,6 +5245,14 @@ button.app-file-tree-row {
   background: transparent;
 }
 
+.markdown-body img,
+.markdown-body video,
+.markdown-body canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
 .markdown-body a {
   color: var(--color-token-link);
 }
@@ -5893,8 +6144,12 @@ button.app-file-tree-row {
     grid-column: span 1;
   }
 
+  .project-home-filler-card {
+    display: none;
+  }
+
   .project-home-sort-row {
-    grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+    grid-template-columns: auto minmax(0, 1fr) auto auto auto auto;
   }
 
   .project-home-skill-picker,

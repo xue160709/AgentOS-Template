@@ -27,6 +27,12 @@ type ProjectHomeSurfaceProps = {
 }
 
 const pluginCache = new Map<string, { hashes: Record<string, string>; plugins: HomePluginRunItem[] }>()
+const HOME_GRID_COLUMNS = 3
+
+type HomeGridItem =
+  | { kind: 'plugin'; item: HomePluginRunItem }
+  | { kind: 'filler'; id: string; span: 1 | 2; tone: 'grid' | 'signal' | 'trace' }
+type HomeGridFillerItem = Extract<HomeGridItem, { kind: 'filler' }>
 
 /** Runs all card Home Plugins and renders the Agent Mode card grid. */
 export function ProjectHomeSurface({
@@ -47,6 +53,7 @@ export function ProjectHomeSurface({
   const [sortDialogOpen, setSortDialogOpen] = useState(false)
   const [draftOrder, setDraftOrder] = useState<string[]>([])
   const [draftSizes, setDraftSizes] = useState<Record<string, HomePluginCardSize>>({})
+  const [deletingSlug, setDeletingSlug] = useState('')
   const addMenuRef = useRef<HTMLDivElement>(null)
 
   const loadHomePlugins = useCallback(async () => {
@@ -142,6 +149,7 @@ export function ProjectHomeSurface({
   }, [plugins, sortDialogOpen])
 
   const visiblePlugins = plugins.filter((item) => item.status !== 'empty' && hasRenderableMessages(item))
+  const gridItems = useMemo(() => buildHomeGridItems(visiblePlugins), [visiblePlugins])
 
   const saveSortOrder = async () => {
     const layoutCards = Object.entries(draftSizes).map(([slug, preferredSize]) => ({ slug, preferredSize }))
@@ -157,6 +165,46 @@ export function ProjectHomeSurface({
       window.dispatchEvent(new CustomEvent('project-home:refresh'))
     } else {
       setError(result.message)
+    }
+  }
+
+  const deleteCard = async (item: HomePluginRunItem) => {
+    const deleteHomePlugin = window.desktop?.deleteHomePlugin
+    if (!deleteHomePlugin) {
+      setError(t('workspace.deleteAgentCardUnavailable'))
+      return
+    }
+    if (deletingSlug) return
+    const pluginPath = `${project.path}/.agents/home-plugins/${item.slug}`
+    const confirmed = window.confirm(t('workspace.deleteAgentCardConfirm', { name: item.manifest.name, path: pluginPath }))
+    if (!confirmed) return
+
+    setDeletingSlug(item.slug)
+    try {
+      const result = await deleteHomePlugin(project.path, item.slug)
+      if (!result.ok) {
+        setError(result.message)
+        return
+      }
+      const nextPlugins = plugins.filter((plugin) => plugin.slug !== item.slug)
+      const nextHashes: Record<string, string> = {}
+      for (const plugin of nextPlugins) {
+        if (plugin.outputHash) nextHashes[plugin.slug] = plugin.outputHash
+      }
+      outputHashesRef.current = nextHashes
+      pluginCache.set(cacheKey, { hashes: nextHashes, plugins: nextPlugins })
+      setPlugins(nextPlugins)
+      setDraftOrder((current) => current.filter((slug) => slug !== item.slug))
+      setDraftSizes((current) => {
+        const next = { ...current }
+        delete next[item.slug]
+        return next
+      })
+      window.dispatchEvent(new CustomEvent('project-home:refresh'))
+    } catch (error) {
+      setError(error instanceof Error ? error.message : t('workspace.deleteAgentCardFailed'))
+    } finally {
+      setDeletingSlug('')
     }
   }
 
@@ -225,21 +273,25 @@ export function ProjectHomeSurface({
       {!error && visiblePlugins.length === 0 ? <ProjectHomeEmptyState /> : null}
       {!error && visiblePlugins.length > 0 ? (
         <div className="project-home-card-grid">
-          {visiblePlugins.map((item) => (
-            <HomePluginCard
-              key={`${item.slug}:${item.outputHash ?? ''}`}
-              item={item}
-              projectPath={project.path}
-              onEdit={() => {
-                if (item.manifest.kind === 'task') {
-                  setEditingTaskSlug(item.slug)
-                  setTaskDialogOpen(true)
-                  return
-                }
-                onEditHomePluginCard(item)
-              }}
-            />
-          ))}
+          {gridItems.map((gridItem) =>
+            gridItem.kind === 'filler' ? (
+              <HomeGridFiller key={gridItem.id} span={gridItem.span} tone={gridItem.tone} />
+            ) : (
+              <HomePluginCard
+                key={`${gridItem.item.slug}:${gridItem.item.outputHash ?? ''}`}
+                item={gridItem.item}
+                projectPath={project.path}
+                onEdit={() => {
+                  if (gridItem.item.manifest.kind === 'task') {
+                    setEditingTaskSlug(gridItem.item.slug)
+                    setTaskDialogOpen(true)
+                    return
+                  }
+                  onEditHomePluginCard(gridItem.item)
+                }}
+              />
+            ),
+          )}
         </div>
       ) : null}
 
@@ -268,10 +320,31 @@ export function ProjectHomeSurface({
           draftSizes={draftSizes}
           onDraftOrderChange={setDraftOrder}
           onDraftSizeChange={(slug, preferredSize) => setDraftSizes((prev) => ({ ...prev, [slug]: preferredSize }))}
+          deletingSlug={deletingSlug}
+          onDelete={(item) => void deleteCard(item)}
           onClose={() => setSortDialogOpen(false)}
           onSave={() => void saveSortOrder()}
         />
       ) : null}
+    </div>
+  )
+}
+
+function HomeGridFiller({ span, tone }: Pick<HomeGridFillerItem, 'span' | 'tone'>) {
+  const rowSpan = 10
+  return (
+    <div
+      className={`project-home-filler-card project-home-filler-card--span-${span} project-home-filler-card--${tone}`}
+      aria-hidden="true"
+      role="presentation"
+      style={{ '--home-card-span': span, gridRowEnd: `span ${rowSpan}` } as CSSProperties}
+    >
+      <div className="project-home-filler-card__rule" />
+      <div className="project-home-filler-card__marks">
+        {Array.from({ length: span === 1 ? 7 : 12 }, (_, index) => (
+          <span key={index} />
+        ))}
+      </div>
     </div>
   )
 }
@@ -919,6 +992,8 @@ function SortCardsDialog({
   draftSizes,
   onDraftOrderChange,
   onDraftSizeChange,
+  deletingSlug,
+  onDelete,
   onClose,
   onSave,
 }: {
@@ -927,6 +1002,8 @@ function SortCardsDialog({
   draftSizes: Record<string, HomePluginCardSize>
   onDraftOrderChange: (order: string[]) => void
   onDraftSizeChange: (slug: string, preferredSize: HomePluginCardSize) => void
+  deletingSlug: string
+  onDelete: (item: HomePluginRunItem) => void
   onClose: () => void
   onSave: () => void
 }) {
@@ -1007,6 +1084,16 @@ function SortCardsDialog({
               <button type="button" className="project-home-icon-button" disabled={index === ordered.length - 1} onClick={() => move(item.slug, 1)} aria-label={t('workspace.moveCardDown')}>
                 <IconInline name="arrowDown" />
               </button>
+              <button
+                type="button"
+                className="project-home-icon-button project-home-icon-button--danger"
+                disabled={Boolean(deletingSlug)}
+                title={t('workspace.deleteAgentCard')}
+                onClick={() => onDelete(item)}
+                aria-label={t('workspace.deleteAgentCard')}
+              >
+                <IconInline name={deletingSlug === item.slug ? 'refresh' : 'trash'} />
+              </button>
             </div>
           ))}
         </div>
@@ -1021,6 +1108,47 @@ function SortCardsDialog({
       </div>
     </div>
   )
+}
+
+function buildHomeGridItems(plugins: HomePluginRunItem[]): HomeGridItem[] {
+  const output: HomeGridItem[] = []
+  let column = 1
+  let fillerCount = 0
+
+  const createFiller = (id: string, span: number): HomeGridFillerItem | null => {
+    if (span !== 1 && span !== 2) return null
+    const tones: HomeGridFillerItem['tone'][] = ['grid', 'signal', 'trace']
+    const filler: HomeGridFillerItem = {
+      kind: 'filler',
+      id,
+      span,
+      tone: tones[fillerCount % tones.length],
+    }
+    fillerCount += 1
+    return filler
+  }
+
+  plugins.forEach((item, index) => {
+    const span = Math.min(HOME_GRID_COLUMNS, Math.max(1, sizeToColumnSpan(item.manifest.preferredSize)))
+    const remaining = HOME_GRID_COLUMNS - column + 1
+    if (column > 1 && span > remaining) {
+      const filler = createFiller(`before-${item.slug}-${index}`, remaining)
+      if (filler) output.push(filler)
+      column = 1
+    }
+
+    output.push({ kind: 'plugin', item })
+    column = span >= HOME_GRID_COLUMNS ? 1 : column + span
+    if (column > HOME_GRID_COLUMNS) column = 1
+  })
+
+  if (plugins.length > 0 && column > 1) {
+    const remaining = HOME_GRID_COLUMNS - column + 1
+    const filler = createFiller(`after-${plugins[plugins.length - 1]?.slug ?? 'last'}`, remaining)
+    if (filler) output.push(filler)
+  }
+
+  return output
 }
 
 function useMasonrySpan(ref: RefObject<HTMLElement | null>, deps: unknown[]) {

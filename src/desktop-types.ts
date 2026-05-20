@@ -179,6 +179,23 @@ export type HomePluginLayoutSaveResult =
       message: string
     }
 
+/** Home Plugin 删除结果 / Home Plugin delete result */
+export type HomePluginDeleteResult =
+  | {
+      ok: true
+      rootPath: string
+      pluginRootPath: string
+      slug: string
+      deletedPath: string
+      order: string[]
+    }
+  | {
+      ok: false
+      rootPath: string
+      slug?: string
+      message: string
+    }
+
 /** Home Plugin 任务运行模式 / Home Plugin task execution mode */
 export type HomePluginTaskMode = 'agent' | 'skills'
 
