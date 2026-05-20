@@ -331,7 +331,7 @@ export function ProjectHomeSurface({
 }
 
 function HomeGridFiller({ span, tone }: Pick<HomeGridFillerItem, 'span' | 'tone'>) {
-  const rowSpan = span === 1 ? 7 : 9
+  const rowSpan = 10
   return (
     <div
       className={`project-home-filler-card project-home-filler-card--span-${span} project-home-filler-card--${tone}`}

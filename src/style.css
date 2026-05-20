@@ -3453,6 +3453,7 @@ button.app-file-tree-row {
 }
 
 .project-home-card {
+  --project-home-card-compact-height: 292px;
   position: relative;
   grid-column: span var(--home-card-span, 1);
   min-width: 0;
@@ -3481,32 +3482,32 @@ button.app-file-tree-row {
   position: relative;
   grid-column: span var(--home-card-span, 1);
   min-width: 0;
-  min-height: 244px;
+  min-height: var(--project-home-card-compact-height, 292px);
   overflow: hidden;
-  border: 1px dashed color-mix(in oklab, var(--color-token-border-light) 64%, transparent);
+  border: 1px solid color-mix(in oklab, var(--color-token-border) 42%, transparent);
   border-radius: var(--radius-md);
   background:
-    linear-gradient(90deg, color-mix(in oklab, var(--color-token-border-light) 34%, transparent) 1px, transparent 1px),
-    linear-gradient(0deg, color-mix(in oklab, var(--color-token-border-light) 30%, transparent) 1px, transparent 1px),
-    color-mix(in oklab, var(--color-token-input-background) 72%, transparent);
-  background-size: 28px 28px;
+    linear-gradient(90deg, color-mix(in oklab, var(--color-token-border-light) 28%, transparent) 1px, transparent 1px),
+    linear-gradient(0deg, color-mix(in oklab, var(--color-token-border-light) 24%, transparent) 1px, transparent 1px),
+    color-mix(in oklab, var(--color-token-input-background) 86%, var(--color-token-main-surface-primary));
+  background-size: 32px 32px;
   box-shadow:
-    inset 0 1px 0 color-mix(in oklab, var(--color-token-main-surface-primary) 78%, transparent),
-    0 12px 28px -30px color-mix(in oklab, var(--color-token-foreground) 38%, transparent);
-  opacity: 0.72;
+    inset 0 1px 0 color-mix(in oklab, var(--color-token-main-surface-primary) 88%, transparent),
+    0 10px 28px -30px color-mix(in oklab, var(--color-token-foreground) 38%, transparent);
+  opacity: 0.9;
   pointer-events: none;
   user-select: none;
 }
 
 .project-home-filler-card--span-1 {
-  min-height: 196px;
+  min-height: var(--project-home-card-compact-height, 292px);
 }
 
 .project-home-filler-card::before {
   content: '';
   position: absolute;
-  inset: calc(var(--spacing) * 2.5);
-  border: 1px solid color-mix(in oklab, var(--color-token-border-light) 44%, transparent);
+  inset: calc(var(--spacing) * 3);
+  border: 1px solid color-mix(in oklab, var(--color-token-border-light) 46%, transparent);
   border-radius: calc(var(--radius-md) - 2px);
 }
 
@@ -3515,8 +3516,8 @@ button.app-file-tree-row {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(115deg, transparent 0 38%, color-mix(in oklab, var(--color-token-main-surface-primary) 54%, transparent) 38% 39%, transparent 39% 100%),
-    linear-gradient(115deg, transparent 0 66%, color-mix(in oklab, var(--color-token-main-surface-primary) 44%, transparent) 66% 67%, transparent 67% 100%);
+    linear-gradient(115deg, transparent 0 34%, color-mix(in oklab, var(--color-token-main-surface-primary) 62%, transparent) 34% 36%, transparent 36% 100%),
+    linear-gradient(115deg, transparent 0 70%, color-mix(in oklab, var(--color-token-main-surface-primary) 50%, transparent) 70% 71%, transparent 71% 100%);
 }
 
 .project-home-filler-card__rule {
@@ -3526,75 +3527,82 @@ button.app-file-tree-row {
   left: calc(var(--spacing) * 3);
   z-index: 1;
   height: 1px;
-  background: color-mix(in oklab, var(--color-token-border) 35%, transparent);
+  background: color-mix(in oklab, var(--color-token-border) 36%, transparent);
 }
 
 .project-home-filler-card__marks {
   position: absolute;
   z-index: 1;
-  inset: calc(var(--spacing) * 4);
+  inset: calc(var(--spacing) * 5);
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: calc(var(--spacing) * 1.5);
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: calc(var(--spacing) * 2);
   align-content: center;
+  opacity: 0.78;
 }
 
 .project-home-filler-card__marks span {
   display: block;
-  height: 2px;
+  width: 6px;
+  height: 6px;
+  justify-self: center;
   border-radius: var(--radius-full);
-  background: color-mix(in oklab, var(--color-token-text-tertiary) 46%, transparent);
+  background: color-mix(in oklab, var(--color-token-text-tertiary) 72%, transparent);
 }
 
 .project-home-filler-card__marks span:nth-child(3n + 1) {
-  opacity: 0.36;
+  opacity: 0.62;
   transform: translateY(calc(var(--spacing) * -2));
 }
 
 .project-home-filler-card__marks span:nth-child(3n + 2) {
-  opacity: 0.58;
+  opacity: 0.86;
+  width: min(52px, 100%);
+  height: 2px;
 }
 
 .project-home-filler-card__marks span:nth-child(3n) {
-  opacity: 0.24;
+  opacity: 0.5;
   transform: translateY(calc(var(--spacing) * 2));
 }
 
 .project-home-filler-card--signal {
   background:
-    repeating-linear-gradient(0deg, color-mix(in oklab, var(--color-token-border-light) 28%, transparent) 0 1px, transparent 1px 18px),
-    color-mix(in oklab, var(--color-token-input-background) 78%, transparent);
+    repeating-linear-gradient(0deg, color-mix(in oklab, var(--color-token-border-light) 24%, transparent) 0 1px, transparent 1px 20px),
+    color-mix(in oklab, var(--color-token-input-background) 86%, var(--color-token-main-surface-primary));
 }
 
 .project-home-filler-card--signal .project-home-filler-card__marks {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   align-items: end;
+  opacity: 0.68;
 }
 
 .project-home-filler-card--signal .project-home-filler-card__marks span {
   width: 100%;
-  height: 34px;
+  height: 22px;
   border-radius: var(--radius-sm);
-  background: color-mix(in oklab, var(--color-token-text-tertiary) 22%, transparent);
+  background: color-mix(in oklab, var(--color-token-text-tertiary) 30%, transparent);
   transform: none;
 }
 
 .project-home-filler-card--signal .project-home-filler-card__marks span:nth-child(2n) {
-  height: 58px;
+  height: 44px;
 }
 
 .project-home-filler-card--signal .project-home-filler-card__marks span:nth-child(3n) {
-  height: 24px;
+  height: 16px;
 }
 
 .project-home-filler-card--trace {
   background:
-    repeating-linear-gradient(90deg, transparent 0 18px, color-mix(in oklab, var(--color-token-border-light) 26%, transparent) 18px 19px),
-    color-mix(in oklab, var(--color-token-input-background) 76%, transparent);
+    repeating-linear-gradient(90deg, transparent 0 18px, color-mix(in oklab, var(--color-token-border-light) 24%, transparent) 18px 19px),
+    color-mix(in oklab, var(--color-token-input-background) 86%, var(--color-token-main-surface-primary));
 }
 
 .project-home-filler-card--trace .project-home-filler-card__marks {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  opacity: 0.62;
 }
 
 .project-home-filler-card--trace .project-home-filler-card__marks span {
@@ -3657,6 +3665,11 @@ button.app-file-tree-row {
   min-width: 0;
   padding: calc(var(--spacing) * 3);
   overflow-wrap: anywhere;
+}
+
+.project-home-card--small .project-home-card__surface,
+.project-home-card--medium .project-home-card__surface {
+  min-height: var(--project-home-card-compact-height);
 }
 
 .project-home-size-switch {
