@@ -1,4 +1,0 @@
-interface:
-  display_name: "A2UI Project Home Panel"
-  short_description: "PM/开发/测试闭环定制 A2UI Agent 面板"
-  default_prompt: "Use $a2ui-project-home-panel to inspect this project, decide what the Agent panel should show, implement the project-home Home Plugin, validate it, and include useful data visualization plus open_file interactions."
