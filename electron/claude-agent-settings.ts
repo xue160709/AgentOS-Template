@@ -163,13 +163,12 @@ export class ClaudeAgentSettingsStore {
 
     const provider = selectActiveProvider(settings)
     const providerApiKey = provider?.apiKey ?? ''
-    const envApiKey = readEnv('ANTHROPIC_API_KEY')
 
     const overlay = normalizeString(settings.activeAnthropicModel)
     const primaryModel = normalizeString(provider?.model ?? '')
     const effectiveOverlay =
       overlay && provider && providerAcceptsModel(provider, overlay) ? overlay : ''
-    const resolvedModel = effectiveOverlay || primaryModel || env.model
+    const resolvedModel = effectiveOverlay || primaryModel
 
     const resolved: ClaudeAgentResolvedConfig = {
       configSource: 'settings',
@@ -177,22 +176,20 @@ export class ClaudeAgentSettingsStore {
         ? provider?.authMode === 'authToken'
           ? ''
           : providerApiKey
-        : envApiKey,
+        : '',
       authToken: providerApiKey
         ? provider?.authMode === 'authToken'
           ? providerApiKey
           : ''
-        : envApiKey
-          ? ''
-          : readEnv('ANTHROPIC_AUTH_TOKEN'),
-      baseUrl: provider?.baseUrl || env.baseUrl,
+        : '',
+      baseUrl: provider?.baseUrl || '',
       model: resolvedModel,
       supportsImages: provider
-        ? providerSupportsImagesForModel(provider, resolvedModel, env.supportsImages)
-        : env.supportsImages,
-      defaultHaikuModel: provider?.defaultHaikuModel || env.defaultHaikuModel,
-      defaultOpusModel: provider?.defaultOpusModel || env.defaultOpusModel,
-      defaultSonnetModel: provider?.defaultSonnetModel || env.defaultSonnetModel,
+        ? providerSupportsImagesForModel(provider, resolvedModel, false)
+        : false,
+      defaultHaikuModel: provider?.defaultHaikuModel || '',
+      defaultOpusModel: provider?.defaultOpusModel || '',
+      defaultSonnetModel: provider?.defaultSonnetModel || '',
     }
     safeConsoleInfo('[ClaudeAgentSettingsStore] resolved settings config', {
       settingsFilePath: this.settingsFilePath,
@@ -206,11 +203,6 @@ export class ClaudeAgentSettingsStore {
         opus: provider?.defaultOpusModel || '',
       },
       resolved: summarizeResolvedConfigForLog(resolved),
-      envFallbacks: {
-        hasEnvApiKey: Boolean(envApiKey),
-        envBaseUrl: env.baseUrl,
-        envModel: env.model,
-      },
     })
     return resolved
   }

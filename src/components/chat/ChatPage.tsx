@@ -2016,8 +2016,8 @@ function resolvedChatSupportsImages(snapshot: ClaudeAgentSettingsSnapshot): bool
   if (!provider) return false
   const overlay = settings.activeAnthropicModel?.trim() ?? ''
   const primary = provider.model.trim()
-  const model = overlay && providerAcceptsAnthropicId(provider, overlay) ? overlay : primary || snapshot.env.model
-  return providerSupportsImagesForModel(provider, model, snapshot.env.supportsImages)
+  const model = overlay && providerAcceptsAnthropicId(provider, overlay) ? overlay : primary
+  return providerSupportsImagesForModel(provider, model, false)
 }
 
 function pickerSelectionKeyFromSettings(

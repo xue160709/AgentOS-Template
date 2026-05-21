@@ -261,17 +261,17 @@ export function AppShell() {
         apiKeyUrl: localizedProvider?.apiKeyUrl ?? '',
         authMode: localizedProvider?.authMode ?? 'apiKey',
         apiKey: localizedProvider?.apiKey ?? '',
-        baseUrl: localizedProvider?.baseUrl ?? snapshot.env.baseUrl ?? '',
-        model: localizedProvider?.model ?? snapshot.env.model ?? '',
-        modelSupportsImages: localizedProvider?.modelSupportsImages ?? snapshot.env.supportsImages ?? false,
-        haikuModel: localizedProvider?.defaultHaikuModel ?? snapshot.env.defaultHaikuModel ?? '',
-        haikuSupportsImages: localizedProvider?.defaultHaikuSupportsImages ?? snapshot.env.supportsImages ?? false,
+        baseUrl: localizedProvider?.baseUrl ?? '',
+        model: localizedProvider?.model ?? '',
+        modelSupportsImages: localizedProvider?.modelSupportsImages ?? false,
+        haikuModel: localizedProvider?.defaultHaikuModel ?? '',
+        haikuSupportsImages: localizedProvider?.defaultHaikuSupportsImages ?? false,
         sonnetModel:
-          localizedProvider?.defaultSonnetModel ?? snapshot.env.defaultSonnetModel ?? localizedProvider?.model ?? snapshot.env.model ?? '',
+          localizedProvider?.defaultSonnetModel ?? localizedProvider?.model ?? '',
         sonnetSupportsImages:
-          localizedProvider?.defaultSonnetSupportsImages ?? localizedProvider?.modelSupportsImages ?? snapshot.env.supportsImages ?? false,
-        opusModel: localizedProvider?.defaultOpusModel ?? snapshot.env.defaultOpusModel ?? '',
-        opusSupportsImages: localizedProvider?.defaultOpusSupportsImages ?? snapshot.env.supportsImages ?? false,
+          localizedProvider?.defaultSonnetSupportsImages ?? localizedProvider?.modelSupportsImages ?? false,
+        opusModel: localizedProvider?.defaultOpusModel ?? '',
+        opusSupportsImages: localizedProvider?.defaultOpusSupportsImages ?? false,
       })
       setInitialModelStatus(t('shell.initModelLoaded'))
     },
@@ -911,6 +911,10 @@ export function AppShell() {
     const selectedModel = sonnetModel || primaryModel || opusModel || haikuModel
     if (!selectedModel) {
       setInitialModelStatus(t('shell.initModelRequired'))
+      return false
+    }
+    if (!initialModelForm.apiKey.trim()) {
+      setInitialModelStatus(t('shell.initModelApiKeyRequired'))
       return false
     }
 
@@ -1646,7 +1650,6 @@ export function AppShell() {
                         className="settings-input"
                         autoComplete="off"
                         spellCheck={false}
-                        placeholder={t('shell.initModelApiKeyPlaceholder')}
                         value={initialModelForm.apiKey}
                         onChange={(event) => updateInitialModelField('apiKey', event.target.value)}
                         disabled={initialModelBusy}
