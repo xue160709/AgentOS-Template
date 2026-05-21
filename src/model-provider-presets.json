@@ -20,22 +20,22 @@
       "defaultOpusSupportsImages": true
     },
     {
-      "id": "openrouter",
+      "id": "minimax",
       "name": {
-        "zh": "OpenRouter",
-        "en": "OpenRouter"
+        "zh": "MiniMax-CN",
+        "en": "MiniMax-CN"
       },
-      "apiKeyUrl": "https://openrouter.ai/settings/keys",
-      "baseUrl": "https://openrouter.ai/api",
+      "apiKeyUrl": "https://platform.minimaxi.com/subscribe/token-plan?code=JBlROVn3gJ&source=link",
+      "baseUrl": "https://api.minimaxi.com/anthropic",
       "authMode": "authToken",
-      "model": "anthropic/claude-sonnet-4.6",
-      "defaultHaikuModel": "anthropic/claude-haiku-4.5",
-      "defaultSonnetModel": "anthropic/claude-sonnet-4.6",
-      "defaultOpusModel": "anthropic/claude-opus-4.7",
-      "modelSupportsImages": true,
-      "defaultHaikuSupportsImages": true,
-      "defaultSonnetSupportsImages": true,
-      "defaultOpusSupportsImages": true
+      "model": "MiniMax-M2.7",
+      "defaultHaikuModel": "MiniMax-M2.7",
+      "defaultSonnetModel": "MiniMax-M2.7",
+      "defaultOpusModel": "MiniMax-M2.7",
+      "modelSupportsImages": false,
+      "defaultHaikuSupportsImages": false,
+      "defaultSonnetSupportsImages": false,
+      "defaultOpusSupportsImages": false
     },
     {
       "id": "minimax",
@@ -56,12 +56,28 @@
       "defaultOpusSupportsImages": false
     },
     {
+      "id": "deepseek",
+      "name": {
+        "zh": "DeepSeek",
+        "en": "DeepSeek"
+      },
+      "apiKeyUrl": "https://api.deepseek.com/api-keys",
+      "baseUrl": "https://api.deepseek.com/anthropic",
+      "authMode": "authToken",
+      "model": "deepseek-v4-pro",
+      "defaultSonnetModel": "deepseek-v4-flash",
+      "defaultOpusModel": "deepseek-v4-pro",
+      "modelSupportsImages": false,
+      "defaultSonnetSupportsImages": false,
+      "defaultOpusSupportsImages": false
+    },    
+    {
       "id": "glm",
       "name": {
         "zh": "智谱 GLM",
         "en": "Zhipu GLM"
       },
-      "apiKeyUrl": "https://bigmodel.cn/usercenter/proj-mgmt/apikeys",
+      "apiKeyUrl": "https://www.bigmodel.cn/glm-coding?ic=CH54Q0ZFIB",
       "baseUrl": "https://open.bigmodel.cn/api/anthropic",
       "authMode": "authToken",
       "model": "glm-5.1",
@@ -86,6 +102,24 @@
       "defaultHaikuModel": "kimi-k2.5",
       "defaultSonnetModel": "kimi-k2.5",
       "defaultOpusModel": "kimi-k2.5",
+      "modelSupportsImages": true,
+      "defaultHaikuSupportsImages": true,
+      "defaultSonnetSupportsImages": true,
+      "defaultOpusSupportsImages": true
+    },
+    {
+      "id": "openrouter",
+      "name": {
+        "zh": "OpenRouter",
+        "en": "OpenRouter"
+      },
+      "apiKeyUrl": "https://openrouter.ai/settings/keys",
+      "baseUrl": "https://openrouter.ai/api",
+      "authMode": "authToken",
+      "model": "anthropic/claude-sonnet-4.6",
+      "defaultHaikuModel": "anthropic/claude-haiku-4.5",
+      "defaultSonnetModel": "anthropic/claude-sonnet-4.6",
+      "defaultOpusModel": "anthropic/claude-opus-4.7",
       "modelSupportsImages": true,
       "defaultHaikuSupportsImages": true,
       "defaultSonnetSupportsImages": true,
