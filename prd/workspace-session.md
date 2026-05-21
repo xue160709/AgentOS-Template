@@ -13,9 +13,11 @@
 | P0 | 多线程管理 | 每个项目支持多条会话线程 |
 | P0 | 线程生命周期 | 支持新建、选择、置顶、归档、移除和自动更新时间 |
 | P0 | 工作区视图 | 支持 Home、Docs、Settings 和聊天线程 |
+| P0 | 首次启动引导 | 空工作区时先选择项目目录，可选配置模型 Provider 后进入工作台 |
 | P1 | 项目排序 | 支持置顶、拖拽排序和最近更新时间排序 |
 | P1 | 缺失路径处理 | 项目路径不存在时保留记录并允许重新定位 |
 | P1 | Project Skills 入口 | 在项目侧栏展示并运行扫描到的 Skills |
+| P1 | 侧栏偏好 | 支持整栏收起、项目线程列表折叠、用户拖动宽度和按项目隐藏 Skill |
 
 ## 数据结构
 
@@ -23,10 +25,17 @@
 type AppViewId = 'home' | 'docs' | 'settings'
 
 interface ChatWorkspaceState {
+  activeProjectId: string
+  activeThreadId: string
   projects: WorkspaceProject[]
   threads: WorkspaceThread[]
-  activeProjectId?: string | null
-  activeThreadId?: string | null
+  sidebarPrefs: WorkspaceSidebarPrefs
+}
+
+interface WorkspaceSidebarPrefs {
+  collapsed: boolean
+  collapsedProjectIds: string[]
+  projectOrderIds: string[]
 }
 
 interface WorkspaceProject {
@@ -53,6 +62,14 @@ interface WorkspaceThread {
   pinnedAt?: number
   archivedAt?: number
   chatState: ChatState
+}
+
+interface ProjectSkillListState {
+  path: string
+  loading: boolean
+  loaded: boolean
+  skills: AgentContextSlashItem[]
+  message?: string
 }
 ```
 
@@ -84,6 +101,11 @@ flowchart TD
 - 归档线程不作为默认活跃线程展示。
 - 项目移除只移除 AgentOS 工作区记录，不删除用户本地目录。
 - 项目路径缺失时应保留项目和线程，避免用户历史会话丢失。
+- 首次启动时 `projects.length === 0` 会展示项目选择和可选模型设置；模型设置为空或跳过时仍允许进入项目。
+- “创建新项目”当前只创建工作区记录，路径按 `~/Projects/<name>` 生成，不负责真实创建目录。
+- 侧栏项目 Skill 只展示 `scope === 'project'` 且 `kind === 'skill'` 的条目；隐藏的 Skill 路径按项目写入 localStorage。
+- 归档 `task-run` 线程时会尽力停止对应任务卡；归档 `skill-run` 线程时会尽力取消仍在运行的 request。
+- 托盘动作 `new-thread` 和 `open-project` 会唤起主窗口，并复用工作区创建线程或添加项目流程。
 
 ## 相关代码文件
 
@@ -92,14 +114,15 @@ flowchart TD
 - `src/components/AppShell.tsx`：工作区状态总控。
 - `src/components/AppShellSidebar.tsx`：项目和线程列表。
 - `src/components/AppShellWorkspace.tsx`：活动视图渲染。
-- `src/components/ChatStartView.tsx`：聊天起始态。
-- `src/components/ChatThreadView.tsx`：线程聊天容器。
+- `src/components/chat/ChatStartView.tsx`：聊天起始态。
+- `src/components/chat/ChatThreadView.tsx`：线程聊天容器。
+- `src/components/app-shell-constants.ts`：hash 路由、设置分类、侧栏存储键。
 
 ### 功能组件/UI组件
 
-- `src/components/ProjectHomeSurface.tsx`：项目首页。
+- `src/components/chat/ProjectHomeSurface.tsx`：项目首页。
 - `src/components/AppWorkspaceSidePanel.tsx`：工作区侧面板。
-- `src/components/AppUpdateSection.tsx`：侧栏更新入口。
+- `src/components/setting/AppUpdateSection.tsx`：侧栏更新入口。
 
 ### 数据管理
 
@@ -118,6 +141,7 @@ flowchart TD
 - `src/components/project-order.ts`
 - `src/components/app-shell-constants.ts`
 - `src/components/window-safe-area.ts`
+- `src/app-events.ts`
 
 ## 关联PRD文档
 
@@ -135,4 +159,3 @@ flowchart TD
 ### 功能关联/支撑系统
 
 - `prd/desktop-shell-settings-release.md`：窗口、托盘和导航入口。
-

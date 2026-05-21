@@ -16,32 +16,50 @@
 | P1 | Provider 预设 | 从远程预设加载，失败时回退本地预设 |
 | P1 | 连接测试 | 发送测试请求验证配置 |
 | P1 | 聊天模型选择 | 聊天页可设置当前 active chat pick |
+| P1 | 首次启动配置 | 空工作区引导中可直接写入当前 active Provider |
+| P1 | 环境变量模式 | 开发环境可选择 env 来源，打包环境强制 settings |
 
 ## 数据结构
 
 ```ts
 interface ClaudeAgentModelProvider {
   id: string
-  presetId?: string
+  presetId: string
   name: string
-  apiKeyUrl?: string
-  authMode: 'api-key' | 'auth-token'
-  apiKey?: string
-  authToken?: string
-  baseUrl?: string
-  model?: string
-  modelSupportsImages?: boolean
-  defaultHaikuModel?: string
-  defaultSonnetModel?: string
-  defaultOpusModel?: string
+  apiKeyUrl: string
+  authMode: 'apiKey' | 'authToken'
+  apiKey: string
+  authToken: string
+  baseUrl: string
+  model: string
+  modelSupportsImages: boolean
+  defaultHaikuModel: string
+  defaultHaikuSupportsImages: boolean
+  defaultSonnetModel: string
+  defaultSonnetSupportsImages: boolean
+  defaultOpusModel: string
+  defaultOpusSupportsImages: boolean
+}
+
+interface ClaudeAgentSettings {
+  configSource: 'settings' | 'env'
+  activeProviderId: string
+  activeAnthropicModel: string
+  providers: ClaudeAgentModelProvider[]
 }
 
 interface ClaudeAgentSettingsSnapshot {
-  providers: ClaudeAgentModelProvider[]
-  activeProviderId?: string
-  activeChatModel?: string
-  activeChatModelSupportsImages?: boolean
-  configSource: 'settings' | 'env'
+  settings: ClaudeAgentSettings
+  env: {
+    hasApiKey: boolean
+    hasAuthToken: boolean
+    baseUrl: string
+    model: string
+    supportsImages: boolean
+    defaultHaikuModel: string
+    defaultOpusModel: string
+    defaultSonnetModel: string
+  }
 }
 ```
 
@@ -70,21 +88,28 @@ flowchart TD
 - Base URL 若未包含 `/v1`，测试连接时自动拼接 `/v1/messages`。
 - 模型图片能力影响聊天附件提交。
 - 第三方 Anthropic 兼容服务通过环境变量传递模型名。
+- `activeAnthropicModel` 只允许匹配当前 Provider 的主模型或 Haiku/Sonnet/Opus 映射；等于主模型时归并为空字符串。
+- Provider id 会去重；重复 id 会追加序号后缀。
+- `authToken` 模式在测试请求中使用 `Authorization: Bearer`，`apiKey` 模式使用 `x-api-key`。
+- env 来源读取 `ANTHROPIC_API_KEY`、`ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_BASE_URL`、`ANTHROPIC_MODEL`/`CLAUDE_MODEL`、`ANTHROPIC_DEFAULT_*_MODEL` 和 `ANTHROPIC_SUPPORTS_IMAGES`。
+- 连接测试超时为 20 秒，成功时验证一个可用模型；失败时尽量读取厂商返回的错误体。
 
 ## 相关代码文件
 
 ### 核心页面组件
 
-- `src/components/ClaudeAgentSettingsPage.tsx`
-- `src/components/SettingsPage.tsx`
+- `src/components/setting/ClaudeAgentSettingsPage.tsx`
+- `src/components/setting/SettingsPage.tsx`
+- `src/components/chat/ChatPage.tsx`
 
 ### 功能组件/UI组件
 
-- `src/components/Composer.tsx`
+- `src/components/chat/Composer.tsx`
 
 ### 数据管理
 
 - `src/claude-chat-types.ts`
+- `src/model-provider-presets.ts`
 - `src/model-provider-presets.json`
 - `src/desktop-types.ts`
 
@@ -113,4 +138,3 @@ flowchart TD
 ### 功能关联/支撑系统
 
 - `prd/persistence.md`：Provider 设置保存在 Electron userData。
-

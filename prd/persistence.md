@@ -16,20 +16,33 @@
 | P1 | JSON 回退 | SQLite 不可用时仍保存 JSON |
 | P1 | JSONL rollout | 按线程保存长期事件/消息记录 |
 | P1 | 路径缺失标记 | 校验项目路径并保留缺失状态 |
+| P1 | 开发者清理 | 开发者设置可清空工作区快照或模型设置 |
+| P1 | 侧栏偏好保存 | 侧栏折叠、项目折叠和项目手动顺序随工作区保存 |
 
 ## 数据结构
 
 ```ts
 interface ChatWorkspaceState {
+  activeProjectId: string
+  activeThreadId: string
   projects: WorkspaceProject[]
   threads: WorkspaceThread[]
-  activeProjectId?: string | null
-  activeThreadId?: string | null
+  sidebarPrefs: {
+    collapsed: boolean
+    collapsedProjectIds: string[]
+    projectOrderIds: string[]
+  }
 }
 
 interface ChatWorkspaceStoreFiles {
+  localStorageKey: 'CodeX-UI-Template-chat-workspace-v1'
+  sidebarWidthKey: 'CodeX-UI-Template-sidebar-width-px'
+  sidebarProjectSkillsKey: 'CodeX-UI-Template-sidebar-project-skills-v1'
+  hiddenSkillsKey: 'CodeX-UI-Template-sidebar-hidden-skills-v1'
+  permissionModeKey: 'codex-ui-template:claude-permission-mode'
+  homeCardLayoutKey: 'agentos:project-home-card-layout:v1'
   workspaceJson: 'chat-workspace.json'
-  workspaceSqlite: 'chat-workspace.sqlite'
+  workspaceSqlite: 'chat-workspace.sqlite*'
   rolloutJsonl: 'chat-sessions/YYYY/MM/DD/rollout-*.jsonl'
 }
 
@@ -66,6 +79,12 @@ flowchart TD
 - 线程 transcript 应保留 sessionId、model、cwd 和消息项。
 - SQLite 不可用不能阻塞主流程。
 - rollout 文件按日期分目录，便于长期归档。
+- 渲染层保存使用 750ms 防抖；卸载时会尽力 flush 未保存状态。
+- 主进程 `chat-workspace:save` 串行执行，保存后会刷新 Task Home Plugin Manager 对工作区项目的认知。
+- `pathMissing` 是运行时标记，保存前会剥离；恢复后通过 `validateProjectPaths` 再补回。
+- 工作区清理会删除 localStorage key、`chat-workspace.json`、`chat-workspace.sqlite*` 和 `chat-sessions/`，不会删除用户项目目录。
+- Claude 设置清理只删除 `claude-agent-settings.json`，不会影响项目文件、工作区、Agent Mode 或桌面偏好。
+- Agent Mode 设置、模型 Provider 设置、桌面偏好和 Home Plugin task/runtime 分别由独立 store 或项目文件保存，不写入 `ChatWorkspaceState`。
 
 ## 相关代码文件
 
@@ -82,6 +101,7 @@ flowchart TD
 - `src/chat-workspace-persistence.ts`
 - `src/components/types.ts`
 - `src/claude-chat-types.ts`
+- `src/app-events.ts`
 
 ### 业务逻辑工具/工具类
 
@@ -94,6 +114,7 @@ flowchart TD
 ### Hooks/其他
 
 - `src/components/project-order.ts`
+- `src/components/setting/DeveloperSettingsPage.tsx`
 
 ## 关联PRD文档
 
@@ -111,4 +132,3 @@ flowchart TD
 ### 功能关联/支撑系统
 
 - `prd/desktop-shell-settings-release.md`：桌面偏好和更新状态由主进程管理。
-

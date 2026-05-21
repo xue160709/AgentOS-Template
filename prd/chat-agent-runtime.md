@@ -17,6 +17,9 @@
 | P1 | 文件回滚 | 支持 active query 或 resume session 执行 rewind |
 | P1 | Session 续接 | 使用 thread `sessionId` 续接，失效时自动重试一次 |
 | P1 | Slash command 展开 | 显式命令和 Home Plugin 强制命令进入运行上下文 |
+| P1 | Composer 联想 | 支持行首 slash 命令、`@` 文件、`@agent-*` 子 Agent 联想 |
+| P1 | 内置命令入口 | 内置 `/compact`、`/status`、`/help` 三个命令提示 |
+| P1 | 权限模式持久化 | 权限模式保存在 localStorage，默认 `auto` |
 
 ## 数据结构
 
@@ -52,6 +55,56 @@ type TranscriptItem =
   | ChatThinkingItem
   | ChatActivityItem
   | ChatFileDiffItem
+
+interface AgentContextSlashItem {
+  kind: 'skill' | 'command'
+  name: string
+  command: string
+  title: string
+  description: string
+  argumentHint: string
+  path: string
+  relativePath: string
+  scope: 'user' | 'project'
+  source: 'claude' | 'agent' | 'agents' | 'cursor'
+  native: boolean
+}
+
+interface AgentContextAgentItem {
+  kind: 'agent'
+  name: string
+  description: string
+  path: string
+  relativePath: string
+  scope: 'user' | 'project'
+  source: 'claude' | 'agent' | 'agents' | 'cursor'
+  native: boolean
+  model?: string
+  tools: string[]
+}
+
+interface ClaudeChatSessionStartEvent {
+  type: 'session_start'
+  requestId: string
+  sessionId: string
+  model: string
+  cwd: string
+  tools: string[]
+  skills: string[]
+  slashCommands: string[]
+  agents: string[]
+  mcpServers: { name: string; status: string }[]
+  permissionMode: string
+  plugins: string[]
+}
+
+interface ClaudeFileRewindPayload {
+  requestId?: string
+  threadId?: string
+  changeSetId?: string
+  checkpointId: string
+  cwd?: string
+}
 ```
 
 ## 业务逻辑
@@ -83,27 +136,35 @@ sequenceDiagram
 - SDK resume 失败且未输出内容时，清空 `sessionId` 后重试一次。
 - 运行完成后清理 pending permission 和 active request。
 - 文件回滚结果必须作为事件回传给当前线程展示。
+- `allowedTools` 默认只放行 `Read`、`Glob`、`Grep`、`ListMcpResources`、`ReadMcpResource` 这类只读工具；其它工具通过 `canUseTool` 进入权限请求。
+- `bypassPermissions` 会映射为 SDK 的 `allowDangerouslySkipPermissions`。
+- 每次运行会生成配置指纹；Provider、模型或图片能力变化时，旧线程的 SDK session 会失效并重新开始。
+- `AskUserQuestion` 必须至少包含 2 个选项，否则直接允许原输入继续；有效问题会转成用户输入弹窗。
+- Slash 展开支持 `$ARGUMENTS` 和 `$1`、`$2` 等参数替换。
+- Home Plugin 定制线程会强制注入 `/a2ui-project-home-panel` Skill，并追加对应系统提示词。
 
 ## 相关代码文件
 
 ### 核心页面组件
 
-- `src/components/ChatPage.tsx`
-- `src/components/ChatThreadView.tsx`
+- `src/components/chat/ChatPage.tsx`
+- `src/components/chat/ChatThreadView.tsx`
+- `src/components/chat/ChatStartView.tsx`
 
 ### 功能组件/UI组件
 
-- `src/components/Composer.tsx`
-- `src/components/Transcript.tsx`
-- `src/components/AgentInputPromptModal.tsx`
-- `src/components/RichCodeBlock.tsx`
-- `src/components/AttachmentThumb.tsx`
+- `src/components/chat/Composer.tsx`
+- `src/components/chat/Transcript.tsx`
+- `src/components/chat/AgentInputPromptModal.tsx`
+- `src/components/chat/RichCodeBlock.tsx`
+- `src/components/chat/AttachmentThumb.tsx`
+- `src/components/chat/GenerativeWidget.tsx`
 
 ### 数据管理
 
 - `src/claude-chat-types.ts`
 - `src/components/types.ts`
-- `src/components/local-types.ts`
+- `src/components/chat/local-types.ts`
 
 ### 业务逻辑工具/工具类
 
@@ -116,12 +177,13 @@ sequenceDiagram
 - `electron/claude-agent-runner/value-formatters.ts`
 - `electron/claude-agent-runner/executable.ts`
 - `electron/agent-context.ts`
+- `electron/home-plugin-customization-prompt.ts`
 
 ### Hooks/其他
 
-- `src/components/markdown.ts`
-- `src/components/clipboard.ts`
-- `src/components/format.ts`
+- `src/components/chat/markdown.ts`
+- `src/components/chat/clipboard.ts`
+- `src/components/chat/format.ts`
 
 ## 关联PRD文档
 
@@ -140,4 +202,3 @@ sequenceDiagram
 ### 功能关联/支撑系统
 
 - `prd/persistence.md`：聊天 transcript、sessionId 和 rollout 持久化。
-

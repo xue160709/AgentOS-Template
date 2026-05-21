@@ -14,29 +14,39 @@
 | P0 | 桌面偏好 | close-to-tray、open-at-login、locale |
 | P1 | 托盘 | 隐藏到托盘、显示窗口、新建会话、打开项目、退出 |
 | P1 | 自动更新 | 检查、下载、安装并推送更新状态 |
-| P1 | 国际化 | 中文、英文、日文、韩文文案切换 |
+| P1 | 国际化 | 中文、英文文案切换，语言变更后提示重启 |
 | P1 | 打包发布 | macOS、Windows、Linux 构建与 GitHub 发布配置 |
+| P1 | 开发者工具 | 开发构建中提供工作区和模型设置清理入口 |
 
 ## 数据结构
 
 ```ts
+type AppUiLocale = 'zh' | 'en'
+
 interface DesktopPreferences {
   closeToTray: boolean
   openAtLogin: boolean
-  locale?: 'zh-CN' | 'en' | 'ja' | 'ko'
+  locale?: AppUiLocale
 }
 
 interface AppUpdaterState {
   phase: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
-  version?: string
-  progress?: number
-  error?: string
+  updatesSupported: boolean
+  currentVersion: string
+  availableVersion?: string
+  releaseNotes?: string
+  percent?: number
+  bytesPerSecond?: number
+  transferred?: number
+  total?: number
+  errorMessage?: string
 }
 
 interface DesktopApi {
   pickProjectDirectory(): Promise<string | null>
+  pickChatAttachments(options?: { allowImages?: boolean }): Promise<ClaudeChatAttachmentPickerResult>
   getDesktopPreferences(): Promise<DesktopPreferences>
-  saveDesktopPreferences(prefs: Partial<DesktopPreferences>): Promise<DesktopPreferences>
+  setDesktopPreferences(prefs: Partial<DesktopPreferences>): Promise<DesktopPreferences>
   checkForUpdates(): Promise<AppUpdaterState>
 }
 ```
@@ -65,20 +75,31 @@ flowchart TD
 - 打包产物包括 `dist`、`dist-electron` 和内置 `.agents/skills/a2ui-project-home-panel`。
 - GitHub 发布目标为 `xue160709/AgentOS`。
 
+桌面规则：
+
+- 主窗口默认 1100 x 720，最小 640 x 480；macOS 使用 hiddenInset、透明背景和 vibrancy。
+- 外部 HTTP/HTTPS 链接统一通过系统浏览器打开，非应用导航会被拦截。
+- 应用使用 single instance lock；第二次启动会聚焦已有窗口。
+- close-to-tray 开启时关闭窗口只隐藏；退出需要托盘菜单或显式 quit。
+- 自动更新只在 packaged 环境启用，启动 8 秒后自动检查；开发模式返回 `updatesSupported: false`。
+- PNG 剪贴板只接受 `data:image/png;base64` 且有长度上限；SVG 剪贴板会限制字符数和渲染尺寸。
+- 设置路由中 `general` 实际承载模型设置，`skills` 承载通用偏好和 Project Skills 开关，`developer` 只在 dev runtime 或显式开关下出现。
+
 ## 相关代码文件
 
 ### 核心页面组件
 
-- `src/components/SettingsPage.tsx`
-- `src/components/ProjectSkillsSettingsPage.tsx`
-- `src/components/AppUpdateSettingsPage.tsx`
-- `src/components/DeveloperSettingsPage.tsx`
+- `src/components/setting/SettingsPage.tsx`
+- `src/components/setting/ProjectSkillsSettingsPage.tsx`
+- `src/components/setting/AppUpdateSettingsPage.tsx`
+- `src/components/setting/DeveloperSettingsPage.tsx`
 
 ### 功能组件/UI组件
 
-- `src/components/AppUpdateSection.tsx`
-- `src/components/AboutSection.tsx`
-- `src/components/icons.tsx`
+- `src/components/setting/AppUpdateSection.tsx`
+- `src/components/setting/AboutSection.tsx`
+- `src/icon-inline.tsx`
+- `src/icons.ts`
 
 ### 数据管理
 
@@ -97,6 +118,8 @@ flowchart TD
 - `electron/window-chrome.ts`
 - `electron/ui-locale.ts`
 - `electron/safe-console.ts`
+- `electron/project-path.ts`
+- `electron/env-loader.ts`
 
 ### Hooks/其他
 
@@ -124,4 +147,3 @@ flowchart TD
 ### 功能关联/支撑系统
 
 - `prd/chat-agent-runtime.md`：preload API 暴露聊天运行能力。
-

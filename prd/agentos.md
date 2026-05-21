@@ -75,6 +75,8 @@ flowchart TD
 - 会话、Home Plugin、任务卡片和 Agent Mode 都必须归属某个项目。
 - Agent 运行必须通过主进程统一处理，渲染层只通过 preload 暴露的安全 API 访问。
 - 文件读取、预览和插件运行都必须限制在项目根目录内。
+- 当前 UI 与主进程模板语言只规范化为 `zh` 和 `en`。
+- 打包应用以应用内 Provider 设置为权威配置来源；开发环境才允许 env 来源。
 - 文档以功能模块 PRD 为准，总览只维护跨模块关系。
 
 ## 相关代码文件
@@ -87,9 +89,9 @@ flowchart TD
 
 ### 功能组件/UI组件
 
-- `src/components/ProjectHomeSurface.tsx`：项目首页入口。
-- `src/components/ChatPage.tsx`：聊天运行入口。
-- `src/components/SettingsPage.tsx`：设置入口。
+- `src/components/chat/ProjectHomeSurface.tsx`：项目首页入口。
+- `src/components/chat/ChatPage.tsx`：聊天运行入口。
+- `src/components/setting/SettingsPage.tsx`：设置入口。
 
 ### 数据管理
 
@@ -106,6 +108,8 @@ flowchart TD
 - `electron/agent-context.ts`
 - `electron/home-plugin-runner.ts`
 - `electron/task-home-plugin-manager.ts`
+- `electron/claude-agent-settings.ts`
+- `electron/chat-workspace-store.ts`
 
 ### Hooks/其他
 
@@ -135,4 +139,3 @@ flowchart TD
 ### 功能关联/支撑系统
 
 - `prd/desktop-shell-settings-release.md`
-
