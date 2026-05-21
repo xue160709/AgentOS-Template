@@ -48,6 +48,12 @@ export const Icons = {
     '<svg class="icon-xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linejoin="round" d="M7 3.75h7l4 4v10.5A1.75 1.75 0 0116.25 20h-8.5A1.75 1.75 0 016 18.25V5.5c0-.966.784-1.75 1.75-1.75z"/><path stroke-linecap="round" stroke-linejoin="round" d="M14 4v4h4M4 7.5v11.25A3.25 3.25 0 007.25 22h7.25"/></svg>',
   copy:
     '<svg class="icon-xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="8" y="8" width="10" height="12" rx="2"/><path stroke-linecap="round" stroke-linejoin="round" d="M6 16H5a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v1"/></svg>',
+  code:
+    '<svg class="icon-xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 8l-4 4 4 4M15 8l4 4-4 4M13 5l-2 14"/></svg>',
+  diagram:
+    '<svg class="icon-xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="4" y="4" width="6" height="5" rx="1.4"/><rect x="14" y="4" width="6" height="5" rx="1.4"/><rect x="9" y="15" width="6" height="5" rx="1.4"/><path stroke-linecap="round" stroke-linejoin="round" d="M10 6.5h4M7 9v2.5A2.5 2.5 0 009.5 14H12M17 9v2.5A2.5 2.5 0 0114.5 14H12"/></svg>',
+  download:
+    '<svg class="icon-xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v10M8 10l4 4 4-4M5 18.5h14"/></svg>',
   edit:
     '<svg class="icon-xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 20h4l10.5-10.5a2.1 2.1 0 00-3-3L5 17v3zM14.5 7.5l2 2"/></svg>',
   file:
