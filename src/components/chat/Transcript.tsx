@@ -21,7 +21,8 @@ import { AttachmentThumb } from './AttachmentThumb'
 import { formatBytes, formatDuration } from './format'
 import { GenerativeWidget } from './GenerativeWidget'
 import { containsGenerativeWidget, parseGenerativeUiSegments } from './generative-ui'
-import { escapeHtml, renderMarkdown } from './markdown'
+import { escapeHtml, renderMarkdownSegments } from './markdown'
+import { RichCodeBlock } from './RichCodeBlock'
 
 type ProcessTranscriptItem = ChatToolItem | ChatThinkingItem | ChatActivityItem
 
@@ -430,7 +431,7 @@ const AssistantMessageContent = memo(function AssistantMessageContent({
   if (segments.length === 0) {
     return (
       <>
-        <div dangerouslySetInnerHTML={{ __html: renderMarkdown(content || (isStreaming ? '' : ' ')) }} />
+        <AssistantMarkdown content={content || (isStreaming ? '' : ' ')} />
         {isStreaming ? <span className="typing-dot" /> : null}
       </>
     )
@@ -441,11 +442,7 @@ const AssistantMessageContent = memo(function AssistantMessageContent({
       {segments.map((segment, index) => {
         if (segment.type === 'text') {
           return (
-            <div
-              key={`text-${index}`}
-              className="assistant-text-segment"
-              dangerouslySetInnerHTML={{ __html: renderMarkdown(segment.content) }}
-            />
+            <AssistantMarkdown key={`text-${index}`} className="assistant-text-segment" content={segment.content} />
           )
         }
         if (segment.type === 'pending') {
@@ -469,6 +466,31 @@ const AssistantMessageContent = memo(function AssistantMessageContent({
       {isStreaming ? <span className="typing-dot" /> : null}
     </>
   )
+})
+
+const AssistantMarkdown = memo(function AssistantMarkdown({
+  content,
+  className,
+}: {
+  content: string
+  className?: string
+}) {
+  const segments = useMemo(() => renderMarkdownSegments(content), [content])
+  const body = segments.map((segment, index) => {
+    if (segment.type === 'code') {
+      return <RichCodeBlock key={`code-${index}`} code={segment.code} language={segment.language} />
+    }
+    return (
+      <div
+        key={`html-${index}`}
+        className="assistant-markdown__html"
+        dangerouslySetInnerHTML={{ __html: segment.html }}
+      />
+    )
+  })
+
+  if (className) return <div className={className}>{body}</div>
+  return <>{body}</>
 })
 
 const ToolRow = memo(function ToolRow({ item }: { item: ChatToolItem }) {

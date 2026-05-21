@@ -30,6 +30,10 @@ export function AboutSection() {
       <div className="settings-about-panel">
         <dl className="settings-about-list">
           <div className="settings-about-row">
+            <dt>{t('settings.about.version')}</dt>
+            <dd>{version}</dd>
+          </div>
+          <div className="settings-about-row">
             <dt>{t('settings.about.email')}</dt>
             <dd>
               <a href={`mailto:${APP_METADATA.authorEmail}`}>{APP_METADATA.authorEmail}</a>

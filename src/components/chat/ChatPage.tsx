@@ -47,6 +47,7 @@ import type {
 import { AgentInputPromptModal, type PendingUserInputPrompt, type UserInputDecision } from './AgentInputPromptModal'
 import { ChatStartView } from './ChatStartView'
 import { ChatThreadView } from './ChatThreadView'
+import { writeClipboardText } from './clipboard'
 import { Composer } from './Composer'
 import type { BuiltInSlashCommand, ChatModelMenuRow, ComposerSuggestion, ComposerTrigger, PermissionModeRow } from './local-types'
 
@@ -1933,29 +1934,6 @@ function readStoredPermissionMode(): ClaudePermissionMode {
   return isClaudePermissionMode(stored) ? stored : 'auto'
 }
 
-async function writeClipboardText(text: string): Promise<boolean> {
-  if (!text.trim()) return false
-  try {
-    await navigator.clipboard.writeText(text)
-    return true
-  } catch {
-    const textarea = document.createElement('textarea')
-    textarea.value = text
-    textarea.style.position = 'fixed'
-    textarea.style.left = '-9999px'
-    textarea.style.top = '0'
-    document.body.appendChild(textarea)
-    textarea.focus()
-    textarea.select()
-    try {
-      return document.execCommand('copy')
-    } catch {
-      return false
-    } finally {
-      textarea.remove()
-    }
-  }
-}
 
 function isClaudePermissionMode(value: unknown): value is ClaudePermissionMode {
   return value === 'plan' || value === 'auto' || value === 'default' || value === 'acceptEdits' || value === 'bypassPermissions'
