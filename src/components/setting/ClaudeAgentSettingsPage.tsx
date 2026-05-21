@@ -3,7 +3,7 @@
  * Multi-provider Claude Agent credentials UI backed by `claudeChat.getSettings`.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import type {
   ClaudeAgentConfigSource,
   ClaudeAgentModelProvider,
@@ -13,8 +13,26 @@ import type {
 import { CLAUDE_AGENT_SETTINGS_CHANGED_EVENT } from '../../app-events'
 import { IconInline } from '../../icon-inline'
 import { getInitialLocale, translate, useI18n } from '../../i18n/i18n'
+import {
+  createModelProvider,
+  LOCAL_PROVIDER_PRESET_CATALOG,
+  localizeProviderPresetName,
+  normalizePresetCatalog,
+  type ProviderPreset,
+  type ProviderPresetCatalog,
+} from '../../model-provider-presets'
 
 const IS_DEV_BUILD = import.meta.env.DEV
+const REMOTE_PROVIDER_PRESETS_URL =
+  'https://raw.githubusercontent.com/xuezhirong/AgentOS/main/src/model-provider-presets.json'
+
+type ProviderPresetSource = 'remote' | 'local'
+
+type ProviderTestState = {
+  busy: boolean
+  message: string
+  ok?: boolean
+}
 
 // --- Snapshot helpers / 快照辅助 ---
 
@@ -42,7 +60,7 @@ type EditableProviderField = Exclude<keyof ClaudeAgentModelProvider, 'id'>
 
 /** `#settings/general` Claude Agent UI / Claude credentials UI route */
 export function ClaudeAgentSettingsPage() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const [configSource, setConfigSource] = useState<ClaudeAgentConfigSource>('settings')
   const [providers, setProviders] = useState<ClaudeAgentModelProvider[]>(() => [createModelProvider()])
   /** 手风琴展开 id（编辑 UX）；非聊天激活条目 / Accordion UX id not tied to chat-active provider */
@@ -55,6 +73,12 @@ export function ClaudeAgentSettingsPage() {
   const [status, setStatus] = useState('')
   const [saveDisabled, setSaveDisabled] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [providerPresets, setProviderPresets] = useState<ProviderPreset[]>(
+    () => normalizePresetCatalog(LOCAL_PROVIDER_PRESET_CATALOG, locale).providers,
+  )
+  const [providerPresetVersion, setProviderPresetVersion] = useState(() => LOCAL_PROVIDER_PRESET_CATALOG.version)
+  const [providerPresetSource, setProviderPresetSource] = useState<ProviderPresetSource>('local')
+  const [providerTestStates, setProviderTestStates] = useState<Record<string, ProviderTestState>>({})
 
   const latestRef = useRef({
     providers,
@@ -69,8 +93,10 @@ export function ClaudeAgentSettingsPage() {
   /** 最近一次成功 load / save 的快照，用于「取消」恢复当前厂商条目 */
   const lastSyncedSnapshotRef = useRef<ClaudeAgentSettingsSnapshot | null>(null)
   const [lastSyncedSeq, setLastSyncedSeq] = useState(0)
+  const [addProviderDialogOpen, setAddProviderDialogOpen] = useState(false)
   const [deleteConfirmDialogOpen, setDeleteConfirmDialogOpen] = useState(false)
   const [pendingDeleteProviderId, setPendingDeleteProviderId] = useState('')
+  const addProviderDialogRef = useRef<HTMLDialogElement>(null)
   const deleteConfirmDialogRef = useRef<HTMLDialogElement>(null)
   const effectiveConfigSource = IS_DEV_BUILD ? configSource : 'settings'
 
@@ -93,9 +119,36 @@ export function ClaudeAgentSettingsPage() {
     dirtyRef.current = snap ? isSettingsDirty(configSource, chatActiveProviderId, chatActiveAnthropicModel, providers, snap) : false
   }, [chatActiveAnthropicModel, chatActiveProviderId, configSource, providers, lastSyncedSeq])
 
+  useEffect(() => {
+    let cancelled = false
+
+    const applyCatalog = (catalog: ProviderPresetCatalog, source: ProviderPresetSource) => {
+      if (cancelled || !catalog.providers.length) return
+      setProviderPresets(catalog.providers)
+      setProviderPresetVersion(catalog.version)
+      setProviderPresetSource(source)
+    }
+
+    async function loadProviderPresets() {
+      try {
+        const response = await fetch(REMOTE_PROVIDER_PRESETS_URL, { cache: 'no-store' })
+        if (!response.ok) throw new Error(`Preset request failed: ${response.status}`)
+        applyCatalog(normalizePresetCatalog(await response.json(), locale), 'remote')
+      } catch {
+        applyCatalog(normalizePresetCatalog(LOCAL_PROVIDER_PRESET_CATALOG, locale), 'local')
+      }
+    }
+
+    void loadProviderPresets()
+
+    return () => {
+      cancelled = true
+    }
+  }, [locale])
+
   const applySnapshot = useCallback((snapshot: ClaudeAgentSettingsSnapshot) => {
     const nextProviders = snapshot.settings.providers.length
-      ? snapshot.settings.providers.map((provider) => ({ ...provider }))
+      ? snapshot.settings.providers.map((provider) => localizeProviderPresetName(provider, providerPresets))
       : [createModelProvider()]
     const nextChatActiveId = nextProviders.some((provider) => provider.id === snapshot.settings.activeProviderId)
       ? snapshot.settings.activeProviderId
@@ -109,7 +162,7 @@ export function ClaudeAgentSettingsPage() {
       nextProviders.some((provider) => provider.id === prev) ? prev : nextProviders[0]?.id ?? '',
     )
     setEnvStatusTags(createEnvStatusTags(snapshot, t))
-  }, [t])
+  }, [providerPresets, t])
 
   const persist = useCallback(async () => {
     if (!window.claudeChat) {
@@ -179,12 +232,56 @@ export function ClaudeAgentSettingsPage() {
     [applySnapshot, t],
   )
 
-  const addProvider = () => {
-    const provider = createModelProvider()
+  const addProvider = (preset?: ProviderPreset) => {
+    const provider = createModelProvider(preset)
     setProviders((current) => [...current, provider])
     setExpandedProviderId(provider.id)
+    setAddProviderDialogOpen(false)
     setStatus(t('settings.models.addedProvider'))
   }
+
+  const openAddProviderDialog = useCallback(() => {
+    setAddProviderDialogOpen(true)
+  }, [])
+
+  const closeAddProviderDialog = useCallback(() => {
+    setAddProviderDialogOpen(false)
+  }, [])
+
+  const openExternalLink = useCallback((event: MouseEvent<HTMLAnchorElement>, url: string) => {
+    event.preventDefault()
+    if (!url) return
+    void window.desktop?.openExternal?.(url)
+  }, [])
+
+  const testProviderConnection = useCallback(
+    async (provider: ClaudeAgentModelProvider) => {
+      if (!window.claudeChat?.testProvider) {
+        setStatus(t('settings.models.bridgeUnavailable'))
+        return
+      }
+      setProviderTestStates((current) => ({
+        ...current,
+        [provider.id]: { busy: true, message: t('settings.models.testingConnection') },
+      }))
+      try {
+        const result = await window.claudeChat.testProvider(provider)
+        setProviderTestStates((current) => ({
+          ...current,
+          [provider.id]: { busy: false, message: result.message, ok: result.ok },
+        }))
+        setStatus(result.message)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        setProviderTestStates((current) => ({
+          ...current,
+          [provider.id]: { busy: false, message, ok: false },
+        }))
+        setStatus(message)
+      }
+    },
+    [t],
+  )
 
   const removeProvider = useCallback(
     (providerId: string) => {
@@ -217,6 +314,12 @@ export function ClaudeAgentSettingsPage() {
     setProviders((current) =>
       current.map((provider) => (provider.id === providerId ? { ...provider, [field]: value } : provider)),
     )
+    setProviderTestStates((current) => {
+      if (!current[providerId]) return current
+      const next = { ...current }
+      delete next[providerId]
+      return next
+    })
   }
 
   const toggleProviderExpanded = (providerId: string) => {
@@ -280,6 +383,16 @@ export function ClaudeAgentSettingsPage() {
     document.addEventListener('visibilitychange', onVisibility)
     return () => document.removeEventListener('visibilitychange', onVisibility)
   }, [load, saveDisabled])
+
+  useEffect(() => {
+    const el = addProviderDialogRef.current
+    if (!el) return
+    if (addProviderDialogOpen) {
+      if (!el.open) el.showModal()
+    } else if (el.open) {
+      el.close()
+    }
+  }, [addProviderDialogOpen])
 
   useEffect(() => {
     const el = deleteConfirmDialogRef.current
@@ -363,7 +476,7 @@ export function ClaudeAgentSettingsPage() {
               <h2 id="settings-section-providers-heading" className="settings-section-heading">
                 {t('settings.models.providersHeading')}
               </h2>
-              <button type="button" className="btn btn-ghost btn-compact" onClick={addProvider}>
+              <button type="button" className="btn btn-ghost btn-compact" onClick={openAddProviderDialog}>
                 <IconInline name="plus" />
                 <span>{t('settings.models.add')}</span>
               </button>
@@ -375,6 +488,7 @@ export function ClaudeAgentSettingsPage() {
                 const bodyId = `provider-body-${provider.id}`
                 const triggerId = `provider-trigger-${provider.id}`
                 const pid = provider.id
+                const testState = providerTestStates[pid]
                 const modelRows = [
                   {
                     field: 'defaultHaikuModel' as const,
@@ -471,7 +585,18 @@ export function ClaudeAgentSettingsPage() {
                                 <IconInline name="key" />
                                 {t('settings.models.fieldApiKey')}
                               </label>
-                              <p className="settings-field-row__hint">{t('settings.models.fieldApiKeyHint')}</p>
+                              {/* <p className="settings-field-row__hint">{t('settings.models.fieldApiKeyHint')}</p> */}
+                              {provider.apiKeyUrl ? (
+                                <a
+                                  className="settings-api-key-link"
+                                  href={provider.apiKeyUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  onClick={(event) => openExternalLink(event, provider.apiKeyUrl)}
+                                >
+                                  {t('settings.models.getApiKey')}
+                                </a>
+                              ) : null}
                             </div>
                             <input
                               id={`claude-api-key-${pid}`}
@@ -550,7 +675,33 @@ export function ClaudeAgentSettingsPage() {
                         </div>
                         <div className="settings-provider-body__actions" aria-label={t('settings.models.editorActionsAria')}>
                           <p className="settings-provider-body__actions-hint">{t('settings.models.editorActionsHint')}</p>
+                          {testState?.message ? (
+                            <p
+                              className={[
+                                'settings-provider-test-status',
+                                testState.ok === true ? 'is-success' : '',
+                                testState.ok === false ? 'is-error' : '',
+                              ]
+                                .filter(Boolean)
+                                .join(' ')}
+                            >
+                              {testState.message}
+                            </p>
+                          ) : null}
                           <div className="settings-provider-body__actions-row">
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-compact"
+                              disabled={busy || Boolean(testState?.busy)}
+                              onClick={() => void testProviderConnection(provider)}
+                            >
+                              <IconInline name={testState?.ok ? 'check' : 'refresh'} />
+                              <span>
+                                {testState?.busy
+                                  ? t('settings.models.testingConnection')
+                                  : t('settings.models.testConnection')}
+                              </span>
+                            </button>
                             <button
                               type="button"
                               className="btn btn-primary btn-compact"
@@ -622,6 +773,56 @@ export function ClaudeAgentSettingsPage() {
       </form>
       {effectiveConfigSource === 'settings' ? (
         <dialog
+          ref={addProviderDialogRef}
+          className="settings-restart-dialog settings-provider-preset-dialog"
+          aria-labelledby="claude-provider-preset-dialog-title"
+          onClose={closeAddProviderDialog}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              addProviderDialogRef.current?.close()
+            }
+          }}
+        >
+          <div className="settings-restart-dialog__panel" onClick={(event) => event.stopPropagation()}>
+            <h3 id="claude-provider-preset-dialog-title" className="settings-restart-dialog__title">
+              {t('settings.models.addProviderDialogTitle')}
+            </h3>
+            <p className="settings-restart-dialog__body">{t('settings.models.addProviderDialogBody')}</p>
+            <p className="settings-provider-preset-source">
+              {t(
+                providerPresetSource === 'remote'
+                  ? 'settings.models.presetSourceRemote'
+                  : 'settings.models.presetSourceLocal',
+                { version: providerPresetVersion },
+              )}
+            </p>
+            <div className="settings-provider-preset-grid">
+              {providerPresets.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  className="settings-provider-preset-card"
+                  onClick={() => addProvider(preset)}
+                >
+                  <span className="settings-provider-preset-card__title">{preset.name}</span>
+                  <span className="settings-provider-preset-card__meta">{preset.baseUrl}</span>
+                </button>
+              ))}
+              <button type="button" className="settings-provider-preset-card" onClick={() => addProvider()}>
+                <span className="settings-provider-preset-card__title">{t('settings.models.customProvider')}</span>
+                <span className="settings-provider-preset-card__meta">{t('settings.models.customProviderMeta')}</span>
+              </button>
+            </div>
+            <div className="settings-restart-dialog__actions">
+              <button type="button" className="btn btn-ghost" onClick={() => addProviderDialogRef.current?.close()}>
+                {t('settings.models.deleteDialogDismiss')}
+              </button>
+            </div>
+          </div>
+        </dialog>
+      ) : null}
+      {effectiveConfigSource === 'settings' ? (
+        <dialog
           ref={deleteConfirmDialogRef}
           className="settings-restart-dialog"
           aria-labelledby="claude-provider-delete-dialog-title"
@@ -678,43 +879,21 @@ function providerKnowsAnthropicModelId(provider: ClaudeAgentModelProvider, id: s
   return pool.includes(m)
 }
 
-function createModelProvider(): ClaudeAgentModelProvider {
-  return {
-    id: createProviderId(),
-    name: '',
-    apiKey: '',
-    authToken: '',
-    baseUrl: '',
-    model: '',
-    modelSupportsImages: false,
-    defaultHaikuModel: '',
-    defaultHaikuSupportsImages: false,
-    defaultOpusModel: '',
-    defaultOpusSupportsImages: false,
-    defaultSonnetModel: '',
-    defaultSonnetSupportsImages: false,
-  }
-}
-
-function createProviderId(): string {
-  const cryptoApi = globalThis.crypto
-  if (cryptoApi?.randomUUID) return cryptoApi.randomUUID()
-  return `provider-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-}
-
 function providerDisplayName(
   provider: ClaudeAgentModelProvider,
   t: (path: string, vars?: Record<string, string | number>) => string,
 ): string {
-  return provider.model || provider.name || t('settings.models.unnamedModel')
+  return provider.name || provider.model || t('settings.models.unnamedModel')
 }
 
 function providerMeta(
   provider: ClaudeAgentModelProvider,
   t: (path: string, vars?: Record<string, string | number>) => string,
 ): string {
+  const primaryModel =
+    provider.model || provider.defaultSonnetModel || provider.defaultOpusModel || provider.defaultHaikuModel
   const parts = [
-    provider.name && provider.model ? provider.name : '',
+    primaryModel,
     provider.baseUrl,
     providerImageSupportSummary(provider, t),
     provider.apiKey ? t('settings.models.apiKeySet') : '',

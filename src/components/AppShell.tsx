@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
   type FormEvent as ReactFormEvent,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import {
@@ -34,11 +35,18 @@ import { CHAT_WORKSPACE_CLEARED_EVENT, CLAUDE_AGENT_SETTINGS_CHANGED_EVENT } fro
 import { defaultThreadTitleSet, getInitialLocale, translate, useI18n } from '../i18n/i18n'
 import { IconInline } from '../icon-inline'
 import type { HomePluginRunItem, HomePluginTaskEvent } from '../desktop-types'
-import type { ClaudeAgentModelProvider, ClaudeAgentSettingsSnapshot } from '../claude-chat-types'
+import type { ClaudeAgentModelProvider, ClaudeAgentProviderAuthMode, ClaudeAgentSettingsSnapshot } from '../claude-chat-types'
+import {
+  LOCAL_PROVIDER_PRESET_CATALOG,
+  localizeProviderPresetName,
+  normalizePresetCatalog,
+  type ProviderPreset,
+} from '../model-provider-presets'
 import type {
   AppViewId,
   ChatState,
   ChatWorkspaceState,
+  ProjectSkillRunRequest,
   ProjectSkillListState,
   SelectedProjectSkill,
   SettingsCategoryId,
@@ -52,13 +60,24 @@ import { type ChatPageHandle } from './chat/ChatPage'
 import { projectIdsForSidebar } from './project-order'
 
 const CHAT_WORKSPACE_SAVE_DEBOUNCE_MS = 750
+const INITIAL_PROVIDER_SKIP_VALUE = '__skip'
+const INITIAL_PROVIDER_CUSTOM_VALUE = '__custom'
 
 type InitialModelFormState = {
+  presetId: string
   name: string
+  apiKeyUrl: string
+  authMode: ClaudeAgentProviderAuthMode
   apiKey: string
   baseUrl: string
+  model: string
+  modelSupportsImages: boolean
+  haikuModel: string
+  haikuSupportsImages: boolean
   sonnetModel: string
-  supportsImages: boolean
+  sonnetSupportsImages: boolean
+  opusModel: string
+  opusSupportsImages: boolean
 }
 
 /** 组合侧栏 + 工作区 + 聊天页顶栏 / Composes sidebar rail, workspace chrome, and chat surfaces */
@@ -83,10 +102,13 @@ export function AppShell() {
   )
   const [homeModeResetKey, setHomeModeResetKey] = useState(0)
   const [initialModelForm, setInitialModelForm] = useState<InitialModelFormState>(() => createInitialModelFormState())
+  const [initialModelEnabled, setInitialModelEnabled] = useState(false)
+  const [initialModelTouched, setInitialModelTouched] = useState(false)
   const [initialModelStatus, setInitialModelStatus] = useState('')
   const [initialModelBusy, setInitialModelBusy] = useState(false)
   const [initialProjectPath, setInitialProjectPath] = useState('')
   const workspaceClearedRef = useRef(false)
+  const initialModelTouchedRef = useRef(false)
 
   const chatRef = useRef<ChatPageHandle>(null)
   const workspaceSaveTimerRef = useRef<number | null>(null)
@@ -138,6 +160,10 @@ export function AppShell() {
     void window.desktop.syncTrayLocale?.(locale)
   }, [locale])
 
+  useEffect(() => {
+    initialModelTouchedRef.current = initialModelTouched
+  }, [initialModelTouched])
+
   // --- Derived handles: active project/thread powering chat chrome / 派生句柄：驱动聊天框架的当前项目与线程 ---
 
   const activeProject =
@@ -174,6 +200,10 @@ export function AppShell() {
 
   const sidebarCollapsed = chatWorkspace?.sidebarPrefs.collapsed ?? false
   const isWindows = typeof window !== 'undefined' && window.desktop?.platform === 'win32'
+  const initialProviderPresets = useMemo(
+    () => normalizePresetCatalog(LOCAL_PROVIDER_PRESET_CATALOG, locale).providers,
+    [locale],
+  )
 
   // --- Prune stored maps when projects disappear; keep collapsed ids consistent / 项目删除后裁剪存储映射；折叠 id 列表保持一致 ---
 
@@ -222,18 +252,30 @@ export function AppShell() {
 
   const applyInitialModelSnapshot = useCallback(
     (snapshot: ClaudeAgentSettingsSnapshot) => {
+      if (initialModelTouchedRef.current) return
       const provider = selectInitialModelProvider(snapshot)
+      const localizedProvider = provider ? localizeProviderPresetName(provider, initialProviderPresets) : undefined
       setInitialModelForm({
-        name: provider?.name ?? '',
-        apiKey: provider?.apiKey ?? '',
-        baseUrl: provider?.baseUrl ?? snapshot.env.baseUrl ?? '',
+        presetId: localizedProvider?.presetId ?? '',
+        name: localizedProvider?.name ?? '',
+        apiKeyUrl: localizedProvider?.apiKeyUrl ?? '',
+        authMode: localizedProvider?.authMode ?? 'apiKey',
+        apiKey: localizedProvider?.apiKey ?? '',
+        baseUrl: localizedProvider?.baseUrl ?? snapshot.env.baseUrl ?? '',
+        model: localizedProvider?.model ?? snapshot.env.model ?? '',
+        modelSupportsImages: localizedProvider?.modelSupportsImages ?? snapshot.env.supportsImages ?? false,
+        haikuModel: localizedProvider?.defaultHaikuModel ?? snapshot.env.defaultHaikuModel ?? '',
+        haikuSupportsImages: localizedProvider?.defaultHaikuSupportsImages ?? snapshot.env.supportsImages ?? false,
         sonnetModel:
-          provider?.defaultSonnetModel ?? snapshot.env.defaultSonnetModel ?? provider?.model ?? snapshot.env.model ?? '',
-        supportsImages: provider?.defaultSonnetSupportsImages ?? provider?.modelSupportsImages ?? snapshot.env.supportsImages ?? false,
+          localizedProvider?.defaultSonnetModel ?? snapshot.env.defaultSonnetModel ?? localizedProvider?.model ?? snapshot.env.model ?? '',
+        sonnetSupportsImages:
+          localizedProvider?.defaultSonnetSupportsImages ?? localizedProvider?.modelSupportsImages ?? snapshot.env.supportsImages ?? false,
+        opusModel: localizedProvider?.defaultOpusModel ?? snapshot.env.defaultOpusModel ?? '',
+        opusSupportsImages: localizedProvider?.defaultOpusSupportsImages ?? snapshot.env.supportsImages ?? false,
       })
       setInitialModelStatus(t('shell.initModelLoaded'))
     },
-    [t],
+    [initialProviderPresets, t],
   )
 
   useEffect(() => {
@@ -633,17 +675,64 @@ export function AppShell() {
     [goHome, t, updateChatWorkspace],
   )
 
-  const runProjectSkill = useCallback((projectId: string, prompt: string) => {
-    setSelectedProjectSkill(null)
-    const submit = chatRef.current?.submitPromptInNewThread(projectId, prompt)
-    if (!submit) {
-      createThreadInProject(projectId)
-      return
-    }
-    void submit.then((submitted) => {
-      if (!submitted) setHeaderStatus(t('shell.headerProcessingThread'))
-    })
-  }, [createThreadInProject, t])
+  const runProjectSkill = useCallback(
+    (projectId: string, skill: ProjectSkillRunRequest) => {
+      setSelectedProjectSkill(null)
+      if (!chatWorkspace?.projects.some((project) => project.id === projectId)) {
+        createThreadInProject(projectId)
+        return
+      }
+      const threadId = createId('thread')
+      const now = Date.now()
+      const prompt = skill.title
+
+      updateChatWorkspace((prev) => {
+        if (!prev.projects.some((project) => project.id === projectId)) return prev
+        const nextThread: WorkspaceThread = {
+          id: threadId,
+          projectId,
+          title: t('thread.newThreadTitle'),
+          purpose: 'skill-run',
+          skillPath: skill.path,
+          skillCommand: skill.command,
+          skillTitle: skill.title,
+          createdAt: now,
+          updatedAt: now,
+          chatState: createEmptyChatState(),
+        }
+        return {
+          ...prev,
+          activeProjectId: projectId,
+          activeThreadId: threadId,
+          projects: touchProject(prev.projects, projectId, now),
+          threads: [nextThread, ...prev.threads],
+        }
+      })
+      goHome()
+
+      requestAnimationFrame(() => {
+        void (async () => {
+          await window.claudeChat?.newThread(threadId)
+          const submitted = await chatRef.current?.submitPromptInThread(projectId, threadId, prompt)
+          if (!submitted) setHeaderStatus(t('shell.headerProcessingThread'))
+        })()
+      })
+    },
+    [chatWorkspace?.projects, createThreadInProject, goHome, t, updateChatWorkspace],
+  )
+
+  const stopProjectSkillRun = useCallback(
+    async (projectId: string, skillPath: string) => {
+      const runningThread = chatWorkspace?.threads
+        .filter((thread) => thread.projectId === projectId && thread.purpose === 'skill-run' && thread.skillPath === skillPath && !thread.archivedAt)
+        .filter((thread) => Boolean(threadRunStates[thread.id]))
+        .sort((a, b) => b.updatedAt - a.updatedAt)[0]
+      const requestId = runningThread ? threadRunStates[runningThread.id]?.requestId : undefined
+      if (!requestId || requestId.startsWith('pending-') || !window.claudeChat) return
+      await window.claudeChat.cancel(requestId)
+    },
+    [chatWorkspace?.threads, threadRunStates],
+  )
 
   const selectProject = useCallback(
     (projectId: string) => {
@@ -744,10 +833,55 @@ export function AppShell() {
 
   const updateInitialModelField = useCallback(
     <K extends keyof InitialModelFormState>(field: K, value: InitialModelFormState[K]) => {
+      setInitialModelEnabled(true)
+      setInitialModelTouched(true)
       setInitialModelForm((current) => ({ ...current, [field]: value }))
     },
     [],
   )
+
+  const chooseInitialProviderPreset = useCallback(
+    (preset: ProviderPreset) => {
+      setInitialModelEnabled(true)
+      setInitialModelTouched(true)
+      setInitialModelForm({
+        presetId: preset.id,
+        name: preset.name,
+        apiKeyUrl: preset.apiKeyUrl,
+        authMode: preset.authMode,
+        apiKey: '',
+        baseUrl: preset.baseUrl,
+        model: preset.model,
+        modelSupportsImages: preset.modelSupportsImages,
+        haikuModel: preset.defaultHaikuModel,
+        haikuSupportsImages: preset.defaultHaikuSupportsImages,
+        sonnetModel: preset.defaultSonnetModel,
+        sonnetSupportsImages: preset.defaultSonnetSupportsImages,
+        opusModel: preset.defaultOpusModel,
+        opusSupportsImages: preset.defaultOpusSupportsImages,
+      })
+      setInitialModelStatus(t('shell.initModelProviderSelected', { name: preset.name }))
+    },
+    [t],
+  )
+
+  const chooseInitialCustomProvider = useCallback(() => {
+    setInitialModelEnabled(true)
+    setInitialModelTouched(true)
+    setInitialModelForm(createInitialModelFormState())
+    setInitialModelStatus(t('shell.initModelCustomSelected'))
+  }, [t])
+
+  const skipInitialModelSetup = useCallback(() => {
+    setInitialModelEnabled(false)
+    setInitialModelStatus(t('shell.initModelSkipped'))
+  }, [t])
+
+  const openInitialModelApiKeyLink = useCallback((event: ReactMouseEvent<HTMLAnchorElement>, url: string) => {
+    if (!window.desktop?.openExternal) return
+    event.preventDefault()
+    void window.desktop.openExternal(url)
+  }, [])
 
   const pickInitialProjectFolder = useCallback(async () => {
     let value: string | undefined
@@ -762,13 +896,20 @@ export function AppShell() {
   }, [t])
 
   const saveInitialModelSettings = useCallback(async () => {
+    if (!initialModelEnabled || !hasInitialModelInput(initialModelForm)) {
+      return true
+    }
     if (!window.claudeChat) {
       setInitialModelStatus(t('shell.initModelBridgeUnavailable'))
       return false
     }
 
+    const primaryModel = initialModelForm.model.trim() || initialModelForm.sonnetModel.trim()
     const sonnetModel = initialModelForm.sonnetModel.trim()
-    if (!sonnetModel) {
+    const haikuModel = initialModelForm.haikuModel.trim()
+    const opusModel = initialModelForm.opusModel.trim()
+    const selectedModel = sonnetModel || primaryModel || opusModel || haikuModel
+    if (!selectedModel) {
       setInitialModelStatus(t('shell.initModelRequired'))
       return false
     }
@@ -789,12 +930,21 @@ export function AppShell() {
         provider.id === activeId
           ? {
               ...provider,
+              presetId: initialModelForm.presetId,
               name: initialModelForm.name.trim(),
+              apiKeyUrl: initialModelForm.apiKeyUrl.trim(),
+              authMode: initialModelForm.authMode,
               apiKey: initialModelForm.apiKey.trim(),
               authToken: '',
               baseUrl: initialModelForm.baseUrl.trim(),
-              defaultSonnetModel: sonnetModel,
-              defaultSonnetSupportsImages: initialModelForm.supportsImages,
+              model: primaryModel || selectedModel,
+              modelSupportsImages: initialModelForm.modelSupportsImages,
+              defaultHaikuModel: haikuModel,
+              defaultHaikuSupportsImages: initialModelForm.haikuSupportsImages,
+              defaultSonnetModel: sonnetModel || selectedModel,
+              defaultSonnetSupportsImages: initialModelForm.sonnetSupportsImages,
+              defaultOpusModel: opusModel,
+              defaultOpusSupportsImages: initialModelForm.opusSupportsImages,
             }
           : provider,
       )
@@ -802,7 +952,7 @@ export function AppShell() {
       const nextSnapshot = await window.claudeChat.saveSettings({
         configSource: 'settings',
         activeProviderId: activeId,
-        activeAnthropicModel: sonnetModel,
+        activeAnthropicModel: selectedModel,
         providers: nextProviders,
       })
       window.dispatchEvent(new CustomEvent(CLAUDE_AGENT_SETTINGS_CHANGED_EVENT, { detail: nextSnapshot }))
@@ -815,7 +965,7 @@ export function AppShell() {
     } finally {
       setInitialModelBusy(false)
     }
-  }, [applyInitialModelSnapshot, initialModelForm, t])
+  }, [applyInitialModelSnapshot, initialModelEnabled, initialModelForm, t])
 
   const startInitialSetup = useCallback(
     async (event: ReactFormEvent<HTMLFormElement>) => {
@@ -941,6 +1091,15 @@ export function AppShell() {
             /* stop is best-effort when archiving a running task */
           }
         }
+      } else if (target.purpose === 'skill-run') {
+        const requestId = threadRunStates[target.id]?.requestId
+        if (requestId && !requestId.startsWith('pending-') && window.claudeChat) {
+          try {
+            await window.claudeChat.cancel(requestId)
+          } catch {
+            /* stop is best-effort when archiving a running Skill */
+          }
+        }
       }
 
       updateChatWorkspace((prev) => {
@@ -975,7 +1134,7 @@ export function AppShell() {
       setSelectedProjectSkill(null)
       goHome()
     },
-    [chatWorkspace, goHome, updateChatWorkspace],
+    [chatWorkspace, goHome, threadRunStates, updateChatWorkspace],
   )
 
   const toggleThreadPinned = useCallback((threadId: string) => {
@@ -1301,10 +1460,56 @@ export function AppShell() {
     return null
   }
 
-  const initialModelComplete = Boolean(initialModelForm.sonnetModel.trim())
   const initialProjectComplete = Boolean(initialProjectPath.trim())
-  const initialSetupReady = initialModelComplete && initialProjectComplete && !initialModelBusy
+  const initialSetupReady = initialProjectComplete && !initialModelBusy
   const initialProjectName = initialProjectPath ? pathBasename(initialProjectPath, t('shell.initProjectFolderTitle')) : ''
+  const initialModelSummary = buildInitialModelSummary(initialModelForm)
+  const initialProviderSelectValue = !initialModelEnabled
+    ? INITIAL_PROVIDER_SKIP_VALUE
+    : initialModelForm.presetId || INITIAL_PROVIDER_CUSTOM_VALUE
+  const selectedInitialProviderPreset = initialModelEnabled && initialModelForm.presetId
+    ? initialProviderPresets.find((preset) => preset.id === initialModelForm.presetId)
+    : undefined
+  const initialProviderSelectMeta = !initialModelEnabled
+    ? initialModelSummary
+      ? t('shell.initModelCurrentConfig', { summary: initialModelSummary })
+      : t('shell.initModelSkipMeta')
+    : selectedInitialProviderPreset
+      ? selectedInitialProviderPreset.baseUrl
+      : t('settings.models.customProviderMeta')
+  const initialModelUsesCustomProvider = initialModelEnabled && !initialModelForm.presetId
+  const initialModelRows = [
+    {
+      key: 'haiku',
+      label: t('settings.models.fieldHaiku'),
+      hint: t('settings.models.fieldHaikuHint'),
+      inputId: 'init-model-haiku',
+      field: 'haikuModel' as const,
+      value: initialModelForm.haikuModel,
+      supportField: 'haikuSupportsImages' as const,
+      supportsImages: initialModelForm.haikuSupportsImages,
+    },
+    {
+      key: 'sonnet',
+      label: t('settings.models.fieldSonnet'),
+      hint: t('settings.models.fieldSonnetHint'),
+      inputId: 'init-model-sonnet',
+      field: 'sonnetModel' as const,
+      value: initialModelForm.sonnetModel,
+      supportField: 'sonnetSupportsImages' as const,
+      supportsImages: initialModelForm.sonnetSupportsImages,
+    },
+    {
+      key: 'opus',
+      label: t('settings.models.fieldOpus'),
+      hint: t('settings.models.fieldOpusHint'),
+      inputId: 'init-model-opus',
+      field: 'opusModel' as const,
+      value: initialModelForm.opusModel,
+      supportField: 'opusSupportsImages' as const,
+      supportsImages: initialModelForm.opusSupportsImages,
+    },
+  ]
 
   if (chatWorkspace.projects.length === 0) {
     return (
@@ -1317,75 +1522,9 @@ export function AppShell() {
           </header>
 
           <div className="app-shell-empty__flow" aria-label={t('shell.initFlowAria')}>
-            <section className="app-shell-empty__step" aria-labelledby="init-model-title">
+            <section className="app-shell-empty__step app-shell-empty__step--project" aria-labelledby="init-project-title">
               <div className="app-shell-empty__step-heading">
                 <span className="app-shell-empty__step-index">1</span>
-                <div>
-                  <h2 id="init-model-title">{t('shell.initModelTitle')}</h2>
-                  <p>{t('shell.initModelBody')}</p>
-                </div>
-              </div>
-
-              <div className="app-shell-empty__fields">
-                <label className="app-shell-empty__field">
-                  <span>{t('shell.initModelNameLabel')}</span>
-                  <input
-                    value={initialModelForm.name}
-                    onChange={(event) => updateInitialModelField('name', event.target.value)}
-                    placeholder={t('shell.initModelNamePlaceholder')}
-                    disabled={initialModelBusy}
-                  />
-                </label>
-                <label className="app-shell-empty__field">
-                  <span>{t('shell.initModelIdLabel')}</span>
-                  <input
-                    value={initialModelForm.sonnetModel}
-                    onChange={(event) => updateInitialModelField('sonnetModel', event.target.value)}
-                    placeholder={t('shell.initModelIdPlaceholder')}
-                    disabled={initialModelBusy}
-                  />
-                </label>
-                <label className="app-shell-empty__field">
-                  <span>{t('shell.initModelApiKeyLabel')}</span>
-                  <input
-                    value={initialModelForm.apiKey}
-                    onChange={(event) => updateInitialModelField('apiKey', event.target.value)}
-                    placeholder={t('shell.initModelApiKeyPlaceholder')}
-                    type="password"
-                    autoComplete="off"
-                    disabled={initialModelBusy}
-                  />
-                </label>
-                <label className="app-shell-empty__field">
-                  <span>{t('shell.initModelBaseUrlLabel')}</span>
-                  <input
-                    value={initialModelForm.baseUrl}
-                    onChange={(event) => updateInitialModelField('baseUrl', event.target.value)}
-                    placeholder={t('shell.initModelBaseUrlPlaceholder')}
-                    disabled={initialModelBusy}
-                  />
-                </label>
-                <label className="app-shell-empty__switch">
-                  <span className="app-shell-empty__switch-copy">
-                    <strong>{t('shell.initModelImagesLabel')}</strong>
-                    <span>{t('shell.initModelImagesHint')}</span>
-                  </span>
-                  <input
-                    type="checkbox"
-                    checked={initialModelForm.supportsImages}
-                    onChange={(event) => updateInitialModelField('supportsImages', event.target.checked)}
-                    disabled={initialModelBusy}
-                  />
-                  <span className="app-shell-empty__switch-track" aria-hidden="true">
-                    <span />
-                  </span>
-                </label>
-              </div>
-            </section>
-
-            <section className="app-shell-empty__step" aria-labelledby="init-project-title">
-              <div className="app-shell-empty__step-heading">
-                <span className="app-shell-empty__step-index">2</span>
                 <div>
                   <h2 id="init-project-title">{t('shell.initProjectTitle')}</h2>
                   <p>{t('shell.initProjectBody')}</p>
@@ -1403,6 +1542,188 @@ export function AppShell() {
                   <span>{initialProjectName ? initialProjectPath : t('shell.initProjectFolderHint')}</span>
                 </div>
               </button>
+            </section>
+
+            <section className="app-shell-empty__step app-shell-empty__step--model" aria-labelledby="init-model-title">
+              <div className="app-shell-empty__step-heading">
+                <span className="app-shell-empty__step-index">2</span>
+                <div>
+                  <h2 id="init-model-title">{t('shell.initModelTitle')}</h2>
+                  <p>{t('shell.initModelBody')}</p>
+                </div>
+              </div>
+
+              <div className="app-shell-empty__provider-select-block">
+                <label htmlFor="init-provider-select" className="app-shell-empty__provider-select-label">
+                  {t('settings.models.addProviderDialogTitle')}
+                </label>
+                <div className="app-shell-empty__provider-select-wrap">
+                  <select
+                    id="init-provider-select"
+                    className="app-shell-empty__provider-select"
+                    value={initialProviderSelectValue}
+                    aria-label={t('shell.initModelPresetAria')}
+                    disabled={initialModelBusy}
+                    onChange={(event) => {
+                      const value = event.target.value
+                      if (value === INITIAL_PROVIDER_SKIP_VALUE) {
+                        skipInitialModelSetup()
+                        return
+                      }
+                      if (value === INITIAL_PROVIDER_CUSTOM_VALUE) {
+                        chooseInitialCustomProvider()
+                        return
+                      }
+                      const preset = initialProviderPresets.find((item) => item.id === value)
+                      if (preset) chooseInitialProviderPreset(preset)
+                    }}
+                  >
+                    <option value={INITIAL_PROVIDER_SKIP_VALUE}>{t('shell.initModelSkipTitle')}</option>
+                    {initialProviderPresets.map((preset) => (
+                      <option value={preset.id} key={preset.id}>
+                        {preset.name}
+                      </option>
+                    ))}
+                    <option value={INITIAL_PROVIDER_CUSTOM_VALUE}>{t('settings.models.customProvider')}</option>
+                  </select>
+                  <span className="app-shell-empty__provider-select-chevron" aria-hidden="true">
+                    <IconInline name="chevron" />
+                  </span>
+                </div>
+                <p className="app-shell-empty__provider-select-meta">{initialProviderSelectMeta}</p>
+              </div>
+
+              {initialModelEnabled ? (
+                <>
+                  {!initialModelUsesCustomProvider ? (
+                    <p className="app-shell-empty__preset-hint">{t('shell.initModelPresetHiddenHint')}</p>
+                  ) : null}
+                  <div className="settings-group settings-group--provider-fields app-shell-empty__model-fields">
+                    {initialModelUsesCustomProvider ? (
+                      <div className="settings-field-row">
+                        <div className="settings-field-row__meta">
+                          <label htmlFor="init-model-provider-name" className="settings-field-row__label">
+                            <IconInline name="settings" />
+                            {t('settings.models.fieldName')}
+                          </label>
+                          <p className="settings-field-row__hint">{t('settings.models.fieldNameHint')}</p>
+                        </div>
+                        <input
+                          id="init-model-provider-name"
+                          type="text"
+                          className="settings-input"
+                          autoComplete="off"
+                          spellCheck={false}
+                          placeholder={t('settings.models.fieldNamePlaceholder')}
+                          value={initialModelForm.name}
+                          onChange={(event) => updateInitialModelField('name', event.target.value)}
+                          disabled={initialModelBusy}
+                        />
+                      </div>
+                    ) : null}
+                    <div className="settings-field-row">
+                      <div className="settings-field-row__meta">
+                        <label htmlFor="init-model-api-key" className="settings-field-row__label">
+                          <IconInline name="key" />
+                          {t('settings.models.fieldApiKey')}
+                        </label>
+                        {/* <p className="settings-field-row__hint">{t('settings.models.fieldApiKeyHint')}</p> */}
+                        {initialModelForm.apiKeyUrl ? (
+                          <a
+                            className="settings-api-key-link"
+                            href={initialModelForm.apiKeyUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={(event) => openInitialModelApiKeyLink(event, initialModelForm.apiKeyUrl)}
+                          >
+                            {t('settings.models.getApiKey')}
+                          </a>
+                        ) : null}
+                      </div>
+                      <input
+                        id="init-model-api-key"
+                        type="password"
+                        className="settings-input"
+                        autoComplete="off"
+                        spellCheck={false}
+                        placeholder={t('shell.initModelApiKeyPlaceholder')}
+                        value={initialModelForm.apiKey}
+                        onChange={(event) => updateInitialModelField('apiKey', event.target.value)}
+                        disabled={initialModelBusy}
+                      />
+                    </div>
+                    {initialModelUsesCustomProvider ? (
+                      <div className="settings-field-row">
+                        <div className="settings-field-row__meta">
+                          <label htmlFor="init-model-base-url" className="settings-field-row__label">
+                            <IconInline name="server" />
+                            {t('settings.models.fieldBaseUrl')}
+                          </label>
+                          <p className="settings-field-row__hint">{t('settings.models.fieldBaseUrlHint')}</p>
+                        </div>
+                        <input
+                          id="init-model-base-url"
+                          type="url"
+                          className="settings-input"
+                          autoComplete="off"
+                          spellCheck={false}
+                          placeholder={t('shell.initModelBaseUrlPlaceholder')}
+                          value={initialModelForm.baseUrl}
+                          onChange={(event) => updateInitialModelField('baseUrl', event.target.value)}
+                          disabled={initialModelBusy}
+                        />
+                      </div>
+                    ) : null}
+                    {initialModelUsesCustomProvider ? (
+                      <div className="settings-model-map" aria-label={t('settings.models.modelMappingsAria')}>
+                        {initialModelRows.map((row) => (
+                          <div className="settings-field-row settings-model-row" key={row.key}>
+                            <div className="settings-field-row__meta">
+                              <label htmlFor={row.inputId} className="settings-field-row__label">
+                                <IconInline name="chip" />
+                                {row.label}
+                              </label>
+                              <p className="settings-field-row__hint">{row.hint}</p>
+                            </div>
+                            <input
+                              id={row.inputId}
+                              type="text"
+                              className="settings-input"
+                              autoComplete="off"
+                              spellCheck={false}
+                              placeholder={t('shell.initModelIdPlaceholder')}
+                              value={row.value}
+                              onChange={(event) => updateInitialModelField(row.field, event.target.value)}
+                              disabled={initialModelBusy}
+                            />
+                            <label
+                              className="settings-model-image-toggle"
+                              title={t('settings.models.modelImageToggleTitle', { slot: row.label })}
+                            >
+                              <span className="settings-model-image-toggle__glyph" aria-hidden="true">
+                                <IconInline name="image" />
+                              </span>
+                              <span className="settings-switch-control">
+                                <input
+                                  type="checkbox"
+                                  className="settings-switch-input"
+                                  checked={row.supportsImages}
+                                  aria-label={t('settings.models.modelImageToggleAria', { slot: row.label })}
+                                  onChange={(event) => updateInitialModelField(row.supportField, event.target.checked)}
+                                  disabled={initialModelBusy}
+                                />
+                                <span className="settings-switch-track" aria-hidden="true">
+                                  <span className="settings-switch-thumb" />
+                                </span>
+                              </span>
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                </>
+              ) : null}
             </section>
           </div>
 
@@ -1487,6 +1808,9 @@ export function AppShell() {
           homeModeResetKey={homeModeResetKey}
           onCreateHomePluginCardThread={createHomePluginCardThread}
           onEditHomePluginCard={openHomePluginCardThread}
+          hiddenSkillPaths={hiddenSkillPathsByProject[activeProject.id] ?? []}
+          onRunProjectSkill={runProjectSkill}
+          onStopProjectSkillRun={stopProjectSkillRun}
           showProjectSkillsInSidebar={showProjectSkillsInSidebar}
           onShowProjectSkillsInSidebarChange={updateShowProjectSkillsInSidebar}
         />
@@ -1549,18 +1873,49 @@ function normalizeComparablePath(value: string): string {
 
 function createInitialModelFormState(): InitialModelFormState {
   return {
+    presetId: '',
     name: '',
+    apiKeyUrl: '',
+    authMode: 'apiKey',
     apiKey: '',
     baseUrl: '',
+    model: '',
+    modelSupportsImages: false,
+    haikuModel: '',
+    haikuSupportsImages: false,
     sonnetModel: '',
-    supportsImages: false,
+    sonnetSupportsImages: false,
+    opusModel: '',
+    opusSupportsImages: false,
   }
+}
+
+function hasInitialModelInput(form: InitialModelFormState): boolean {
+  return [
+    form.name,
+    form.apiKey,
+    form.baseUrl,
+    form.model,
+    form.haikuModel,
+    form.sonnetModel,
+    form.opusModel,
+  ].some((value) => value.trim())
+}
+
+function buildInitialModelSummary(form: InitialModelFormState): string {
+  return [form.name, form.sonnetModel || form.model || form.opusModel || form.haikuModel, form.baseUrl]
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .join(' · ')
 }
 
 function createInitialModelProvider(): ClaudeAgentModelProvider {
   return {
     id: createId('provider'),
+    presetId: '',
     name: '',
+    apiKeyUrl: '',
+    authMode: 'apiKey',
     apiKey: '',
     authToken: '',
     baseUrl: '',

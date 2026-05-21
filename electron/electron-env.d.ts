@@ -62,6 +62,8 @@ declare global {
     claudeChat?: ClaudeChatAPI
     desktop?: {
       platform: NodeJS.Platform
+      /** 主进程判定的开发运行时；用于显示测试/清理入口 / Main-process dev runtime flag for test-only UI. */
+      isDevRuntime?: boolean
       /** macOS 透明磨砂窗口标记（渲染层样式钩子）/ Enables vibrancy-aware styling on macOS */
       windowEffects?: {
         macVibrancy: boolean

@@ -39,6 +39,7 @@ import type {
   ChatState,
   ChatThinkingItem,
   ChatToolItem,
+  ProjectSkillRunRequest,
   ThreadRunState,
   TranscriptItem,
   WorkspaceProject,
@@ -86,8 +87,11 @@ type ChatPageProps = {
   todoEnabled: boolean
   agentModeLoading: boolean
   homeModeResetKey: number
+  hiddenSkillPaths: string[]
   onCreateHomePluginCardThread: (projectId: string, initialPrompt: string) => string | void
   onEditHomePluginCard: (projectId: string, item: HomePluginRunItem) => void
+  onRunProjectSkill: (projectId: string, skill: ProjectSkillRunRequest) => void
+  onStopProjectSkillRun: (projectId: string, skillPath: string) => void
 }
 
 // --- Internal helpers / 模块内辅助 ---
@@ -166,8 +170,11 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     todoEnabled,
     agentModeLoading,
     homeModeResetKey,
+    hiddenSkillPaths,
     onCreateHomePluginCardThread,
     onEditHomePluginCard,
+    onRunProjectSkill,
+    onStopProjectSkillRun,
   },
   ref,
 ) {
@@ -1706,7 +1713,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     hasMessages ||
     activeThread?.purpose === 'home-plugin-customization' ||
     activeThread?.purpose === 'home-plugin-card-customization' ||
-    activeThread?.purpose === 'task-run'
+    activeThread?.purpose === 'task-run' ||
+    activeThread?.purpose === 'skill-run'
 
   return (
     <section
@@ -1737,12 +1745,17 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
           agentModeEnabled={agentModeEnabled}
           todoEnabled={todoEnabled}
           agentModeLoading={agentModeLoading}
+          threads={threads.filter((thread) => thread.projectId === activeProject.id)}
+          threadRunStates={threadRunStates}
+          hiddenSkillPaths={hiddenSkillPaths}
           heading={homeComposerMode === 'data-card-draft' ? t('chat.dataCardDraftHeading') : undefined}
           onStartDataCardDraft={() => {
             setHomeComposerMode('data-card-draft')
             requestAnimationFrame(() => chatInputRef.current?.focus())
           }}
           onEditHomePluginCard={(item) => onEditHomePluginCard(activeProject.id, item)}
+          onRunProjectSkill={onRunProjectSkill}
+          onStopProjectSkillRun={onStopProjectSkillRun}
         />
       )}
       {activeUserInputPrompt

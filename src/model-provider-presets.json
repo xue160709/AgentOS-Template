@@ -1,0 +1,113 @@
+{
+  "version": "2026.05.21",
+  "providers": [
+    {
+      "id": "anthropic",
+      "name": {
+        "zh": "Anthropic",
+        "en": "Anthropic"
+      },
+      "apiKeyUrl": "https://console.anthropic.com/settings/keys",
+      "baseUrl": "https://api.anthropic.com",
+      "authMode": "apiKey",
+      "model": "claude-sonnet-4-6",
+      "defaultHaikuModel": "claude-haiku-4-5",
+      "defaultSonnetModel": "claude-sonnet-4-6",
+      "defaultOpusModel": "claude-opus-4-7",
+      "modelSupportsImages": true,
+      "defaultHaikuSupportsImages": true,
+      "defaultSonnetSupportsImages": true,
+      "defaultOpusSupportsImages": true
+    },
+    {
+      "id": "openrouter",
+      "name": {
+        "zh": "OpenRouter",
+        "en": "OpenRouter"
+      },
+      "apiKeyUrl": "https://openrouter.ai/settings/keys",
+      "baseUrl": "https://openrouter.ai/api",
+      "authMode": "authToken",
+      "model": "anthropic/claude-sonnet-4.6",
+      "defaultHaikuModel": "anthropic/claude-haiku-4.5",
+      "defaultSonnetModel": "anthropic/claude-sonnet-4.6",
+      "defaultOpusModel": "anthropic/claude-opus-4.7",
+      "modelSupportsImages": true,
+      "defaultHaikuSupportsImages": true,
+      "defaultSonnetSupportsImages": true,
+      "defaultOpusSupportsImages": true
+    },
+    {
+      "id": "minimax",
+      "name": {
+        "zh": "MiniMax",
+        "en": "MiniMax"
+      },
+      "apiKeyUrl": "https://platform.minimax.io/user-center/basic-information/interface-key",
+      "baseUrl": "https://api.minimax.io/anthropic",
+      "authMode": "authToken",
+      "model": "MiniMax-M2.7",
+      "defaultHaikuModel": "MiniMax-M2.7",
+      "defaultSonnetModel": "MiniMax-M2.7",
+      "defaultOpusModel": "MiniMax-M2.7",
+      "modelSupportsImages": false,
+      "defaultHaikuSupportsImages": false,
+      "defaultSonnetSupportsImages": false,
+      "defaultOpusSupportsImages": false
+    },
+    {
+      "id": "glm",
+      "name": {
+        "zh": "智谱 GLM",
+        "en": "Zhipu GLM"
+      },
+      "apiKeyUrl": "https://bigmodel.cn/usercenter/proj-mgmt/apikeys",
+      "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+      "authMode": "authToken",
+      "model": "glm-5.1",
+      "defaultHaikuModel": "glm-4.7",
+      "defaultSonnetModel": "glm-5",
+      "defaultOpusModel": "glm-5.1",
+      "modelSupportsImages": false,
+      "defaultHaikuSupportsImages": false,
+      "defaultSonnetSupportsImages": false,
+      "defaultOpusSupportsImages": false
+    },
+    {
+      "id": "kimi",
+      "name": {
+        "zh": "Kimi",
+        "en": "Kimi"
+      },
+      "apiKeyUrl": "https://platform.moonshot.cn/console/api-keys",
+      "baseUrl": "https://api.moonshot.cn/anthropic",
+      "authMode": "authToken",
+      "model": "kimi-k2.5",
+      "defaultHaikuModel": "kimi-k2.5",
+      "defaultSonnetModel": "kimi-k2.5",
+      "defaultOpusModel": "kimi-k2.5",
+      "modelSupportsImages": true,
+      "defaultHaikuSupportsImages": true,
+      "defaultSonnetSupportsImages": true,
+      "defaultOpusSupportsImages": true
+    },
+    {
+      "id": "siliconflow",
+      "name": {
+        "zh": "硅基流动",
+        "en": "SiliconFlow"
+      },
+      "apiKeyUrl": "https://cloud.siliconflow.cn/account/ak",
+      "baseUrl": "https://api.siliconflow.cn",
+      "authMode": "apiKey",
+      "model": "moonshotai/Kimi-K2-Instruct-0905",
+      "defaultHaikuModel": "THUDM/GLM-4.5-Air",
+      "defaultSonnetModel": "moonshotai/Kimi-K2-Instruct-0905",
+      "defaultOpusModel": "Qwen/Qwen3.6-27B",
+      "modelSupportsImages": false,
+      "defaultHaikuSupportsImages": false,
+      "defaultSonnetSupportsImages": false,
+      "defaultOpusSupportsImages": false
+    }
+  ]
+}

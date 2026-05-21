@@ -34,6 +34,7 @@ const APP_UPDATER_EVENT_CHANNEL = 'app-updater:event'
 
 contextBridge.exposeInMainWorld('desktop', {
   platform: process.platform,
+  isDevRuntime: process.env.AGENTOS_DEV_RUNTIME === '1' || Boolean(process.env.VITE_DEV_SERVER_URL),
   windowEffects: {
     macVibrancy: process.platform === 'darwin',
     windowsTitlebarOverlay: process.platform === 'win32',
@@ -222,6 +223,9 @@ contextBridge.exposeInMainWorld('claudeChat', {
   },
   saveSettings(settings: ClaudeAgentSettings) {
     return ipcRenderer.invoke('claude-agent-settings:save', settings)
+  },
+  testProvider(provider: ClaudeAgentSettings['providers'][number]) {
+    return ipcRenderer.invoke('claude-agent-settings:test-provider', provider)
   },
   setActiveChatPick(payload: ActiveChatPickPayload) {
     return ipcRenderer.invoke('claude-agent-settings:set-active-chat-pick', payload)

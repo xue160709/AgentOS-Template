@@ -42,10 +42,19 @@ const SETTINGS_SIDEBAR_NAV_BASE: {
 /** 设置侧栏导航（文案键 + 图标）/ Settings sidebar nav entries (i18n keys + icons) */
 export function getSettingsSidebarNav() {
   const nav = [...SETTINGS_SIDEBAR_NAV_BASE]
-  if (import.meta.env.DEV) {
+  if (isDeveloperSettingsEnabled()) {
     nav.push({ id: 'developer', labelKey: 'settingsCategory.developer', icon: 'laptop' })
   }
   return nav
+}
+
+/** 开发者设置入口：Vite dev、桌面 dev runtime，或显式构建开关。 */
+export function isDeveloperSettingsEnabled(): boolean {
+  return (
+    import.meta.env.DEV ||
+    import.meta.env.VITE_SHOW_DEVELOPER_SETTINGS === 'true' ||
+    (typeof window !== 'undefined' && window.desktop?.isDevRuntime === true)
+  )
 }
 
 /** 非设置视图标题所用 i18n 键 / Heading keys for non-settings views */
@@ -91,7 +100,7 @@ export function settingsCategoryFromLocation(): SettingsCategoryId {
   const sub = parts[1]
   if (sub === 'skills') return 'skills'
   if (sub === 'updates') return 'updates'
-  if (sub === 'developer' && import.meta.env.DEV) return 'developer'
+  if (sub === 'developer' && isDeveloperSettingsEnabled()) return 'developer'
   if (sub === 'agent') return 'agent'
   return DEFAULT_SETTINGS_CATEGORY
 }

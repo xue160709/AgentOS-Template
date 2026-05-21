@@ -15,37 +15,59 @@ import type {
 } from '../../desktop-types'
 import { IconInline } from '../../icon-inline'
 import { useI18n } from '../../i18n/i18n'
-import type { WorkspaceProject } from '../types'
+import type { ProjectSkillRunRequest, ThreadRunState, WorkspaceProject, WorkspaceThread } from '../types'
 import { renderMarkdown } from './markdown'
 
 type ProjectHomeSurfaceProps = {
   project: WorkspaceProject
   todoEnabled: boolean
   loading: boolean
+  threads: WorkspaceThread[]
+  threadRunStates: Record<string, ThreadRunState>
+  hiddenSkillPaths: string[]
   onStartDataCardDraft: () => void
   onEditHomePluginCard: (item: HomePluginRunItem) => void
+  onRunProjectSkill: (projectId: string, skill: ProjectSkillRunRequest) => void
+  onStopProjectSkillRun: (projectId: string, skillPath: string) => void
 }
 
 const pluginCache = new Map<string, { hashes: Record<string, string>; plugins: HomePluginRunItem[] }>()
 const HOME_GRID_COLUMNS = 3
+const HOME_CARD_LAYOUT_STORAGE_KEY = 'agentos:project-home-card-layout:v1'
+
+type HomeCardItem =
+  | { kind: 'plugin'; cardId: string; item: HomePluginRunItem; size: HomePluginCardSize }
+  | { kind: 'skill'; cardId: string; skill: AgentContextSlashItem; size: HomePluginCardSize }
 
 type HomeGridItem =
-  | { kind: 'plugin'; item: HomePluginRunItem }
+  | { kind: 'card'; card: HomeCardItem }
   | { kind: 'filler'; id: string; span: 1 | 2; tone: 'grid' | 'signal' | 'trace' }
 type HomeGridFillerItem = Extract<HomeGridItem, { kind: 'filler' }>
+
+type HomeCardLayout = {
+  order: string[]
+  sizes: Record<string, HomePluginCardSize>
+}
 
 /** Runs all card Home Plugins and renders the Agent Mode card grid. */
 export function ProjectHomeSurface({
   project,
   todoEnabled,
   loading,
+  threads,
+  threadRunStates,
+  hiddenSkillPaths,
   onStartDataCardDraft,
   onEditHomePluginCard,
+  onRunProjectSkill,
+  onStopProjectSkillRun,
 }: ProjectHomeSurfaceProps) {
   const { t } = useI18n()
   const cacheKey = project.path
   const outputHashesRef = useRef<Record<string, string>>(pluginCache.get(cacheKey)?.hashes ?? {})
   const [plugins, setPlugins] = useState<HomePluginRunItem[]>(() => pluginCache.get(cacheKey)?.plugins ?? [])
+  const [skills, setSkills] = useState<AgentContextSlashItem[]>([])
+  const [cardLayout, setCardLayout] = useState<HomeCardLayout>(() => readHomeCardLayout(cacheKey))
   const [error, setError] = useState('')
   const [addMenuOpen, setAddMenuOpen] = useState(false)
   const [taskDialogOpen, setTaskDialogOpen] = useState(false)
@@ -89,18 +111,38 @@ export function ProjectHomeSurface({
     }
   }, [cacheKey, project.path])
 
+  const loadProjectSkills = useCallback(async () => {
+    const listAgentContext = window.desktop?.listAgentContext
+    if (!listAgentContext) {
+      setSkills([])
+      return
+    }
+    try {
+      const result = await listAgentContext(project.path)
+      setSkills(result.ok ? result.skills.filter((skill) => skill.kind === 'skill' && skill.scope === 'project') : [])
+    } catch {
+      setSkills([])
+    }
+  }, [project.path])
+
   useEffect(() => {
     outputHashesRef.current = pluginCache.get(cacheKey)?.hashes ?? {}
     setPlugins(pluginCache.get(cacheKey)?.plugins ?? [])
+    setSkills([])
+    setCardLayout(readHomeCardLayout(cacheKey))
     setError('')
     void loadHomePlugins()
-  }, [cacheKey, loadHomePlugins])
+    void loadProjectSkills()
+  }, [cacheKey, loadHomePlugins, loadProjectSkills])
 
   useEffect(() => {
-    const onRefresh = () => void loadHomePlugins()
+    const onRefresh = () => {
+      void loadHomePlugins()
+      void loadProjectSkills()
+    }
     window.addEventListener('project-home:refresh', onRefresh)
     return () => window.removeEventListener('project-home:refresh', onRefresh)
-  }, [loadHomePlugins])
+  }, [loadHomePlugins, loadProjectSkills])
 
   useEffect(() => {
     const subscribe = window.desktop?.onHomePluginTaskEvent
@@ -142,30 +184,74 @@ export function ProjectHomeSurface({
     }
   }, [addMenuOpen])
 
+  const visiblePlugins = useMemo(
+    () => plugins.filter((item) => item.status !== 'empty' && hasRenderableMessages(item)),
+    [plugins],
+  )
+  const hiddenSkillPathKey = hiddenSkillPaths.join('\n')
+  const hiddenSkillPathSet = useMemo(() => new Set(hiddenSkillPaths), [hiddenSkillPathKey])
+  const visibleSkills = useMemo(
+    () => skills.filter((skill) => !hiddenSkillPathSet.has(skill.path)),
+    [hiddenSkillPathSet, skills],
+  )
+  const homeCards = useMemo(() => {
+    const pluginCards: HomeCardItem[] = visiblePlugins.map((item) => {
+      const cardId = pluginCardId(item.slug)
+      return {
+        kind: 'plugin',
+        cardId,
+        item,
+        size: cardLayout.sizes[cardId] ?? item.manifest.preferredSize,
+      }
+    })
+    const skillCards: HomeCardItem[] = visibleSkills.map((skill) => {
+      const cardId = skillCardId(skill)
+      return {
+        kind: 'skill',
+        cardId,
+        skill,
+        size: cardLayout.sizes[cardId] ?? 'small',
+      }
+    })
+    return sortHomeCards([...pluginCards, ...skillCards], cardLayout.order)
+  }, [cardLayout.order, cardLayout.sizes, visiblePlugins, visibleSkills])
+  const gridItems = useMemo(() => buildHomeGridItems(homeCards), [homeCards])
+
   useEffect(() => {
     if (!sortDialogOpen) return
-    setDraftOrder(plugins.map((item) => item.slug))
-    setDraftSizes(Object.fromEntries(plugins.map((item) => [item.slug, item.manifest.preferredSize])))
-  }, [plugins, sortDialogOpen])
-
-  const visiblePlugins = plugins.filter((item) => item.status !== 'empty' && hasRenderableMessages(item))
-  const gridItems = useMemo(() => buildHomeGridItems(visiblePlugins), [visiblePlugins])
+    setDraftOrder(homeCards.map((card) => card.cardId))
+    setDraftSizes(Object.fromEntries(homeCards.map((card) => [card.cardId, card.size])))
+  }, [homeCards, sortDialogOpen])
 
   const saveSortOrder = async () => {
-    const layoutCards = Object.entries(draftSizes).map(([slug, preferredSize]) => ({ slug, preferredSize }))
-    const result = window.desktop?.saveHomePluginLayout
-      ? await window.desktop.saveHomePluginLayout(project.path, draftOrder, layoutCards)
-      : window.desktop?.saveHomePluginOrder
-        ? await window.desktop.saveHomePluginOrder(project.path, draftOrder)
-        : null
-    if (!result) return
-    if (result.ok) {
-      setSortDialogOpen(false)
-      outputHashesRef.current = {}
-      window.dispatchEvent(new CustomEvent('project-home:refresh'))
-    } else {
-      setError(result.message)
+    const cardsById = new Map(homeCards.map((card) => [card.cardId, card]))
+    const pluginOrder = draftOrder
+      .map((cardId) => cardsById.get(cardId))
+      .filter((card): card is Extract<HomeCardItem, { kind: 'plugin' }> => card?.kind === 'plugin')
+      .map((card) => card.item.slug)
+    const layoutCards = homeCards
+      .filter((card): card is Extract<HomeCardItem, { kind: 'plugin' }> => card.kind === 'plugin')
+      .map((card) => ({
+        slug: card.item.slug,
+        preferredSize: draftSizes[card.cardId] ?? card.size,
+      }))
+    if (layoutCards.length > 0) {
+      const result = window.desktop?.saveHomePluginLayout
+        ? await window.desktop.saveHomePluginLayout(project.path, pluginOrder, layoutCards)
+        : window.desktop?.saveHomePluginOrder
+          ? await window.desktop.saveHomePluginOrder(project.path, pluginOrder)
+          : null
+      if (result && !result.ok) {
+        setError(result.message)
+        return
+      }
     }
+    const nextLayout = normalizeHomeCardLayout({ order: draftOrder, sizes: draftSizes })
+    writeHomeCardLayout(project.path, nextLayout)
+    setCardLayout(nextLayout)
+    setSortDialogOpen(false)
+    outputHashesRef.current = {}
+    window.dispatchEvent(new CustomEvent('project-home:refresh'))
   }
 
   const deleteCard = async (item: HomePluginRunItem) => {
@@ -194,10 +280,11 @@ export function ProjectHomeSurface({
       outputHashesRef.current = nextHashes
       pluginCache.set(cacheKey, { hashes: nextHashes, plugins: nextPlugins })
       setPlugins(nextPlugins)
-      setDraftOrder((current) => current.filter((slug) => slug !== item.slug))
+      const cardId = pluginCardId(item.slug)
+      setDraftOrder((current) => current.filter((id) => id !== cardId))
       setDraftSizes((current) => {
         const next = { ...current }
-        delete next[item.slug]
+        delete next[cardId]
         return next
       })
       window.dispatchEvent(new CustomEvent('project-home:refresh'))
@@ -221,7 +308,7 @@ export function ProjectHomeSurface({
             className="project-home-icon-button"
             title={t('workspace.sortAgentCards')}
             aria-label={t('workspace.sortAgentCards')}
-            disabled={loading || visiblePlugins.length === 0}
+            disabled={loading || homeCards.length === 0}
             onClick={() => setSortDialogOpen(true)}
           >
             <IconInline name="sort" />
@@ -270,28 +357,43 @@ export function ProjectHomeSurface({
       </div>
 
       {error ? <div className="project-home-surface-error">{error}</div> : null}
-      {!error && visiblePlugins.length === 0 ? <ProjectHomeEmptyState /> : null}
-      {!error && visiblePlugins.length > 0 ? (
+      {!error && homeCards.length === 0 ? <ProjectHomeEmptyState /> : null}
+      {!error && homeCards.length > 0 ? (
         <div className="project-home-card-grid">
-          {gridItems.map((gridItem) =>
-            gridItem.kind === 'filler' ? (
-              <HomeGridFiller key={gridItem.id} span={gridItem.span} tone={gridItem.tone} />
-            ) : (
+          {gridItems.map((gridItem) => {
+            if (gridItem.kind === 'filler') return <HomeGridFiller key={gridItem.id} span={gridItem.span} tone={gridItem.tone} />
+            const card = gridItem.card
+            if (card.kind === 'skill') {
+              return (
+                <SkillHomeCard
+                  key={card.cardId}
+                  skill={card.skill}
+                  size={card.size}
+                  projectId={project.id}
+                  threads={threads}
+                  threadRunStates={threadRunStates}
+                  onRun={onRunProjectSkill}
+                  onStop={onStopProjectSkillRun}
+                />
+              )
+            }
+            return (
               <HomePluginCard
-                key={`${gridItem.item.slug}:${gridItem.item.outputHash ?? ''}`}
-                item={gridItem.item}
+                key={`${card.cardId}:${card.item.outputHash ?? ''}`}
+                item={card.item}
+                size={card.size}
                 projectPath={project.path}
                 onEdit={() => {
-                  if (gridItem.item.manifest.kind === 'task') {
-                    setEditingTaskSlug(gridItem.item.slug)
+                  if (card.item.manifest.kind === 'task') {
+                    setEditingTaskSlug(card.item.slug)
                     setTaskDialogOpen(true)
                     return
                   }
-                  onEditHomePluginCard(gridItem.item)
+                  onEditHomePluginCard(card.item)
                 }}
               />
-            ),
-          )}
+            )
+          })}
         </div>
       ) : null}
 
@@ -315,11 +417,11 @@ export function ProjectHomeSurface({
       ) : null}
       {sortDialogOpen ? (
         <SortCardsDialog
-          plugins={visiblePlugins}
+          cards={homeCards}
           draftOrder={draftOrder}
           draftSizes={draftSizes}
           onDraftOrderChange={setDraftOrder}
-          onDraftSizeChange={(slug, preferredSize) => setDraftSizes((prev) => ({ ...prev, [slug]: preferredSize }))}
+          onDraftSizeChange={(cardId, preferredSize) => setDraftSizes((prev) => ({ ...prev, [cardId]: preferredSize }))}
           deletingSlug={deletingSlug}
           onDelete={(item) => void deleteCard(item)}
           onClose={() => setSortDialogOpen(false)}
@@ -351,15 +453,16 @@ function HomeGridFiller({ span, tone }: Pick<HomeGridFillerItem, 'span' | 'tone'
 
 function HomePluginCard({
   item,
+  size,
   projectPath,
   onEdit,
 }: {
   item: HomePluginRunItem
+  size: HomePluginCardSize
   projectPath: string
   onEdit: () => void
 }) {
   const { t } = useI18n()
-  const size = item.manifest.preferredSize
   const messages = messagesForSize(item, size)
   const taskCard = item.manifest.kind === 'task' ? taskCardViewModelFromMessages(item, messages) : null
   const [menuOpen, setMenuOpen] = useState(false)
@@ -487,6 +590,135 @@ function TaskHomeCardView({ task, projectPath }: { task: TaskHomeCardViewModel; 
         </button>
       </footer>
     </article>
+  )
+}
+
+function SkillHomeCard({
+  skill,
+  size,
+  projectId,
+  threads,
+  threadRunStates,
+  onRun,
+  onStop,
+}: {
+  skill: AgentContextSlashItem
+  size: HomePluginCardSize
+  projectId: string
+  threads: WorkspaceThread[]
+  threadRunStates: Record<string, ThreadRunState>
+  onRun: (projectId: string, skill: ProjectSkillRunRequest) => void
+  onStop: (projectId: string, skillPath: string) => void
+}) {
+  const { t } = useI18n()
+  const [busy, setBusy] = useState(false)
+  const cardRef = useRef<HTMLDivElement>(null)
+  const runningThread = useMemo(
+    () => latestSkillThread(threads, skill.path, (thread) => Boolean(threadRunStates[thread.id])),
+    [skill.path, threadRunStates, threads],
+  )
+  const latestThread = useMemo(
+    () => runningThread ?? latestSkillThread(threads, skill.path),
+    [runningThread, skill.path, threads],
+  )
+  const activeRunState = runningThread ? threadRunStates[runningThread.id] : undefined
+  const lastStatus = latestThread ? latestThreadMessageStatus(latestThread) : undefined
+  const active = Boolean(activeRunState)
+  const statusTone: TaskHomeCardTone = active
+    ? 'active'
+    : lastStatus === 'error'
+      ? 'error'
+      : lastStatus === 'cancelled'
+        ? 'cancelled'
+        : lastStatus === 'done'
+          ? 'done'
+          : 'idle'
+  const statusLabel = active
+    ? activeRunState?.status === 'waiting'
+      ? t('workspace.skillCardWaiting')
+      : t('workspace.skillCardRunning')
+    : lastStatus === 'error'
+      ? t('workspace.skillCardFailed')
+      : lastStatus === 'cancelled'
+        ? t('workspace.skillCardCancelled')
+        : lastStatus === 'done'
+          ? t('workspace.skillCardDone')
+          : t('workspace.skillCardIdle')
+  const summary = active
+    ? t('workspace.skillCardRunningSummary')
+    : latestThread
+      ? t('workspace.skillCardLastRunSummary')
+      : t('workspace.skillCardReadySummary')
+  const detail = skill.description || skill.relativePath
+  const actionLabel = active ? t('workspace.skillCardStop') : t('workspace.skillCardRun')
+  const iconName = active ? 'stop' : 'play'
+
+  useMasonrySpan(cardRef, [size, skill.path, skill.description, active, statusLabel, summary, detail])
+
+  const runAction = useCallback(async () => {
+    if (busy) return
+    setBusy(true)
+    try {
+      if (active) {
+        onStop(projectId, skill.path)
+      } else {
+        onRun(projectId, {
+          title: skill.title,
+          command: skill.command,
+          description: skill.description,
+          path: skill.path,
+          relativePath: skill.relativePath,
+        })
+      }
+    } finally {
+      window.setTimeout(() => setBusy(false), 120)
+    }
+  }, [active, busy, onRun, onStop, projectId, skill.command, skill.description, skill.path, skill.relativePath, skill.title])
+
+  return (
+    <div
+      ref={cardRef}
+      className={`project-home-card project-home-card--${size} project-home-card--skill`}
+      style={{ '--home-card-span': sizeToColumnSpan(size) } as CSSProperties}
+    >
+      <div className="project-home-card__measure">
+        <div className="project-home-card__surface">
+          <article className="task-home-card skill-home-card" aria-label={skill.title}>
+            <header className="task-home-card__header">
+              <span className="task-home-card__glyph" aria-hidden="true">
+                <IconInline name="chip" />
+              </span>
+              <span className="task-home-card__heading">
+                <h3>{skill.title}</h3>
+                <span>{skill.command ? `/${skill.command}` : skill.relativePath}</span>
+              </span>
+              <span className={`task-home-card__status task-home-card__status--${statusTone}`}>{statusLabel}</span>
+            </header>
+
+            <div className="task-home-card__body">
+              <p className="task-home-card__summary">{summary}</p>
+              {detail ? <p className="task-home-card__detail">{detail}</p> : null}
+            </div>
+
+            <div className="task-home-card__meta">
+              <span title={skill.relativePath}>{skill.relativePath}</span>
+            </div>
+
+            <footer className="task-home-card__footer">
+              <button
+                type="button"
+                className={`task-home-card__action${active ? ' task-home-card__action--stop' : ''}`}
+                disabled={busy}
+                onClick={() => void runAction()}
+              >
+                <IconInline name={iconName} />
+                <span>{busy ? t('workspace.skillCardProcessing') : actionLabel}</span>
+              </button>
+            </footer>
+          </article>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -987,7 +1219,7 @@ function TaskCardDialog({
 }
 
 function SortCardsDialog({
-  plugins,
+  cards,
   draftOrder,
   draftSizes,
   onDraftOrderChange,
@@ -997,21 +1229,21 @@ function SortCardsDialog({
   onClose,
   onSave,
 }: {
-  plugins: HomePluginRunItem[]
+  cards: HomeCardItem[]
   draftOrder: string[]
   draftSizes: Record<string, HomePluginCardSize>
   onDraftOrderChange: (order: string[]) => void
-  onDraftSizeChange: (slug: string, preferredSize: HomePluginCardSize) => void
+  onDraftSizeChange: (cardId: string, preferredSize: HomePluginCardSize) => void
   deletingSlug: string
   onDelete: (item: HomePluginRunItem) => void
   onClose: () => void
   onSave: () => void
 }) {
   const { t } = useI18n()
-  const bySlug = new Map(plugins.map((item) => [item.slug, item]))
-  const ordered = draftOrder.map((slug) => bySlug.get(slug)).filter((item): item is HomePluginRunItem => Boolean(item))
-  const move = (slug: string, offset: number) => {
-    const index = draftOrder.indexOf(slug)
+  const byId = new Map(cards.map((item) => [item.cardId, item]))
+  const ordered = draftOrder.map((cardId) => byId.get(cardId)).filter((item): item is HomeCardItem => Boolean(item))
+  const move = (cardId: string, offset: number) => {
+    const index = draftOrder.indexOf(cardId)
     const nextIndex = index + offset
     if (index < 0 || nextIndex < 0 || nextIndex >= draftOrder.length) return
     const next = [...draftOrder]
@@ -1020,16 +1252,16 @@ function SortCardsDialog({
     onDraftOrderChange(next)
   }
 
-  const onDragStart = (event: DragEvent<HTMLDivElement>, slug: string) => {
-    event.dataTransfer.setData('text/plain', slug)
+  const onDragStart = (event: DragEvent<HTMLDivElement>, cardId: string) => {
+    event.dataTransfer.setData('text/plain', cardId)
     event.dataTransfer.effectAllowed = 'move'
   }
-  const onDrop = (event: DragEvent<HTMLDivElement>, targetSlug: string) => {
+  const onDrop = (event: DragEvent<HTMLDivElement>, targetCardId: string) => {
     event.preventDefault()
-    const sourceSlug = event.dataTransfer.getData('text/plain')
-    if (!sourceSlug || sourceSlug === targetSlug) return
-    const sourceIndex = draftOrder.indexOf(sourceSlug)
-    const targetIndex = draftOrder.indexOf(targetSlug)
+    const sourceCardId = event.dataTransfer.getData('text/plain')
+    if (!sourceCardId || sourceCardId === targetCardId) return
+    const sourceIndex = draftOrder.indexOf(sourceCardId)
+    const targetIndex = draftOrder.indexOf(targetCardId)
     if (sourceIndex < 0 || targetIndex < 0) return
     const next = [...draftOrder]
     const [item] = next.splice(sourceIndex, 1)
@@ -1047,55 +1279,70 @@ function SortCardsDialog({
           </button>
         </div>
         <div className="project-home-sort-list" role="list">
-          {ordered.map((item, index) => (
+          {ordered.map((card, index) => {
+            const displaySize = draftSizes[card.cardId] ?? card.size
+            const title = card.kind === 'plugin' ? card.item.manifest.name : card.skill.title
+            const subtitle = card.kind === 'plugin' ? card.item.slug : card.skill.relativePath
+            const badge =
+              card.kind === 'skill'
+                ? t('workspace.addSkillCard')
+                : card.item.manifest.kind === 'task'
+                  ? t('workspace.addTaskCard')
+                  : t('workspace.addDataCard')
+            return (
             <div
-              key={item.slug}
+              key={card.cardId}
               className="project-home-sort-row"
               role="listitem"
               draggable
-              onDragStart={(event) => onDragStart(event, item.slug)}
+              onDragStart={(event) => onDragStart(event, card.cardId)}
               onDragOver={(event) => event.preventDefault()}
-              onDrop={(event) => onDrop(event, item.slug)}
+              onDrop={(event) => onDrop(event, card.cardId)}
             >
               <span className="project-home-sort-row__grab" aria-hidden="true">
                 <IconInline name="sort" />
               </span>
               <span className="project-home-sort-row__copy">
-                <span>{item.manifest.name}</span>
-                <span>{item.slug}</span>
+                <span>{title}</span>
+                <span>{subtitle}</span>
               </span>
               <div className="project-home-size-switch" role="group" aria-label={t('workspace.sortAgentCards')}>
                 {(['small', 'medium', 'large'] as const).map((size) => (
                   <button
                     key={size}
                     type="button"
-                    className={`project-home-size-switch__button${(draftSizes[item.slug] ?? item.manifest.preferredSize) === size ? ' is-active' : ''}`}
-                    aria-pressed={(draftSizes[item.slug] ?? item.manifest.preferredSize) === size}
-                    onClick={() => onDraftSizeChange(item.slug, size)}
+                    className={`project-home-size-switch__button${displaySize === size ? ' is-active' : ''}`}
+                    aria-pressed={displaySize === size}
+                    onClick={() => onDraftSizeChange(card.cardId, size)}
                   >
                     {t(`workspace.cardSize.${size}`)}
                   </button>
                 ))}
               </div>
-              <span className="project-home-kind-badge">{item.manifest.kind === 'task' ? t('workspace.addTaskCard') : t('workspace.addDataCard')}</span>
-              <button type="button" className="project-home-icon-button" disabled={index === 0} onClick={() => move(item.slug, -1)} aria-label={t('workspace.moveCardUp')}>
+              <span className="project-home-kind-badge">{badge}</span>
+              <button type="button" className="project-home-icon-button" disabled={index === 0} onClick={() => move(card.cardId, -1)} aria-label={t('workspace.moveCardUp')}>
                 <IconInline name="arrowUp" />
               </button>
-              <button type="button" className="project-home-icon-button" disabled={index === ordered.length - 1} onClick={() => move(item.slug, 1)} aria-label={t('workspace.moveCardDown')}>
+              <button type="button" className="project-home-icon-button" disabled={index === ordered.length - 1} onClick={() => move(card.cardId, 1)} aria-label={t('workspace.moveCardDown')}>
                 <IconInline name="arrowDown" />
               </button>
-              <button
-                type="button"
-                className="project-home-icon-button project-home-icon-button--danger"
-                disabled={Boolean(deletingSlug)}
-                title={t('workspace.deleteAgentCard')}
-                onClick={() => onDelete(item)}
-                aria-label={t('workspace.deleteAgentCard')}
-              >
-                <IconInline name={deletingSlug === item.slug ? 'refresh' : 'trash'} />
-              </button>
+              {card.kind === 'plugin' ? (
+                <button
+                  type="button"
+                  className="project-home-icon-button project-home-icon-button--danger"
+                  disabled={Boolean(deletingSlug)}
+                  title={t('workspace.deleteAgentCard')}
+                  onClick={() => onDelete(card.item)}
+                  aria-label={t('workspace.deleteAgentCard')}
+                >
+                  <IconInline name={deletingSlug === card.item.slug ? 'refresh' : 'trash'} />
+                </button>
+              ) : (
+                <span className="project-home-sort-row__spacer" aria-hidden="true" />
+              )}
             </div>
-          ))}
+            )
+          })}
         </div>
         <div className="project-home-modal__footer">
           <button type="button" className="agent-card-secondary-button" onClick={onClose}>
@@ -1110,7 +1357,7 @@ function SortCardsDialog({
   )
 }
 
-function buildHomeGridItems(plugins: HomePluginRunItem[]): HomeGridItem[] {
+function buildHomeGridItems(cards: HomeCardItem[]): HomeGridItem[] {
   const output: HomeGridItem[] = []
   let column = 1
   let fillerCount = 0
@@ -1128,23 +1375,23 @@ function buildHomeGridItems(plugins: HomePluginRunItem[]): HomeGridItem[] {
     return filler
   }
 
-  plugins.forEach((item, index) => {
-    const span = Math.min(HOME_GRID_COLUMNS, Math.max(1, sizeToColumnSpan(item.manifest.preferredSize)))
+  cards.forEach((card, index) => {
+    const span = Math.min(HOME_GRID_COLUMNS, Math.max(1, sizeToColumnSpan(card.size)))
     const remaining = HOME_GRID_COLUMNS - column + 1
     if (column > 1 && span > remaining) {
-      const filler = createFiller(`before-${item.slug}-${index}`, remaining)
+      const filler = createFiller(`before-${card.cardId}-${index}`, remaining)
       if (filler) output.push(filler)
       column = 1
     }
 
-    output.push({ kind: 'plugin', item })
+    output.push({ kind: 'card', card })
     column = span >= HOME_GRID_COLUMNS ? 1 : column + span
     if (column > HOME_GRID_COLUMNS) column = 1
   })
 
-  if (plugins.length > 0 && column > 1) {
+  if (cards.length > 0 && column > 1) {
     const remaining = HOME_GRID_COLUMNS - column + 1
-    const filler = createFiller(`after-${plugins[plugins.length - 1]?.slug ?? 'last'}`, remaining)
+    const filler = createFiller(`after-${cards[cards.length - 1]?.cardId ?? 'last'}`, remaining)
     if (filler) output.push(filler)
   }
 
@@ -1240,6 +1487,90 @@ function sizeToColumnSpan(size: HomePluginCardSize): number {
   if (size === 'large') return 3
   if (size === 'medium') return 2
   return 1
+}
+
+function sortHomeCards(cards: HomeCardItem[], order: string[]): HomeCardItem[] {
+  const orderIndex = new Map(order.map((cardId, index) => [cardId, index]))
+  return [...cards].sort((a, b) => {
+    const ao = orderIndex.get(a.cardId)
+    const bo = orderIndex.get(b.cardId)
+    if (ao !== undefined || bo !== undefined) return (ao ?? Number.MAX_SAFE_INTEGER) - (bo ?? Number.MAX_SAFE_INTEGER)
+    return a.cardId.localeCompare(b.cardId)
+  })
+}
+
+function pluginCardId(slug: string): string {
+  return `plugin-${slug}`
+}
+
+function skillCardId(skill: AgentContextSlashItem): string {
+  return `skill-${skill.command}-${shortHash(skill.relativePath || skill.path)}`
+}
+
+function shortHash(value: string): string {
+  let hash = 2166136261
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0).toString(36).slice(0, 7)
+}
+
+function readHomeCardLayout(projectPath: string): HomeCardLayout {
+  if (typeof window === 'undefined') return { order: [], sizes: {} }
+  try {
+    const raw = window.localStorage.getItem(HOME_CARD_LAYOUT_STORAGE_KEY)
+    if (!raw) return { order: [], sizes: {} }
+    const parsed = JSON.parse(raw)
+    return normalizeHomeCardLayout(isRecord(parsed) ? parsed[projectPath] : undefined)
+  } catch {
+    return { order: [], sizes: {} }
+  }
+}
+
+function writeHomeCardLayout(projectPath: string, layout: HomeCardLayout): void {
+  if (typeof window === 'undefined') return
+  try {
+    const raw = window.localStorage.getItem(HOME_CARD_LAYOUT_STORAGE_KEY)
+    const parsed = raw ? JSON.parse(raw) : {}
+    const next = isRecord(parsed) ? { ...parsed } : {}
+    next[projectPath] = normalizeHomeCardLayout(layout)
+    window.localStorage.setItem(HOME_CARD_LAYOUT_STORAGE_KEY, JSON.stringify(next))
+  } catch {
+    /* ignore */
+  }
+}
+
+function normalizeHomeCardLayout(value: unknown): HomeCardLayout {
+  if (!isRecord(value)) return { order: [], sizes: {} }
+  const order = Array.isArray(value.order)
+    ? value.order.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : []
+  const sizes: Record<string, HomePluginCardSize> = {}
+  if (isRecord(value.sizes)) {
+    for (const [cardId, size] of Object.entries(value.sizes)) {
+      if (size === 'small' || size === 'medium' || size === 'large') sizes[cardId] = size
+    }
+  }
+  return { order, sizes }
+}
+
+function latestSkillThread(
+  threads: WorkspaceThread[],
+  skillPath: string,
+  predicate: (thread: WorkspaceThread) => boolean = () => true,
+): WorkspaceThread | undefined {
+  return threads
+    .filter((thread) => thread.purpose === 'skill-run' && thread.skillPath === skillPath && !thread.archivedAt && predicate(thread))
+    .sort((a, b) => b.updatedAt - a.updatedAt)[0]
+}
+
+function latestThreadMessageStatus(thread: WorkspaceThread): 'done' | 'error' | 'cancelled' | undefined {
+  const assistant = [...thread.chatState.items]
+    .reverse()
+    .find((item) => item.type === 'message' && item.role === 'assistant')
+  if (!assistant || assistant.type !== 'message') return undefined
+  return assistant.status === 'error' || assistant.status === 'cancelled' ? assistant.status : 'done'
 }
 
 function defaultTaskSchedule(): HomePluginTaskSchedule {

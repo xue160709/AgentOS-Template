@@ -10,6 +10,7 @@ import type {
   AppViewId,
   ChatState,
   FileTreeNode,
+  ProjectSkillRunRequest,
   SettingsCategoryId,
   ThreadRunState,
   WorkspaceProject,
@@ -51,6 +52,9 @@ type AppShellWorkspaceProps = {
   homeModeResetKey: number
   onCreateHomePluginCardThread: (projectId: string, initialPrompt: string) => string | void
   onEditHomePluginCard: (projectId: string, item: HomePluginRunItem) => void
+  hiddenSkillPaths: string[]
+  onRunProjectSkill: (projectId: string, skill: ProjectSkillRunRequest) => void
+  onStopProjectSkillRun: (projectId: string, skillPath: string) => void
   showProjectSkillsInSidebar: boolean
   onShowProjectSkillsInSidebarChange: (enabled: boolean) => void
 }
@@ -75,6 +79,9 @@ export function AppShellWorkspace({
   homeModeResetKey,
   onCreateHomePluginCardThread,
   onEditHomePluginCard,
+  hiddenSkillPaths,
+  onRunProjectSkill,
+  onStopProjectSkillRun,
   showProjectSkillsInSidebar,
   onShowProjectSkillsInSidebarChange,
 }: AppShellWorkspaceProps) {
@@ -95,7 +102,8 @@ export function AppShellWorkspace({
     hasThreadMessages ||
     activeThread?.purpose === 'home-plugin-customization' ||
     activeThread?.purpose === 'home-plugin-card-customization' ||
-    activeThread?.purpose === 'task-run'
+    activeThread?.purpose === 'task-run' ||
+    activeThread?.purpose === 'skill-run'
   const showAgentModeToolbar = activeViewId === 'home' && !showConversationFlow
 
   // --- Close auxiliary drawer when navigating into settings / 进入设置路由时收起辅助抽屉 ---
@@ -230,8 +238,11 @@ export function AppShellWorkspace({
             todoEnabled={agentMode.todoEnabled}
             agentModeLoading={agentMode.loading}
             homeModeResetKey={homeModeResetKey}
+            hiddenSkillPaths={hiddenSkillPaths}
             onCreateHomePluginCardThread={onCreateHomePluginCardThread}
             onEditHomePluginCard={onEditHomePluginCard}
+            onRunProjectSkill={onRunProjectSkill}
+            onStopProjectSkillRun={onStopProjectSkillRun}
           />
           <DocsPage hidden={activeViewId !== 'docs'} />
           <SettingsPage

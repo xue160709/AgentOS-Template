@@ -37,6 +37,7 @@ import type {
   ActiveChatPickPayload,
   ClaudeChatAttachment,
   ClaudeChatAttachmentPickerResult,
+  ClaudeAgentModelProvider,
   ClaudeAgentSettings,
   ClaudeChatSubmitPayload,
   ClaudeFileRewindPayload,
@@ -92,6 +93,7 @@ const gotSingleInstanceLock = app.requestSingleInstanceLock()
 
 /** 与 VITE 开发服务器一致：打包产物无开发菜单 / Matches Vite dev server; packaged builds omit dev menu */
 const isDevRuntime = Boolean(VITE_DEV_SERVER_URL) || !app.isPackaged
+process.env.AGENTOS_DEV_RUNTIME = isDevRuntime ? '1' : '0'
 
 app.setName(APP_NAME)
 
@@ -671,6 +673,9 @@ if (gotSingleInstanceLock) {
     })
     ipcMain.handle('claude-agent-settings:save', (_event, settings: ClaudeAgentSettings) => {
       return runClaudeSettingsOperation(async () => getClaudeAgentSettingsStore().save(settings))
+    })
+    ipcMain.handle('claude-agent-settings:test-provider', (_event, provider: ClaudeAgentModelProvider) => {
+      return getClaudeAgentSettingsStore().testProvider(provider)
     })
     ipcMain.handle('claude-agent-settings:set-active-chat-pick', (_event, payload: ActiveChatPickPayload) => {
       return runClaudeSettingsOperation(async () => getClaudeAgentSettingsStore().setActiveChatPick(payload))
