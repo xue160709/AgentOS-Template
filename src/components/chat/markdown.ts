@@ -20,6 +20,57 @@ export function renderMarkdown(markdown: string): string {
   })
 }
 
+export type RenderedMarkdownSegment =
+  | {
+      type: 'html'
+      html: string
+    }
+  | {
+      type: 'code'
+      code: string
+      language: string
+    }
+
+type MarkdownToken = {
+  type: string
+  raw?: string
+  text?: string
+  lang?: string
+}
+
+/** Split fenced code from Markdown so React controls copy and diagram actions. */
+export function renderMarkdownSegments(markdown: string): RenderedMarkdownSegment[] {
+  const tokens = marked.lexer(markdown) as MarkdownToken[]
+  const segments: RenderedMarkdownSegment[] = []
+  let pendingMarkdown = ''
+
+  const flushMarkdown = () => {
+    if (!pendingMarkdown.trim()) {
+      pendingMarkdown = ''
+      return
+    }
+    const html = renderMarkdown(pendingMarkdown)
+    if (html.trim()) segments.push({ type: 'html', html })
+    pendingMarkdown = ''
+  }
+
+  for (const token of tokens) {
+    if (token.type === 'code') {
+      flushMarkdown()
+      segments.push({
+        type: 'code',
+        code: token.text ?? '',
+        language: token.lang?.trim() ?? '',
+      })
+      continue
+    }
+    pendingMarkdown += token.raw ?? ''
+  }
+
+  flushMarkdown()
+  return segments
+}
+
 /** 纯文本注入前的 HTML 转义 / Escape text before injecting into HTML contexts */
 export function escapeHtml(value: string): string {
   return value
