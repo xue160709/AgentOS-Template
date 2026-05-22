@@ -18,6 +18,7 @@
 | P1 | Session 续接 | 使用 thread `sessionId` 续接，失效时自动重试一次 |
 | P1 | Slash command 展开 | 显式命令和 Home Plugin 强制命令进入运行上下文 |
 | P1 | Composer 联想 | 支持行首 slash 命令、`@` 文件、`@agent-*` 子 Agent 联想 |
+| P1 | macOS Composer 语音输入 | macOS 客户端通过 Apple Speech helper 把听写 partial/final 写入 composer 输入框 |
 | P1 | 内置命令入口 | 内置 `/compact`、`/status`、`/help` 三个命令提示 |
 | P1 | 权限模式持久化 | 权限模式保存在 localStorage，默认 `auto` |
 | P1 | Generative UI | 支持 `show-widget` Markdown fence 渲染沙箱交互组件 |
@@ -84,6 +85,44 @@ interface AgentContextAgentItem {
   tools: string[]
 }
 
+type SpeechRecognitionStatus =
+  | 'unsupported'
+  | 'idle'
+  | 'starting'
+  | 'requesting_permission'
+  | 'listening'
+  | 'transcribing'
+  | 'error'
+
+type SpeechRecognitionEvent =
+  | {
+      type: 'status'
+      status: SpeechRecognitionStatus
+      locale?: string
+      supportsOnDevice?: boolean
+      requiresOnDevice?: boolean
+    }
+  | {
+      type: 'partial'
+      text: string
+    }
+  | {
+      type: 'final'
+      text: string
+    }
+  | {
+      type: 'error'
+      code: string
+      message: string
+    }
+
+interface SpeechDraftRange {
+  start: number
+  end: number
+  committedText: string
+  liveText: string
+}
+
 interface ClaudeChatSessionStartEvent {
   type: 'session_start'
   requestId: string
@@ -129,6 +168,29 @@ sequenceDiagram
   CP->>CP: 更新 transcript / run state
 ```
 
+Composer 语音输入流程：
+
+```mermaid
+sequenceDiagram
+  participant U as 用户
+  participant C as Composer
+  participant CP as ChatPage
+  participant IPC as preload IPC
+  participant SR as MacSpeechRecognitionService
+  participant H as Apple Speech Helper
+
+  U->>C: 点击语音按钮
+  C->>CP: onToggleSpeechRecognition()
+  CP->>CP: 记录输入框选区并创建 speech draft
+  CP->>IPC: startSpeechRecognition({ requiresOnDevice: true })
+  IPC->>SR: desktop:speech-recognition:start
+  SR->>H: start
+  H-->>SR: status / partial / final
+  SR-->>CP: SpeechRecognitionEvent
+  CP->>CP: 将 partial/final 替换到 draft range
+  CP->>C: 更新 inputValue 和光标
+```
+
 运行规则：
 
 - 同一线程已有请求时，新请求会取消旧请求。
@@ -145,6 +207,17 @@ sequenceDiagram
 - Home Plugin 定制线程会强制注入 `/a2ui-project-home-panel` Skill，并追加对应系统提示词。
 - 每次聊天上下文都会追加 Generative UI 能力提示，指导模型用 `show-widget` fence 输出紧凑的 HTML/SVG/CSS/JS 小组件。
 - `show-widget` 渲染在 sandbox iframe 中完成，禁止网络和表单；组件可通过 `window.__widgetSendMessage()` 触发后续用户消息。
+
+Composer 语音输入规则：
+
+- 语音按钮只在 `window.desktop.platform === 'darwin'` 且 preload 暴露语音 API 时显示，非 macOS 状态为 `unsupported`。
+- `idle/error` 点击开始；`starting/requesting_permission/transcribing` 点击取消；`listening` 点击停止并等待 final。
+- 开始听写时记录 composer 当前光标和选区，创建 `SpeechDraftRange`；partial 到来时只替换该 draft range，不直接追加到输入框尾部。
+- Apple Speech 的 partial 可能修正当前短语，也可能在停顿后重新返回一段短文本；renderer 使用 `committedText + liveText` 合并策略，避免停顿后覆盖前文。
+- final 有文本时做最后一次替换并清空 draft；final 为空但 draft 已有文本时保留已写入内容；完全无文本时提示 no speech。
+- 每次由语音写入输入框后记录 `lastSpeechAppliedValueRef`，用于区分语音写入和用户手动编辑。
+- 用户在听写中手动编辑或删除 composer 内容时，立即清空 speech draft；如果仍处于 `listening`，先忽略旧 partial/final，再 `cancel` 当前 helper task 并重新 `start` 新识别段。
+- 收到新一轮 `listening` 状态后才重新接收 partial/final，避免旧识别任务残留文本把用户删掉的内容写回来。
 
 ## 相关代码文件
 
@@ -168,10 +241,14 @@ sequenceDiagram
 - `src/claude-chat-types.ts`
 - `src/components/types.ts`
 - `src/components/chat/local-types.ts`
+- `src/desktop-types.ts`
 
 ### 业务逻辑工具/工具类
 
 - `electron/claude-agent-runner.ts`
+- `electron/speech-recognition.ts`
+- `electron/main.ts`
+- `electron/preload.ts`
 - `electron/claude-agent-runner/config.ts`
 - `electron/claude-agent-runner/input.ts`
 - `electron/claude-agent-runner/sdk-message-router.ts`
@@ -189,6 +266,7 @@ sequenceDiagram
 - `src/components/chat/clipboard.ts`
 - `src/components/chat/format.ts`
 - `src/components/chat/generative-ui.ts`
+- `native/speech-cli/SpeechCLI.swift`
 
 ## 关联PRD文档
 
@@ -197,6 +275,7 @@ sequenceDiagram
 - `prd/workspace-session.md`：聊天运行绑定项目和线程。
 - `prd/model-settings.md`：运行时读取模型 Provider 配置。
 - `prd/file-context.md`：附件、文件搜索和文件 diff 依赖项目文件能力。
+- `prd/desktop-shell-settings-release.md`：macOS 原生语音 helper、preload API、权限与打包资源由桌面外壳提供。
 
 ### 间接关联
 

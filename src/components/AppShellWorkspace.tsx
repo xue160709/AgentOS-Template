@@ -42,10 +42,13 @@ type AppShellWorkspaceProps = {
   activeThread: WorkspaceThread | undefined
   threads: WorkspaceThread[]
   projects: WorkspaceProject[]
+  projectOrderIds: readonly string[]
   threadRunStates: Record<string, ThreadRunState>
   chatRef: RefObject<ChatPageHandle | null>
   onStatusChange: (text: string) => void
   onNewThread: (projectId?: string) => string | void
+  onCreateProject: (mode: 'scratch' | 'existing') => void | Promise<void>
+  onSelectProject: (projectId: string) => void
   onThreadChatStateChange: (threadId: string, update: ChatState | ((prev: ChatState) => ChatState)) => void
   onThreadPromptSubmit: (threadId: string, prompt: string) => void
   onThreadRunStateChange: (threadId: string, state: ThreadRunState | null) => void
@@ -69,10 +72,13 @@ export function AppShellWorkspace({
   activeThread,
   threads,
   projects,
+  projectOrderIds,
   threadRunStates,
   chatRef,
   onStatusChange,
   onNewThread,
+  onCreateProject,
+  onSelectProject,
   onThreadChatStateChange,
   onThreadPromptSubmit,
   onThreadRunStateChange,
@@ -228,9 +234,12 @@ export function AppShellWorkspace({
             activeThread={activeThread}
             threads={threads}
             projects={projects}
+            projectOrderIds={projectOrderIds}
             threadRunStates={threadRunStates}
             onStatusChange={onStatusChange}
             onNewThread={onNewThread}
+            onCreateProject={onCreateProject}
+            onSelectProject={onSelectProject}
             onThreadChatStateChange={onThreadChatStateChange}
             onThreadPromptSubmit={onThreadPromptSubmit}
             onThreadRunStateChange={onThreadRunStateChange}

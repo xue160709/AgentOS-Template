@@ -543,13 +543,24 @@ export function AppShellSidebar({
                 <button
                   type="button"
                   className="app-sidebar-new-thread"
-                  id="btn-sidebar-new-project"
-                  onClick={() => void onCreateProject('existing')}
+                  id="btn-sidebar-new-thread"
+                  onClick={() => onSelectProject(activeProjectId)}
                 >
-                  <IconInline name="plus" />
-                  <span>{t('sidebar.addProject')}</span>
+                  <IconInline name="message" />
+                  <span>{t('sidebar.newThread')}</span>
                 </button>
-                <div className="app-sidebar-section-label">{t('sidebar.projectsSection')}</div>
+                <div className="app-sidebar-section-heading">
+                  <div className="app-sidebar-section-label">{t('sidebar.projectsSection')}</div>
+                  <button
+                    type="button"
+                    className="app-sidebar-section-action"
+                    title={t('sidebar.addProject')}
+                    aria-label={t('sidebar.addProject')}
+                    onClick={() => void onCreateProject('existing')}
+                  >
+                    <IconInline name="plus" />
+                  </button>
+                </div>
                 <div className="app-project-list">
                   {sortedProjects.map((project) => {
                     const projectThreads = threadsByProject.get(project.id) ?? []

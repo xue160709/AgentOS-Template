@@ -1801,10 +1801,13 @@ export function AppShell() {
           activeThread={activeThread}
           threads={chatWorkspace.threads}
           projects={chatWorkspace.projects}
+          projectOrderIds={chatWorkspace.sidebarPrefs.projectOrderIds}
           threadRunStates={threadRunStates}
           chatRef={chatRef}
           onStatusChange={setHeaderStatus}
           onNewThread={createThreadInProject}
+          onCreateProject={createProject}
+          onSelectProject={selectProject}
           onThreadChatStateChange={updateThreadChatState}
           onThreadPromptSubmit={handleThreadPromptSubmit}
           onThreadRunStateChange={updateThreadRunState}

@@ -130,9 +130,12 @@ type ChatPageProps = {
   /** 按 threadId 查找持久化 sessionId（重启后恢复 SDK）/ Threads list for resolving persisted session ids */
   threads: WorkspaceThread[]
   projects: WorkspaceProject[]
+  projectOrderIds: readonly string[]
   threadRunStates: Record<string, ThreadRunState>
   onStatusChange: (text: string) => void
   onNewThread: (projectId?: string) => string | void
+  onCreateProject: (mode: 'scratch' | 'existing') => void | Promise<void>
+  onSelectProject: (projectId: string) => void
   onThreadChatStateChange: (threadId: string, update: ChatState | ((prev: ChatState) => ChatState)) => void
   onThreadPromptSubmit: (threadId: string, prompt: string) => void
   onThreadRunStateChange: (threadId: string, state: ThreadRunState | null) => void
@@ -213,9 +216,12 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     activeThread,
     threads,
     projects,
+    projectOrderIds,
     threadRunStates,
     onStatusChange,
     onNewThread,
+    onCreateProject,
+    onSelectProject,
     onThreadChatStateChange,
     onThreadPromptSubmit,
     onThreadRunStateChange,
@@ -2062,6 +2068,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       ) : (
         <ChatStartView
           project={activeProject}
+          projects={projects}
+          projectOrderIds={projectOrderIds}
           composer={composer}
           agentModeEnabled={agentModeEnabled}
           todoEnabled={todoEnabled}
@@ -2074,6 +2082,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
             setHomeComposerMode('data-card-draft')
             requestAnimationFrame(() => chatInputRef.current?.focus())
           }}
+          onCreateProject={onCreateProject}
+          onSelectProject={onSelectProject}
           onEditHomePluginCard={(item) => onEditHomePluginCard(activeProject.id, item)}
           onRunProjectSkill={onRunProjectSkill}
           onStopProjectSkillRun={onStopProjectSkillRun}
