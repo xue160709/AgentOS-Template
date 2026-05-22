@@ -299,6 +299,9 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   const inputValueRef = useRef(inputValue)
   const composerSelectionRef = useRef(composerSelection)
   const speechDraftRangeRef = useRef<SpeechDraftRange | null>(null)
+  const lastSpeechAppliedValueRef = useRef<string | null>(null)
+  const ignoreSpeechRecognitionTextRef = useRef(false)
+  const speechRestartAfterEditRef = useRef(false)
 
   const [composerAutocompleteBox, setComposerAutocompleteBox] = useState<{
     left: number
@@ -330,12 +333,17 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     const selection = composerSelectionRef.current
     const selectionStart = Math.max(0, Math.min(selection.start, currentInput.length))
     const selectionEnd = Math.max(selectionStart, Math.min(selection.end, currentInput.length))
+    lastSpeechAppliedValueRef.current = currentInput
     speechDraftRangeRef.current = {
       start: selectionStart,
       end: selectionEnd,
       committedText: '',
       liveText: '',
     }
+  }, [])
+  const clearSpeechDraft = useCallback(() => {
+    speechDraftRangeRef.current = null
+    lastSpeechAppliedValueRef.current = null
   }, [])
   const replaceSpeechDraftText = useCallback((text: string) => {
     const cleanText = text.trim()
@@ -380,6 +388,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     }
     inputValueRef.current = nextValue
     composerSelectionRef.current = { start: nextCursor, end: nextCursor }
+    lastSpeechAppliedValueRef.current = nextValue
     setInputValue(nextValue)
     setComposerSelection({ start: nextCursor, end: nextCursor })
     requestAnimationFrame(() => {
@@ -472,6 +481,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
         if (event.status === 'requesting_permission') {
           onStatusChange(t('chat.voiceRequestingPermission'))
         } else if (event.status === 'listening') {
+          ignoreSpeechRecognitionTextRef.current = false
           onStatusChange(t('chat.voiceListening'))
         } else if (event.status === 'transcribing') {
           onStatusChange(t('chat.voiceTranscribing'))
@@ -480,27 +490,30 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       }
 
       if (event.type === 'partial') {
+        if (ignoreSpeechRecognitionTextRef.current) return
         replaceSpeechDraftText(event.text)
         return
       }
 
       if (event.type === 'final') {
+        if (ignoreSpeechRecognitionTextRef.current) return
         if (event.text.trim()) {
           replaceSpeechDraftText(event.text)
-          speechDraftRangeRef.current = null
+          clearSpeechDraft()
           onStatusChange(t('chat.voiceInserted'))
         } else if (speechDraftRangeRef.current?.committedText || speechDraftRangeRef.current?.liveText) {
-          speechDraftRangeRef.current = null
+          clearSpeechDraft()
           onStatusChange(t('chat.voiceInserted'))
         } else {
-          speechDraftRangeRef.current = null
+          clearSpeechDraft()
           onStatusChange(t('chat.voiceNoSpeech'))
         }
         return
       }
 
       const message = speechRecognitionErrorMessage(event.code, event.message)
-      speechDraftRangeRef.current = null
+      ignoreSpeechRecognitionTextRef.current = false
+      clearSpeechDraft()
       setSpeechRecognitionStatus('error')
       onStatusChange(message)
     })
@@ -509,7 +522,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       disposed = true
       unsubscribe?.()
     }
-  }, [onStatusChange, replaceSpeechDraftText, speechRecognitionErrorMessage, speechRecognitionSupported, t])
+  }, [clearSpeechDraft, onStatusChange, replaceSpeechDraftText, speechRecognitionErrorMessage, speechRecognitionSupported, t])
 
   const applyGlobalModelFromSettings = useCallback(
     (snapshot: ClaudeAgentSettingsSnapshot) => {
@@ -1789,6 +1802,51 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     void cancelActiveRequest()
   }
 
+  const restartSpeechRecognitionAfterManualEdit = useCallback(() => {
+    if (
+      !speechRecognitionSupported ||
+      speechRecognitionStatus !== 'listening' ||
+      speechRestartAfterEditRef.current
+    ) {
+      return
+    }
+
+    speechRestartAfterEditRef.current = true
+    ignoreSpeechRecognitionTextRef.current = true
+    setSpeechRecognitionStatus('starting')
+    onStatusChange(t('chat.voiceStarting'))
+
+    void (async () => {
+      try {
+        await window.desktop?.cancelSpeechRecognition?.()
+        clearSpeechDraft()
+        beginSpeechDraft()
+        const result = await window.desktop?.startSpeechRecognition?.({ requiresOnDevice: true })
+        if (result && !result.ok) {
+          ignoreSpeechRecognitionTextRef.current = false
+          clearSpeechDraft()
+          setSpeechRecognitionStatus(result.status)
+          onStatusChange(result.message)
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : t('chat.voiceError')
+        ignoreSpeechRecognitionTextRef.current = false
+        clearSpeechDraft()
+        setSpeechRecognitionStatus('error')
+        onStatusChange(message)
+      } finally {
+        speechRestartAfterEditRef.current = false
+      }
+    })()
+  }, [
+    beginSpeechDraft,
+    clearSpeechDraft,
+    onStatusChange,
+    speechRecognitionStatus,
+    speechRecognitionSupported,
+    t,
+  ])
+
   const handleInputKeydown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (composerAutocompleteOpen && composerSuggestions.length > 0) {
       if (event.key === 'ArrowDown') {
@@ -1843,7 +1901,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
         }
 
         const result = await window.desktop?.cancelSpeechRecognition?.()
-        speechDraftRangeRef.current = null
+        clearSpeechDraft()
         if (result && !result.ok) {
           setSpeechRecognitionStatus(result.status)
           onStatusChange(result.message)
@@ -1856,16 +1914,17 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       onStatusChange(t('chat.voiceStarting'))
       const result = await window.desktop?.startSpeechRecognition?.({ requiresOnDevice: true })
       if (result && !result.ok) {
-        speechDraftRangeRef.current = null
+        clearSpeechDraft()
         setSpeechRecognitionStatus(result.status)
         onStatusChange(result.message)
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : t('chat.voiceError')
+      clearSpeechDraft()
       setSpeechRecognitionStatus('error')
       onStatusChange(message)
     }
-  }, [onStatusChange, speechRecognitionStatus, speechRecognitionSupported, t])
+  }, [beginSpeechDraft, clearSpeechDraft, onStatusChange, speechRecognitionStatus, speechRecognitionSupported, t])
 
   // --- File diff UX: mark reviewed + optional rewind via SDK / 文件 diff：标记已读与可选 SDK 回滚 ---
 
@@ -1945,6 +2004,12 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       setModelPickerOpen={setModelPickerOpen}
       setComposerSuggestionIndex={setComposerSuggestionIndex}
       onInputChange={(value, selectionStart, selectionEnd) => {
+        inputValueRef.current = value
+        composerSelectionRef.current = { start: selectionStart, end: selectionEnd }
+        if (speechDraftRangeRef.current && value !== lastSpeechAppliedValueRef.current) {
+          clearSpeechDraft()
+          restartSpeechRecognitionAfterManualEdit()
+        }
         setInputValue(value)
         setComposerSelection({ start: selectionStart, end: selectionEnd })
         setDismissedAutocompleteKey('')
