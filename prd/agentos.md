@@ -73,10 +73,13 @@ flowchart TD
 
 - 应用以本地项目路径为主组织单位。
 - 会话、Home Plugin、任务卡片和 Agent Mode 都必须归属某个项目。
+- React 入口只负责挂载 `AppShell`、注入初始 i18n Context、写入窗口 chrome dataset 和安装安全区/外链拦截等全局副作用。
+- About 面板、设置页和发布元数据统一读取 `APP_METADATA`，避免产品名、作者、仓库、License 等信息在多处漂移。
 - Agent 运行必须通过主进程统一处理，渲染层只通过 preload 暴露的安全 API 访问。
 - 文件读取、预览和插件运行都必须限制在项目根目录内。
 - 当前 UI 与主进程模板语言只规范化为 `zh` 和 `en`。
 - 打包应用以应用内 Provider 设置为权威配置来源；开发环境才允许 env 来源。
+- `src/counter.ts` 是未接入产品流程的 Vite 模板遗留示例，不应被当作 AgentOS 功能入口。
 - 文档以功能模块 PRD 为准，总览只维护跨模块关系。
 
 ## 相关代码文件
@@ -86,11 +89,13 @@ flowchart TD
 - `src/components/AppShell.tsx`：产品级应用状态和工作台总控。
 - `src/components/AppShellWorkspace.tsx`：项目首页、聊天、文档、设置的视图组合。
 - `src/components/AppShellSidebar.tsx`：项目、线程和设置入口。
+- `src/main.tsx`：React 挂载、I18nProvider、窗口安全区和外链处理入口。
 
 ### 功能组件/UI组件
 
 - `src/components/chat/ProjectHomeSurface.tsx`：项目首页入口。
 - `src/components/chat/ChatPage.tsx`：聊天运行入口。
+- `src/components/DocsPage.tsx`：主导航 Docs 占位视图。
 - `src/components/setting/SettingsPage.tsx`：设置入口。
 
 ### 数据管理
@@ -99,6 +104,7 @@ flowchart TD
 - `src/claude-chat-types.ts`
 - `src/desktop-types.ts`
 - `src/chat-workspace-persistence.ts`
+- `src/app-metadata.ts`
 
 ### 业务逻辑工具/工具类
 
@@ -117,6 +123,7 @@ flowchart TD
 - `vite.config.ts`
 - `electron-builder.config.cjs`
 - `electron-builder.json5`
+- `src/counter.ts`
 - `README.md`
 - `README_EN.md`
 

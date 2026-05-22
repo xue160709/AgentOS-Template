@@ -92,6 +92,7 @@ flowchart TD
 - 支持 action：`customize_home`、`edit_home_card`、`refresh_home`、`task_run`、`task_stop`、`open_file`。
 - `open_file` action 会把 `context.path` 归一化为 `filePath`，渲染层再次过滤 `..` 后才调用桌面打开文件。
 - 卡片布局同时写入项目内 `order.json`、各卡片 `manifest.json` 的 `preferredSize/order/updatedAt`，并在渲染层 localStorage 保存 Skill 卡片混排顺序。
+- 项目首页卡片自定义依赖 `/a2ui-project-home-panel` Skill 名称和定制提示词；仓库当前构建配置引用该内置 Skill 目录，但目录本身未随当前代码树出现，`test:home-plugin` 通过 `--allow-missing` 容忍缺失。
 
 ## 相关代码文件
 
@@ -120,7 +121,8 @@ flowchart TD
 ### Hooks/其他
 
 - `src/components/chat/generative-ui.ts`
-- `.agents/skills/a2ui-project-home-panel/`
+- `package.json`
+- `electron-builder.json5`
 
 ## 关联PRD文档
 

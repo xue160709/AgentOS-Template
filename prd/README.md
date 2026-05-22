@@ -2,7 +2,7 @@
 
 本目录按功能模块维护 AgentOS 的 PRD。每个功能文档都包含 `功能概述`、`核心功能列表`、`数据结构`、`业务逻辑`、`相关代码文件`、`关联PRD文档` 六个标准章节。
 
-生成依据：2026-05-21 对当前仓库的 `src/`、`electron/`、`.agents/`、构建配置、README 与发布配置进行代码阅读后整理。
+生成依据：2026-05-21 对当前仓库的 `src/`、`electron/`、`.agents/`、构建配置、README 与发布配置进行代码阅读后整理；2026-05-22 继续补充入口、i18n、安全区、Generative UI 和自动更新轮询细节。
 
 ## 文档清单
 
@@ -61,4 +61,3 @@ flowchart TD
 - 改动 Provider、模型、API Key、Base URL 或连接测试时，同步更新 [model-settings.md](./model-settings.md)。
 - 改动工作区存储、会话索引、rollout 或数据迁移时，同步更新 [persistence.md](./persistence.md)。
 - 改动 Electron 窗口、托盘、设置、更新或发布配置时，同步更新 [desktop-shell-settings-release.md](./desktop-shell-settings-release.md)。
-

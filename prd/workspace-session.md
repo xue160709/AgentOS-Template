@@ -18,6 +18,7 @@
 | P1 | 缺失路径处理 | 项目路径不存在时保留记录并允许重新定位 |
 | P1 | Project Skills 入口 | 在项目侧栏展示并运行扫描到的 Skills |
 | P1 | 侧栏偏好 | 支持整栏收起、项目线程列表折叠、用户拖动宽度和按项目隐藏 Skill |
+| P2 | Docs 占位页 | 主导航保留 Docs 视图，目前渲染本地化占位内容 |
 
 ## 数据结构
 
@@ -103,6 +104,8 @@ flowchart TD
 - 项目路径缺失时应保留项目和线程，避免用户历史会话丢失。
 - 首次启动时 `projects.length === 0` 会展示项目选择和可选模型设置；模型设置为空或跳过时仍允许进入项目。
 - “创建新项目”当前只创建工作区记录，路径按 `~/Projects/<name>` 生成，不负责真实创建目录。
+- Hash 路由只把 `home`、`docs`、`settings` 识别为主视图；未知 hash 归一化为 `home`。
+- Docs 视图当前是 `DocsPage` 占位面板，只展示本地化 eyebrow、heading 和 placeholder，不读取外部文档源。
 - 侧栏项目 Skill 只展示 `scope === 'project'` 且 `kind === 'skill'` 的条目；隐藏的 Skill 路径按项目写入 localStorage。
 - 归档 `task-run` 线程时会尽力停止对应任务卡；归档 `skill-run` 线程时会尽力取消仍在运行的 request。
 - 托盘动作 `new-thread` 和 `open-project` 会唤起主窗口，并复用工作区创建线程或添加项目流程。
@@ -114,6 +117,7 @@ flowchart TD
 - `src/components/AppShell.tsx`：工作区状态总控。
 - `src/components/AppShellSidebar.tsx`：项目和线程列表。
 - `src/components/AppShellWorkspace.tsx`：活动视图渲染。
+- `src/components/DocsPage.tsx`：Docs 占位视图。
 - `src/components/chat/ChatStartView.tsx`：聊天起始态。
 - `src/components/chat/ChatThreadView.tsx`：线程聊天容器。
 - `src/components/app-shell-constants.ts`：hash 路由、设置分类、侧栏存储键。
@@ -129,6 +133,7 @@ flowchart TD
 - `src/components/types.ts`
 - `src/chat-workspace-persistence.ts`
 - `src/desktop-types.ts`
+- `src/project-path.ts`
 
 ### 业务逻辑工具/工具类
 
@@ -140,7 +145,7 @@ flowchart TD
 
 - `src/components/project-order.ts`
 - `src/components/app-shell-constants.ts`
-- `src/components/window-safe-area.ts`
+- `src/window-safe-area.ts`
 - `src/app-events.ts`
 
 ## 关联PRD文档

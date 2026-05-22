@@ -831,7 +831,7 @@ if (gotSingleInstanceLock) {
     })
     createWindow()
     ensureTray()
-    appUpdaterService.scheduleStartupCheck()
+    appUpdaterService.scheduleUpdateChecks()
   })
 } else {
   app.quit()

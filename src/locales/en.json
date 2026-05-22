@@ -284,7 +284,7 @@
       "openAtLogin": "Open at login",
       "openAtLoginHint": "Launch this app when you log in to your computer (also visible in system login items).",
       "updateHeading": "Version updates",
-      "updateCaption": "The app checks for new builds after launch. The Update button appears only after the installer finishes downloading, then quits the app and installs it.",
+      "updateCaption": "The app checks for new builds after launch and every 6 hours afterward. The Update button appears only after the installer finishes downloading, then quits the app and installs it.",
       "updateCurrentVersion": "Current version",
       "updateDevHint": "Auto-update is disabled in development",
       "updateLoading": "Loading version info…",

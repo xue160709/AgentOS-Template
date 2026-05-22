@@ -20,6 +20,7 @@
 | P1 | Composer 联想 | 支持行首 slash 命令、`@` 文件、`@agent-*` 子 Agent 联想 |
 | P1 | 内置命令入口 | 内置 `/compact`、`/status`、`/help` 三个命令提示 |
 | P1 | 权限模式持久化 | 权限模式保存在 localStorage，默认 `auto` |
+| P1 | Generative UI | 支持 `show-widget` Markdown fence 渲染沙箱交互组件 |
 
 ## 数据结构
 
@@ -142,6 +143,8 @@ sequenceDiagram
 - `AskUserQuestion` 必须至少包含 2 个选项，否则直接允许原输入继续；有效问题会转成用户输入弹窗。
 - Slash 展开支持 `$ARGUMENTS` 和 `$1`、`$2` 等参数替换。
 - Home Plugin 定制线程会强制注入 `/a2ui-project-home-panel` Skill，并追加对应系统提示词。
+- 每次聊天上下文都会追加 Generative UI 能力提示，指导模型用 `show-widget` fence 输出紧凑的 HTML/SVG/CSS/JS 小组件。
+- `show-widget` 渲染在 sandbox iframe 中完成，禁止网络和表单；组件可通过 `window.__widgetSendMessage()` 触发后续用户消息。
 
 ## 相关代码文件
 
@@ -177,6 +180,7 @@ sequenceDiagram
 - `electron/claude-agent-runner/value-formatters.ts`
 - `electron/claude-agent-runner/executable.ts`
 - `electron/agent-context.ts`
+- `electron/generative-ui-prompt.ts`
 - `electron/home-plugin-customization-prompt.ts`
 
 ### Hooks/其他
@@ -184,6 +188,7 @@ sequenceDiagram
 - `src/components/chat/markdown.ts`
 - `src/components/chat/clipboard.ts`
 - `src/components/chat/format.ts`
+- `src/components/chat/generative-ui.ts`
 
 ## 关联PRD文档
 

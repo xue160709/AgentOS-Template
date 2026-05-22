@@ -153,7 +153,8 @@ flowchart TD
 
 ### Hooks/其他
 
-- `.agents/skills/a2ui-project-home-panel/`
+- `package.json`
+- `electron-builder.json5`
 
 ## 关联PRD文档
 

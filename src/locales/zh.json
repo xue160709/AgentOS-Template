@@ -284,7 +284,7 @@
       "openAtLogin": "登录时自动启动",
       "openAtLoginHint": "登录本机系统后自动启动应用（可在系统「登录项」中查看或关闭）。",
       "updateHeading": "版本更新",
-      "updateCaption": "启动后会自动检查新版本；安装包下载完成后才会显示“版本更新”按钮，点击后会退出应用并安装。",
+      "updateCaption": "启动后会自动检查新版本，并每 6 小时轮询一次；安装包下载完成后才会显示“版本更新”按钮，点击后会退出应用并安装。",
       "updateCurrentVersion": "当前版本",
       "updateDevHint": "开发模式不支持自动更新",
       "updateLoading": "正在读取版本信息…",

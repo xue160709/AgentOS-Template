@@ -41,6 +41,7 @@ interface ChatWorkspaceStoreFiles {
   hiddenSkillsKey: 'CodeX-UI-Template-sidebar-hidden-skills-v1'
   permissionModeKey: 'codex-ui-template:claude-permission-mode'
   homeCardLayoutKey: 'agentos:project-home-card-layout:v1'
+  localeKey: 'CodeX-UI-Template-locale-v1'
   workspaceJson: 'chat-workspace.json'
   workspaceSqlite: 'chat-workspace.sqlite*'
   rolloutJsonl: 'chat-sessions/YYYY/MM/DD/rollout-*.jsonl'
@@ -85,6 +86,7 @@ flowchart TD
 - 工作区清理会删除 localStorage key、`chat-workspace.json`、`chat-workspace.sqlite*` 和 `chat-sessions/`，不会删除用户项目目录。
 - Claude 设置清理只删除 `claude-agent-settings.json`，不会影响项目文件、工作区、Agent Mode 或桌面偏好。
 - Agent Mode 设置、模型 Provider 设置、桌面偏好和 Home Plugin task/runtime 分别由独立 store 或项目文件保存，不写入 `ChatWorkspaceState`。
+- UI 语言偏好由 i18n 模块独立保存在 `CodeX-UI-Template-locale-v1`，不随工作区清理一起删除。
 
 ## 相关代码文件
 
