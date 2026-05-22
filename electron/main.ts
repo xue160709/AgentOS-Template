@@ -31,6 +31,7 @@ import { normalizeUiLocale } from './ui-locale'
 import { appUpdaterService, registerAppUpdaterIpc } from './app-updater'
 import { installAboutPanel } from './about-panel'
 import { installApplicationMenu } from './app-menu'
+import { MacSpeechRecognitionService } from './speech-recognition'
 import { formatProjectPathError, resolveProjectPath, validateProjectPaths } from './project-path'
 import { getMainWindowBackgroundColor, getMainWindowChromeOptions } from './window-chrome'
 import type {
@@ -86,6 +87,7 @@ let agentModeSettingsStore: AgentModeSettingsStore | null = null
 let chatWorkspaceStore: ChatWorkspaceStore | null = null
 let desktopPreferencesStore: DesktopPreferencesStore | null = null
 let taskHomePluginManager: TaskHomePluginManager | null = null
+let speechRecognitionService: MacSpeechRecognitionService | null = null
 let chatWorkspaceOperationChain: Promise<void> = Promise.resolve()
 let claudeSettingsOperationChain: Promise<void> = Promise.resolve()
 
@@ -340,8 +342,10 @@ function createWindow() {
   }
 
   win.on('closed', () => {
+    speechRecognitionService?.dispose()
     claudeAgentRunner = null
     taskHomePluginManager = null
+    speechRecognitionService = null
   })
 
   if (VITE_DEV_SERVER_URL) {
@@ -393,6 +397,13 @@ function getTaskHomePluginManager() {
     throw new Error('Task home plugin manager is not ready.')
   }
   return taskHomePluginManager
+}
+
+function getSpeechRecognitionService() {
+  if (!speechRecognitionService) {
+    speechRecognitionService = new MacSpeechRecognitionService(() => win)
+  }
+  return speechRecognitionService
 }
 
 function runChatWorkspaceOperation<T>(operation: () => Promise<T>): Promise<T> {
@@ -548,6 +559,7 @@ function ensureTray() {
 
 function prepareForAppQuit() {
   isQuitting = true
+  speechRecognitionService?.dispose()
   tray?.destroy()
   tray = null
 }
@@ -652,6 +664,24 @@ if (gotSingleInstanceLock) {
         return false
       }
       return copySvgToClipboard(svg)
+    })
+    ipcMain.handle('desktop:speech-recognition:get-status', () => {
+      return getSpeechRecognitionService().getSnapshot()
+    })
+    ipcMain.handle('desktop:speech-recognition:start', (_event, rawOptions: unknown) => {
+      const options = isRecord(rawOptions)
+        ? {
+            locale: typeof rawOptions.locale === 'string' ? rawOptions.locale : undefined,
+            requiresOnDevice: rawOptions.requiresOnDevice === false ? false : true,
+          }
+        : undefined
+      return getSpeechRecognitionService().start(options)
+    })
+    ipcMain.handle('desktop:speech-recognition:stop', () => {
+      return getSpeechRecognitionService().stop()
+    })
+    ipcMain.handle('desktop:speech-recognition:cancel', () => {
+      return getSpeechRecognitionService().cancel()
     })
     ipcMain.handle('claude-chat:submit', (_event, payload: ClaudeChatSubmitPayload) => {
       return getClaudeAgentRunner().submit(payload)
