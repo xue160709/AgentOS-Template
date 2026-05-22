@@ -1,7 +1,7 @@
 {
   "name": "agentos",
   "productName": "AgentOS",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "面向本地项目与长期任务的桌面 Agent 工作台",
   "author": "xuezhirong <xue160709@gmail.com> (https://github.com/xue160709)",
   "homepage": "https://github.com/xue160709/AgentOS",
