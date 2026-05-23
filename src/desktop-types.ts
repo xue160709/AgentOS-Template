@@ -17,6 +17,57 @@ export type DesktopPreferences = {
 /** 托盘菜单动作（与 IPC 载荷一致）/ Tray menu action matching IPC payloads */
 export type TrayMenuAction = 'new-thread' | 'open-project'
 
+/** Apple Speech helper lifecycle exposed to the renderer / 暴露给渲染层的 Apple 语音状态 */
+export type SpeechRecognitionStatus =
+  | 'unsupported'
+  | 'idle'
+  | 'starting'
+  | 'requesting_permission'
+  | 'listening'
+  | 'transcribing'
+  | 'error'
+
+/** Renderer command result for native speech recognition / 原生语音命令结果 */
+export type SpeechRecognitionCommandResult =
+  | {
+      ok: true
+      status: SpeechRecognitionStatus
+    }
+  | {
+      ok: false
+      status: SpeechRecognitionStatus
+      message: string
+    }
+
+/** Current native speech recognizer snapshot / 原生语音识别当前快照 */
+export type SpeechRecognitionSnapshot = {
+  supported: boolean
+  status: SpeechRecognitionStatus
+}
+
+/** Streaming events from the Apple Speech helper / Apple 语音 helper 事件流 */
+export type SpeechRecognitionEvent =
+  | {
+      type: 'status'
+      status: SpeechRecognitionStatus
+      locale?: string
+      supportsOnDevice?: boolean
+      requiresOnDevice?: boolean
+    }
+  | {
+      type: 'partial'
+      text: string
+    }
+  | {
+      type: 'final'
+      text: string
+    }
+  | {
+      type: 'error'
+      code: string
+      message: string
+    }
+
 /** Agent Mode 文件写入状态 / Agent Mode scaffold file status */
 export type AgentModeFileStatus = 'created' | 'updated' | 'exists'
 

@@ -12,6 +12,7 @@ dist
 dist-ssr
 dist-electron
 release
+native/speech-cli/build
 *.local
 scripts/release-env.local.sh
 .env

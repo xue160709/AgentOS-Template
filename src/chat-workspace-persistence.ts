@@ -231,6 +231,10 @@ export function normalizeChatWorkspaceState(value: unknown): ChatWorkspaceState 
         title: typeof thread.title === 'string' && thread.title.trim() ? thread.title : '新对话',
         purpose: normalizeThreadPurpose(thread.purpose),
         homePluginSlug: typeof thread.homePluginSlug === 'string' && thread.homePluginSlug.trim() ? thread.homePluginSlug.trim() : undefined,
+        skillPath: typeof thread.skillPath === 'string' && thread.skillPath.trim() ? thread.skillPath.trim() : undefined,
+        skillCommand:
+          typeof thread.skillCommand === 'string' && thread.skillCommand.trim() ? thread.skillCommand.trim() : undefined,
+        skillTitle: typeof thread.skillTitle === 'string' && thread.skillTitle.trim() ? thread.skillTitle.trim() : undefined,
         createdAt: toFiniteNumber(thread.createdAt, Date.now()),
         updatedAt: toFiniteNumber(thread.updatedAt, Date.now()),
         pinnedAt: toOptionalFiniteNumber(thread.pinnedAt),
@@ -459,7 +463,10 @@ function toOptionalFiniteNumber(value: unknown): number | undefined {
 }
 
 function normalizeThreadPurpose(value: unknown): WorkspaceThread['purpose'] {
-  return value === 'home-plugin-customization' || value === 'home-plugin-card-customization' || value === 'task-run'
+  return value === 'home-plugin-customization' ||
+    value === 'home-plugin-card-customization' ||
+    value === 'task-run' ||
+    value === 'skill-run'
     ? value
     : undefined
 }

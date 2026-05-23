@@ -21,6 +21,7 @@ import type { AppLocale } from '../i18n/i18n'
 import { useI18n } from '../i18n/i18n'
 import type {
   AppViewId,
+  ProjectSkillRunRequest,
   ProjectSkillListState,
   SelectedProjectSkill,
   SettingsCategoryId,
@@ -68,7 +69,7 @@ type AppShellSidebarProps = {
   onSelectProject: (projectId: string) => void
   onSelectThread: (threadId: string) => void
   onSelectProjectSkill: (projectId: string, skill: Omit<SelectedProjectSkill, 'projectId'>) => void
-  onRunProjectSkill: (projectId: string, prompt: string) => void
+  onRunProjectSkill: (projectId: string, skill: ProjectSkillRunRequest) => void
   onToggleThreadPinned: (threadId: string) => void
   onArchiveThread: (threadId: string) => void
   onToggleProjectPinned: (projectId: string) => void
@@ -403,7 +404,7 @@ export function AppShellSidebar({
     })
   }
 
-  const openSkillMenu = (event: ReactMouseEvent, projectId: string, skill: { path: string; title: string }) => {
+  const openSkillMenu = (event: ReactMouseEvent, projectId: string, skill: ProjectSkillRunRequest) => {
     setSkillTip(null)
     event.preventDefault()
     event.stopPropagation()
@@ -417,7 +418,7 @@ export function AppShellSidebar({
           onSelect: () => {
             closeContextMenu()
             setConfirmingArchiveThreadId(null)
-            onRunProjectSkill(projectId, skill.title)
+            onRunProjectSkill(projectId, skill)
           },
         },
         {
@@ -701,7 +702,7 @@ export function AppShellSidebar({
                                                   event.stopPropagation()
                                                   setSkillTip(null)
                                                   setConfirmingArchiveThreadId(null)
-                                                  onRunProjectSkill(project.id, skill.title)
+                                                  onRunProjectSkill(project.id, skill)
                                                 }}
                                               >
                                                 <span>{t('sidebar.menuRunSkill')}</span>
@@ -759,6 +760,7 @@ export function AppShellSidebar({
                                 const isHomePluginThread =
                                   thread.purpose === 'home-plugin-customization' || thread.purpose === 'home-plugin-card-customization'
                                 const isTaskRunThread = thread.purpose === 'task-run'
+                                const isSkillRunThread = thread.purpose === 'skill-run'
                                 const runState = threadRunStates[thread.id]
                                 const isThreadRunning = Boolean(runState)
                                 const timeLabel = formatThreadTime(thread.updatedAt, locale, t)
@@ -796,8 +798,8 @@ export function AppShellSidebar({
                                       }}
                                     >
                                       <span className="app-thread-title">{thread.title}</span>
-                                      {isHomePluginThread || isTaskRunThread ? (
-                                        <IconInline name={isTaskRunThread ? 'play' : 'agent'} className="app-thread-purpose-icon" />
+                                      {isHomePluginThread || isTaskRunThread || isSkillRunThread ? (
+                                        <IconInline name={isTaskRunThread ? 'play' : isSkillRunThread ? 'chip' : 'agent'} className="app-thread-purpose-icon" />
                                       ) : null}
                                     </button>
                                     <div className="app-thread-trailing">

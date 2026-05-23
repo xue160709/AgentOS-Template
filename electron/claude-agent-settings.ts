@@ -10,11 +10,14 @@ import type {
   ClaudeAgentConfigSource,
   ClaudeAgentEnvSnapshot,
   ClaudeAgentModelProvider,
+  ClaudeAgentProviderAuthMode,
+  ClaudeAgentProviderTestResult,
   ClaudeAgentResolvedConfig,
   ClaudeAgentSettings,
   ClaudeAgentSettingsSnapshot,
 } from '../src/claude-chat-types'
 import { safeConsoleInfo } from './safe-console'
+import providerPresetCatalog from '../src/model-provider-presets.json'
 
 const SETTINGS_FILE_NAME = 'claude-agent-settings.json'
 const DEFAULT_PROVIDER_ID = 'default-provider'
@@ -56,6 +59,71 @@ export class ClaudeAgentSettingsStore {
     return this.getSnapshot()
   }
 
+  async testProvider(provider: unknown): Promise<ClaudeAgentProviderTestResult> {
+    const normalized = normalizeProvider(provider, 'test-provider')
+    if (!normalized) {
+      return { ok: false, message: '配置格式无效。' }
+    }
+
+    const apiKey = normalizeString(normalized.apiKey)
+    const baseUrl = normalizeString(normalized.baseUrl)
+    const model = selectProviderTestModel(normalized)
+    if (!apiKey) return { ok: false, message: '请先填写 API Key。' }
+    if (!baseUrl) return { ok: false, message: '请先填写 Base URL。' }
+    if (!model) return { ok: false, message: '请至少填写一个可测试的模型。' }
+
+    let endpoint: string
+    try {
+      endpoint = buildAnthropicMessagesEndpoint(baseUrl)
+    } catch {
+      return { ok: false, message: 'Base URL 不是有效的 HTTP(S) 地址。' }
+    }
+
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 20_000)
+    const headers: Record<string, string> = {
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+    }
+    if (normalized.authMode === 'authToken') {
+      headers.authorization = `Bearer ${apiKey}`
+    } else {
+      headers['x-api-key'] = apiKey
+    }
+
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          model,
+          max_tokens: 8,
+          messages: [{ role: 'user', content: 'ping' }],
+        }),
+        signal: controller.signal,
+      })
+      if (response.ok) {
+        return { ok: true, status: response.status, message: `连接成功，已验证 ${model}。` }
+      }
+      const message = await readProviderTestError(response)
+      return {
+        ok: false,
+        status: response.status,
+        message: message ? `连接失败（${response.status}）：${message}` : `连接失败（${response.status}）。`,
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error && error.name === 'AbortError'
+          ? '连接超时，请检查网络、Base URL 或厂商服务状态。'
+          : error instanceof Error
+            ? error.message
+            : String(error)
+      return { ok: false, message }
+    } finally {
+      clearTimeout(timeout)
+    }
+  }
+
   /** 仅切换当前提供商与可选模型 ID（聊天下拉）/ Switch active provider and optional concrete model id from chat picker */
   setActiveChatPick(payload: ActiveChatPickPayload): ClaudeAgentSettingsSnapshot {
     const settings = this.read()
@@ -95,26 +163,33 @@ export class ClaudeAgentSettingsStore {
 
     const provider = selectActiveProvider(settings)
     const providerApiKey = provider?.apiKey ?? ''
-    const envApiKey = readEnv('ANTHROPIC_API_KEY')
 
     const overlay = normalizeString(settings.activeAnthropicModel)
     const primaryModel = normalizeString(provider?.model ?? '')
     const effectiveOverlay =
       overlay && provider && providerAcceptsModel(provider, overlay) ? overlay : ''
-    const resolvedModel = effectiveOverlay || primaryModel || env.model
+    const resolvedModel = effectiveOverlay || primaryModel
 
     const resolved: ClaudeAgentResolvedConfig = {
       configSource: 'settings',
-      apiKey: providerApiKey || envApiKey,
-      authToken: providerApiKey || envApiKey ? '' : readEnv('ANTHROPIC_AUTH_TOKEN'),
-      baseUrl: provider?.baseUrl || env.baseUrl,
+      apiKey: providerApiKey
+        ? provider?.authMode === 'authToken'
+          ? ''
+          : providerApiKey
+        : '',
+      authToken: providerApiKey
+        ? provider?.authMode === 'authToken'
+          ? providerApiKey
+          : ''
+        : '',
+      baseUrl: provider?.baseUrl || '',
       model: resolvedModel,
       supportsImages: provider
-        ? providerSupportsImagesForModel(provider, resolvedModel, env.supportsImages)
-        : env.supportsImages,
-      defaultHaikuModel: provider?.defaultHaikuModel || env.defaultHaikuModel,
-      defaultOpusModel: provider?.defaultOpusModel || env.defaultOpusModel,
-      defaultSonnetModel: provider?.defaultSonnetModel || env.defaultSonnetModel,
+        ? providerSupportsImagesForModel(provider, resolvedModel, false)
+        : false,
+      defaultHaikuModel: provider?.defaultHaikuModel || '',
+      defaultOpusModel: provider?.defaultOpusModel || '',
+      defaultSonnetModel: provider?.defaultSonnetModel || '',
     }
     safeConsoleInfo('[ClaudeAgentSettingsStore] resolved settings config', {
       settingsFilePath: this.settingsFilePath,
@@ -128,11 +203,6 @@ export class ClaudeAgentSettingsStore {
         opus: provider?.defaultOpusModel || '',
       },
       resolved: summarizeResolvedConfigForLog(resolved),
-      envFallbacks: {
-        hasEnvApiKey: Boolean(envApiKey),
-        envBaseUrl: env.baseUrl,
-        envModel: env.model,
-      },
     })
     return resolved
   }
@@ -179,7 +249,7 @@ function normalizeProviders(raw: Record<string, unknown>): ClaudeAgentModelProvi
         Boolean(provider),
       )
 
-  const providers = normalized.length ? normalized : [createDefaultProvider()]
+  const providers = normalized.length ? normalized : createDefaultProviders()
   return dedupeProviderIds(providers)
 }
 
@@ -192,10 +262,20 @@ function normalizeProvider(raw: unknown, fallbackId: string): ClaudeAgentModelPr
     normalizeString(raw.ANTHROPIC_API_KEY) ||
     normalizeString(raw.authToken) ||
     normalizeString(raw.ANTHROPIC_AUTH_TOKEN)
+  const authMode = normalizeAuthMode(
+    raw.authMode,
+    normalizeString(raw.authToken) || normalizeString(raw.ANTHROPIC_AUTH_TOKEN) ? 'authToken' : 'apiKey',
+  )
 
   return {
     id: normalizeString(raw.id) || fallbackId,
-    name: normalizeString(raw.name) || normalizeString(raw.label) || normalizeString(raw.providerName),
+    presetId: normalizeString(raw.presetId),
+    name:
+      normalizeLocalizedString(raw.name) ||
+      normalizeString(raw.label) ||
+      normalizeString(raw.providerName),
+    apiKeyUrl: normalizeString(raw.apiKeyUrl),
+    authMode,
     apiKey,
     authToken: '',
     baseUrl: normalizeString(raw.baseUrl) || normalizeString(raw.ANTHROPIC_BASE_URL),
@@ -231,12 +311,13 @@ function selectActiveProvider(settings: ClaudeAgentSettings): ClaudeAgentModelPr
 }
 
 function createDefaultSettings(): ClaudeAgentSettings {
-  const provider = createDefaultProvider()
+  const providers = createDefaultProviders()
+  const provider = providers[0]
   return {
     configSource: 'settings',
     activeProviderId: provider.id,
     activeAnthropicModel: '',
-    providers: [provider],
+    providers,
   }
 }
 
@@ -256,7 +337,10 @@ function pruneSettings(settings: ClaudeAgentSettings): ClaudeAgentSettings {
 function createDefaultProvider(): ClaudeAgentModelProvider {
   return {
     id: DEFAULT_PROVIDER_ID,
+    presetId: '',
     name: '',
+    apiKeyUrl: '',
+    authMode: 'apiKey',
     apiKey: '',
     authToken: '',
     baseUrl: '',
@@ -271,13 +355,33 @@ function createDefaultProvider(): ClaudeAgentModelProvider {
   }
 }
 
+function createDefaultProviders(): ClaudeAgentModelProvider[] {
+  const rawProviders = isRecord(providerPresetCatalog) && Array.isArray(providerPresetCatalog.providers)
+    ? providerPresetCatalog.providers
+    : []
+  const providers = rawProviders
+    .map((provider, index) => normalizeProvider(provider, `provider-${index + 1}`))
+    .filter((provider): provider is ClaudeAgentModelProvider => Boolean(provider))
+  return providers.length ? dedupeProviderIds(providers) : [createDefaultProvider()]
+}
+
 function normalizeSource(value: unknown, allowEnvConfigSource: boolean): ClaudeAgentConfigSource {
   if (!allowEnvConfigSource) return 'settings'
   return value === 'env' ? 'env' : 'settings'
 }
 
+function normalizeAuthMode(value: unknown, fallback: ClaudeAgentProviderAuthMode): ClaudeAgentProviderAuthMode {
+  return value === 'authToken' || value === 'apiKey' ? value : fallback
+}
+
 function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+function normalizeLocalizedString(value: unknown): string {
+  if (typeof value === 'string') return value.trim()
+  if (!isRecord(value)) return ''
+  return normalizeString(value.zh) || normalizeString(value.en)
 }
 
 function readEnv(name: string): string {
@@ -302,7 +406,10 @@ function summarizeSettingsForLog(settings: ClaudeAgentSettings): Record<string, 
     providerCount: settings.providers.length,
     providers: settings.providers.map((provider) => ({
       id: provider.id,
+      presetId: provider.presetId,
       name: provider.name,
+      apiKeyUrl: provider.apiKeyUrl,
+      authMode: provider.authMode,
       hasApiKey: Boolean(provider.apiKey),
       apiKey: redactSecret(provider.apiKey),
       baseUrl: provider.baseUrl,
@@ -384,4 +491,54 @@ function providerSupportsImagesForModel(
   ].filter((row) => normalizeString(row.model) === m)
   if (!matches.length) return fallback
   return matches.some((row) => row.supportsImages)
+}
+
+function selectProviderTestModel(provider: ClaudeAgentModelProvider): string {
+  return [
+    provider.model,
+    provider.defaultSonnetModel,
+    provider.defaultOpusModel,
+    provider.defaultHaikuModel,
+  ]
+    .map((value) => normalizeString(value))
+    .find(Boolean) ?? ''
+}
+
+function buildAnthropicMessagesEndpoint(baseUrl: string): string {
+  const url = new URL(baseUrl)
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+    throw new Error('Unsupported protocol')
+  }
+  const pathname = url.pathname.replace(/\/+$/, '')
+  url.pathname = pathname.endsWith('/v1') ? `${pathname}/messages` : `${pathname}/v1/messages`
+  url.search = ''
+  url.hash = ''
+  return url.toString()
+}
+
+async function readProviderTestError(response: Response): Promise<string> {
+  const contentType = response.headers.get('content-type') ?? ''
+  try {
+    if (contentType.includes('application/json')) {
+      const data = (await response.json()) as unknown
+      const message = findProviderErrorMessage(data)
+      if (message) return message.slice(0, 300)
+    }
+    const text = await response.text()
+    return text.trim().replace(/\s+/g, ' ').slice(0, 300)
+  } catch {
+    return ''
+  }
+}
+
+function findProviderErrorMessage(value: unknown): string {
+  if (!isRecord(value)) return ''
+  const direct = normalizeString(value.message)
+  if (direct) return direct
+  const error = value.error
+  if (typeof error === 'string') return error.trim()
+  if (isRecord(error)) {
+    return normalizeString(error.message) || normalizeString(error.type) || normalizeString(error.code)
+  }
+  return ''
 }

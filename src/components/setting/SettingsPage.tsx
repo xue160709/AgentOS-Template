@@ -8,6 +8,7 @@ import { AppUpdateSettingsPage } from './AppUpdateSettingsPage'
 import { DeveloperSettingsPage } from './DeveloperSettingsPage'
 import { ClaudeAgentSettingsPage } from './ClaudeAgentSettingsPage'
 import { ProjectSkillsSettingsPage } from './ProjectSkillsSettingsPage'
+import { isDeveloperSettingsEnabled } from '../app-shell-constants'
 import type { SettingsCategoryId, WorkspaceProject } from '../types'
 
 type SettingsPageProps = {
@@ -47,7 +48,7 @@ export function SettingsPage({
     return <AppUpdateSettingsPage />
   }
 
-  if (settingsCategory === 'developer' && import.meta.env.DEV) {
+  if (settingsCategory === 'developer' && isDeveloperSettingsEnabled()) {
     return <DeveloperSettingsPage />
   }
 
