@@ -1,7 +1,7 @@
 {
   "name": "agentos",
   "productName": "AgentOS",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "面向本地项目与长期任务的桌面 Agent 工作台",
   "author": "xuezhirong <xue160709@gmail.com> (https://github.com/xue160709)",
   "homepage": "https://github.com/xue160709/AgentOS",
@@ -16,14 +16,15 @@
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
-    "dev": "vite",
+    "dev": "npm run build:speech-cli && vite",
+    "build:speech-cli": "node scripts/build-speech-cli.mjs",
     "typecheck": "tsc",
     "test:electron": "node --test electron/*.test.mjs",
     "test:home-plugin": "node .agents/skills/a2ui-project-home-panel/scripts/validate_home_plugin.js --allow-missing",
-    "build": "tsc && vite build && electron-builder --config electron-builder.config.cjs",
+    "build": "npm run build:speech-cli && tsc && vite build && electron-builder --config electron-builder.config.cjs",
     "build:icons:win": "node scripts/generate-windows-icon.mjs",
-    "build:local": "tsc && vite build && electron-builder --config electron-builder.config.cjs --publish never",
-    "release": "tsc && vite build && electron-builder --config electron-builder.config.cjs --publish always",
+    "build:local": "npm run build:speech-cli && tsc && vite build && electron-builder --config electron-builder.config.cjs --publish never",
+    "release": "npm run build:speech-cli && tsc && vite build && electron-builder --config electron-builder.config.cjs --publish always",
     "preview": "vite preview"
   },
   "devDependencies": {

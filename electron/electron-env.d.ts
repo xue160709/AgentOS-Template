@@ -30,6 +30,9 @@ import type {
   HomePluginTaskRunResult,
   HomePluginTaskSaveResult,
   HomePluginTaskStopResult,
+  SpeechRecognitionCommandResult,
+  SpeechRecognitionEvent,
+  SpeechRecognitionSnapshot,
   TrayMenuAction,
 } from '../src/desktop-types'
 import type { ChatWorkspaceState, FileTreeResult, ProjectFilePreviewResult } from '../src/components/types'
@@ -121,6 +124,16 @@ declare global {
       copyPngToClipboard?: (dataUrl: string) => Promise<boolean>
       /** 桌面端 SVG 渲染到图片剪贴板 / Render SVG through Electron and write it as an image clipboard item */
       copySvgToClipboard?: (svg: string) => Promise<boolean>
+      /** macOS Apple Speech 识别状态 / macOS Apple Speech recognition status */
+      getSpeechRecognitionStatus?: () => Promise<SpeechRecognitionSnapshot>
+      /** 启动 macOS Apple Speech 识别 / Start macOS Apple Speech recognition */
+      startSpeechRecognition?: (options?: { locale?: string; requiresOnDevice?: boolean }) => Promise<SpeechRecognitionCommandResult>
+      /** 停止录音并提交转写 / Stop recording and finalize transcription */
+      stopSpeechRecognition?: () => Promise<SpeechRecognitionCommandResult>
+      /** 取消本次语音识别 / Cancel the active speech recognition run */
+      cancelSpeechRecognition?: () => Promise<SpeechRecognitionCommandResult>
+      /** 订阅 macOS Apple Speech 事件 / Subscribe to macOS Apple Speech events */
+      onSpeechRecognitionEvent?: (handler: (event: SpeechRecognitionEvent) => void) => () => void
       getDesktopPreferences?: () => Promise<DesktopPreferences>
       setDesktopPreferences?: (partial: Partial<DesktopPreferences>) => Promise<DesktopPreferences>
       syncTrayLocale?: (locale: 'zh' | 'en') => Promise<void>
