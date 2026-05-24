@@ -6,7 +6,9 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { IconInline } from '../icon-inline'
 import { useI18n } from '../i18n/i18n'
+import type { AgentContextSlashItem, AgentKnowledgeSearchItem, ProjectFileSearchItem } from '../claude-chat-types'
 import type {
+  AppSearchScope,
   AppViewId,
   ChatState,
   FileTreeNode,
@@ -18,6 +20,7 @@ import type {
 } from './types'
 import { AgentModeMenu } from './AgentModeMenu'
 import { AppFileTreePane, type AppFileTreePaneHandle } from './AppFileTreePane'
+import { AppSearchModal } from './AppSearchModal'
 import { AppWorkspaceSidePanel, type WorkspaceSidePanelTab } from './AppWorkspaceSidePanel'
 import { ChatPage, type ChatPageHandle } from './chat/ChatPage'
 import { DocsPage } from './DocsPage'
@@ -49,6 +52,7 @@ type AppShellWorkspaceProps = {
   onNewThread: (projectId?: string) => string | void
   onCreateProject: (mode: 'scratch' | 'existing') => void | Promise<void>
   onSelectProject: (projectId: string) => void
+  onSelectThread: (threadId: string) => void
   onThreadChatStateChange: (threadId: string, update: ChatState | ((prev: ChatState) => ChatState)) => void
   onThreadPromptSubmit: (threadId: string, prompt: string) => void
   onThreadRunStateChange: (threadId: string, state: ThreadRunState | null) => void
@@ -56,6 +60,7 @@ type AppShellWorkspaceProps = {
   onCreateHomePluginCardThread: (projectId: string, initialPrompt: string) => string | void
   onEditHomePluginCard: (projectId: string, item: HomePluginRunItem) => void
   hiddenSkillPaths: string[]
+  projectSkills: AgentContextSlashItem[]
   onRunProjectSkill: (projectId: string, skill: ProjectSkillRunRequest) => void
   onStopProjectSkillRun: (projectId: string, skillPath: string) => void
   showProjectSkillsInSidebar: boolean
@@ -79,6 +84,7 @@ export function AppShellWorkspace({
   onNewThread,
   onCreateProject,
   onSelectProject,
+  onSelectThread,
   onThreadChatStateChange,
   onThreadPromptSubmit,
   onThreadRunStateChange,
@@ -86,6 +92,7 @@ export function AppShellWorkspace({
   onCreateHomePluginCardThread,
   onEditHomePluginCard,
   hiddenSkillPaths,
+  projectSkills,
   onRunProjectSkill,
   onStopProjectSkillRun,
   showProjectSkillsInSidebar,
@@ -97,6 +104,8 @@ export function AppShellWorkspace({
   const isSettingsChromeHidden = activeViewId === 'settings'
   const [sidePanel, setSidePanel] = useState<SidePanelState>(() => ({ open: false, tab: 'files' }))
   const [filePreview, setFilePreview] = useState<ProjectFilePreviewOverlayState | null>(null)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchScope, setSearchScope] = useState<AppSearchScope>('all')
   const filePaneRef = useRef<AppFileTreePaneHandle>(null)
   const filePreviewRequestRef = useRef(0)
   const agentMode = useWorkspaceAgentMode(activeProject)
@@ -140,6 +149,34 @@ export function AppShellWorkspace({
       return { open: true, tab }
     })
   }, [])
+
+  const openSearch = useCallback((scope: AppSearchScope) => {
+    setSearchScope(scope)
+    setSearchOpen(true)
+  }, [])
+
+  useEffect(() => {
+    const onOpenSearch = (event: Event) => {
+      const scope = (event as CustomEvent<{ scope?: AppSearchScope }>).detail?.scope
+      openSearch(scope === 'files' || scope === 'chats' || scope === 'messages' || scope === 'memory' || scope === 'skills' || scope === 'tasks' ? scope : 'all')
+    }
+    window.addEventListener('agentos:open-search', onOpenSearch)
+    return () => window.removeEventListener('agentos:open-search', onOpenSearch)
+  }, [openSearch])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return
+      const key = event.key.toLowerCase()
+      const scope: AppSearchScope | null = key === 'k' ? 'all' : key === 'p' ? 'files' : key === 'g' ? 'chats' : null
+      if (!scope) return
+      event.preventDefault()
+      event.stopPropagation()
+      openSearch(scope)
+    }
+    window.addEventListener('keydown', onKeyDown, { capture: true })
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true })
+  }, [openSearch])
 
   const openProjectFilePreview = useCallback(
     async (node: FileTreeNode) => {
@@ -192,6 +229,65 @@ export function AppShellWorkspace({
     [activeProject.path, t],
   )
 
+  const openSearchFileResult = useCallback(
+    (item: ProjectFileSearchItem) => {
+      if (item.type === 'directory') {
+        setSidePanel({ open: true, tab: 'files' })
+        return
+      }
+      void openProjectFilePreview({
+        name: item.label,
+        path: item.path,
+        relativePath: item.relativePath,
+        type: item.type,
+      })
+    },
+    [openProjectFilePreview],
+  )
+
+  const openSearchMessageResult = useCallback(
+    (threadId: string, itemId?: string) => {
+      onSelectThread(threadId)
+      if (!itemId) return
+
+      let attempts = 0
+      const reveal = () => {
+        attempts += 1
+        const found = chatRef.current?.revealMessage(itemId) ?? false
+        if (!found && attempts < 8) requestAnimationFrame(reveal)
+      }
+      requestAnimationFrame(reveal)
+    },
+    [chatRef, onSelectThread],
+  )
+
+  const askAboutKnowledgeResult = useCallback(
+    (item: AgentKnowledgeSearchItem) => {
+      const prompt = [
+        t('search.askPromptIntro', { title: item.title }),
+        item.relativePath ? t('search.askPromptPath', { path: item.relativePath }) : '',
+        item.snippet ? t('search.askPromptSnippet', { snippet: item.snippet }) : '',
+      ]
+        .filter(Boolean)
+        .join('\n')
+      void chatRef.current?.submitPromptInNewThread(item.projectId, prompt)
+    },
+    [chatRef, t],
+  )
+
+  const insertKnowledgeContext = useCallback(
+    (item: AgentKnowledgeSearchItem) => {
+      const contextText = [
+        item.relativePath ? `@${item.relativePath}` : item.title,
+        item.snippet ? item.snippet : '',
+      ]
+        .filter(Boolean)
+        .join('\n')
+      chatRef.current?.insertComposerText(contextText)
+    },
+    [chatRef],
+  )
+
   const folderToolbarActive = sidePanel.open && sidePanel.tab === 'files'
   const activePreviewPath = filePreview?.status === 'ready' ? filePreview.file.path : filePreview?.path ?? null
 
@@ -209,6 +305,17 @@ export function AppShellWorkspace({
           <div className="app-workspace-drag-gap draggable" aria-hidden="true" />
           <div className="app-workspace-actions no-drag">
             {showAgentModeToolbar ? <AgentModeMenu agent={agentMode} /> : null}
+            <button
+              type="button"
+              className={`btn btn-toolbar${searchOpen ? ' is-active' : ''}`}
+              id="btn-open-search"
+              title={t('search.open')}
+              aria-label={t('search.open')}
+              aria-expanded={searchOpen}
+              onClick={() => openSearch('all')}
+            >
+              <IconInline name="search" />
+            </button>
             <button
               type="button"
               className={`btn btn-toolbar${folderToolbarActive ? ' is-active' : ''}`}
@@ -261,7 +368,7 @@ export function AppShellWorkspace({
             showProjectSkillsInSidebar={showProjectSkillsInSidebar}
             onShowProjectSkillsInSidebarChange={onShowProjectSkillsInSidebarChange}
           />
-          {activeViewId === 'home' && filePreview ? (
+          {filePreview ? (
             <ProjectFilePreviewOverlay preview={filePreview} onClose={() => setFilePreview(null)} />
           ) : null}
         </main>
@@ -282,6 +389,23 @@ export function AppShellWorkspace({
           }
         />
       </div>
+      {searchOpen ? (
+        <AppSearchModal
+          activeProject={activeProject}
+          projects={projects}
+          threads={threads}
+          projectSkills={projectSkills}
+          threadRunStates={threadRunStates}
+          initialScope={searchScope}
+          onClose={() => setSearchOpen(false)}
+          onOpenFile={openSearchFileResult}
+          onRunProjectSkill={onRunProjectSkill}
+          onAskKnowledge={askAboutKnowledgeResult}
+          onInsertKnowledgeContext={insertKnowledgeContext}
+          onSelectMessage={openSearchMessageResult}
+          onSelectThread={onSelectThread}
+        />
+      ) : null}
     </div>
   )
 }

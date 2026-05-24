@@ -71,6 +71,104 @@
     "agentMode": "Agent Mode",
     "developer": "Developer Mode"
   },
+  "search": {
+    "open": "Search",
+    "inputLabel": "Search current project",
+    "placeholder": "Search {{project}}",
+    "close": "Close search",
+    "scopeAria": "Search scope",
+    "resultsAria": "Search results",
+    "scope": {
+      "all": "All",
+      "files": "Files",
+      "messages": "Messages",
+      "memory": "Memory",
+      "chats": "Chats",
+      "skills": "Skills",
+      "tasks": "Tasks"
+    },
+    "section": {
+      "files": "Files",
+      "messages": "Message history",
+      "memory": "Memory and knowledge",
+      "chats": "Chats",
+      "skills": "Skills",
+      "tasks": "Tasks"
+    },
+    "action": {
+      "openFile": "Open",
+      "openDirectory": "Open files",
+      "openMessage": "Reveal",
+      "openChat": "Open",
+      "openMemory": "Open",
+      "askAgent": "Ask",
+      "addContext": "Add context",
+      "continueThread": "Continue",
+      "runSkill": "Run"
+    },
+    "knowledgeKind": {
+      "memory": "Memory",
+      "skill": "Skill",
+      "command": "Command",
+      "agent": "Sub-agent",
+      "home-plugin": "Card",
+      "task": "Task"
+    },
+    "messageKind": {
+      "thread": "Thread",
+      "user": "User",
+      "assistant": "Assistant",
+      "tool": "Tool",
+      "activity": "Activity"
+    },
+    "purpose": {
+      "chat": "Chat",
+      "homePlugin": "Agent panel customization",
+      "homePluginCard": "Card customization",
+      "skill": "Skill run",
+      "task": "Task run"
+    },
+    "currentProject": "Current project",
+    "empty": "No visible results in this project",
+    "noResults": "No matches in {{project}}",
+    "typeForFiles": "Type a file name or path",
+    "typeForMessages": "Type message text to search",
+    "typeForMemory": "Type memory, AGENT, or TODO text to search",
+    "noFileResults": "No matching files",
+    "noMessageResults": "No matching history messages",
+    "noMemoryResults": "No matching memory or knowledge",
+    "noChatResults": "No matching chats",
+    "noTaskResults": "No matching tasks",
+    "noSkillResults": "No matching Skills",
+    "loading": "Searching…",
+    "running": "Running",
+    "archived": "Archived",
+    "includeArchived": "Include archived",
+    "filtersAria": "Search filters",
+    "projectScope": {
+      "label": "Project",
+      "current": "Current",
+      "all": "All"
+    },
+    "recent": {
+      "label": "Time",
+      "all": "Any",
+      "7d": "7 days",
+      "30d": "30 days"
+    },
+    "justNow": "Just now",
+    "message": "Message",
+    "skill": "Project Skill",
+    "fileSearchUnavailable": "Project file search is unavailable in this environment",
+    "fileSearchFailed": "Project file search failed",
+    "messageSearchUnavailable": "Message history search is unavailable in this environment",
+    "messageSearchFailed": "Message history search failed",
+    "knowledgeSearchUnavailable": "Project knowledge search is unavailable in this environment",
+    "knowledgeSearchFailed": "Project knowledge search failed",
+    "askPromptIntro": "Please continue from this project knowledge: {{title}}",
+    "askPromptPath": "Source: {{path}}",
+    "askPromptSnippet": "Relevant snippet: {{snippet}}"
+  },
   "sidebar": {
     "windowNav": "Window navigation",
     "toggleSidebar": "Toggle sidebar",

@@ -71,6 +71,104 @@
     "agentMode": "Agent模式",
     "developer": "开发者模式"
   },
+  "search": {
+    "open": "搜索",
+    "inputLabel": "搜索当前项目",
+    "placeholder": "搜索 {{project}}",
+    "close": "关闭搜索",
+    "scopeAria": "搜索范围",
+    "resultsAria": "搜索结果",
+    "scope": {
+      "all": "全部",
+      "files": "文件",
+      "messages": "消息",
+      "memory": "记忆",
+      "chats": "对话",
+      "skills": "Skills",
+      "tasks": "任务"
+    },
+    "section": {
+      "files": "文件",
+      "messages": "消息历史",
+      "memory": "记忆与知识",
+      "chats": "对话",
+      "skills": "Skills",
+      "tasks": "任务"
+    },
+    "action": {
+      "openFile": "打开",
+      "openDirectory": "打开文件树",
+      "openMessage": "定位",
+      "openChat": "打开",
+      "openMemory": "打开",
+      "askAgent": "提问",
+      "addContext": "加上下文",
+      "continueThread": "继续",
+      "runSkill": "执行"
+    },
+    "knowledgeKind": {
+      "memory": "记忆",
+      "skill": "Skill",
+      "command": "命令",
+      "agent": "子 Agent",
+      "home-plugin": "卡片",
+      "task": "任务"
+    },
+    "messageKind": {
+      "thread": "线程",
+      "user": "用户",
+      "assistant": "助手",
+      "tool": "工具",
+      "activity": "活动"
+    },
+    "purpose": {
+      "chat": "对话",
+      "homePlugin": "Agent 面板定制",
+      "homePluginCard": "卡片定制",
+      "skill": "Skill 运行",
+      "task": "任务运行"
+    },
+    "currentProject": "当前项目",
+    "empty": "当前项目暂无可显示结果",
+    "noResults": "在 {{project}} 中没有找到匹配结果",
+    "typeForFiles": "输入文件名或路径",
+    "typeForMessages": "输入要查找的消息内容",
+    "typeForMemory": "输入要查找的记忆、AGENT 或 TODO 内容",
+    "noFileResults": "没有匹配的文件",
+    "noMessageResults": "没有匹配的历史消息",
+    "noMemoryResults": "没有匹配的记忆或知识",
+    "noChatResults": "没有匹配的对话",
+    "noTaskResults": "没有匹配的任务",
+    "noSkillResults": "没有匹配的 Skill",
+    "loading": "正在搜索…",
+    "running": "运行中",
+    "archived": "已归档",
+    "includeArchived": "包含已归档",
+    "filtersAria": "搜索过滤器",
+    "projectScope": {
+      "label": "项目",
+      "current": "当前",
+      "all": "全部"
+    },
+    "recent": {
+      "label": "时间",
+      "all": "不限",
+      "7d": "7天",
+      "30d": "30天"
+    },
+    "justNow": "刚刚",
+    "message": "消息",
+    "skill": "项目 Skill",
+    "fileSearchUnavailable": "当前运行环境无法搜索项目文件",
+    "fileSearchFailed": "搜索项目文件失败",
+    "messageSearchUnavailable": "当前运行环境无法搜索消息历史",
+    "messageSearchFailed": "搜索消息历史失败",
+    "knowledgeSearchUnavailable": "当前运行环境无法搜索项目知识",
+    "knowledgeSearchFailed": "搜索项目知识失败",
+    "askPromptIntro": "请基于这个项目知识继续分析：{{title}}",
+    "askPromptPath": "来源：{{path}}",
+    "askPromptSnippet": "相关片段：{{snippet}}"
+  },
   "sidebar": {
     "windowNav": "窗口导航",
     "toggleSidebar": "切换侧栏",

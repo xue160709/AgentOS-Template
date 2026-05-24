@@ -8,6 +8,7 @@ import type {
   ClaudeChatAttachmentKind,
   ClaudeFileChangeSetStatus,
   ClaudeFileDiffFile,
+  ProjectFileSearchItem,
 } from '../claude-chat-types'
 
 /** 顶部主导航视图 / Primary shell view id */
@@ -246,3 +247,42 @@ export type ProjectSkillRunRequest = Pick<
   AgentContextSlashItem,
   'title' | 'command' | 'description' | 'path' | 'relativePath'
 >
+
+/** 搜索结果类型 / Search result category */
+export type AppSearchResultKind =
+  | 'agent'
+  | 'chat'
+  | 'command'
+  | 'directory'
+  | 'file'
+  | 'home-plugin'
+  | 'memory'
+  | 'message'
+  | 'skill'
+  | 'task'
+
+/** 搜索范围筛选 / Search scope filter */
+export type AppSearchScope = 'all' | 'chats' | 'files' | 'memory' | 'messages' | 'skills' | 'tasks'
+
+/** 搜索结果高亮范围 / Search result highlight range */
+export type AppSearchHighlightRange = {
+  field: 'subtitle' | 'title'
+  ranges: Array<[number, number]>
+}
+
+/** 搜索结果基础数据；具体 UI 可附加原始 item / Base search result payload; UI may attach source item */
+export type AppSearchResult = {
+  id: string
+  kind: AppSearchResultKind
+  projectId: string
+  title: string
+  subtitle?: string
+  path?: string
+  threadId?: string
+  score: number
+  updatedAt?: number
+  highlights?: AppSearchHighlightRange[]
+}
+
+/** 文件搜索结果在 App 级搜索中的来源 / File result source used by app-level search */
+export type AppSearchFileSource = ProjectFileSearchItem

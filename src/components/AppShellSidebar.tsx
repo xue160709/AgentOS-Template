@@ -66,6 +66,7 @@ type AppShellSidebarProps = {
   canBack: boolean
   canForward: boolean
   onCreateProject: (mode: 'scratch' | 'existing') => void | Promise<void>
+  onOpenSearch: () => void
   onSelectProject: (projectId: string) => void
   onSelectThread: (threadId: string) => void
   onSelectProjectSkill: (projectId: string, skill: Omit<SelectedProjectSkill, 'projectId'>) => void
@@ -103,6 +104,7 @@ export function AppShellSidebar({
   canBack,
   canForward,
   onCreateProject,
+  onOpenSearch,
   onSelectProject,
   onSelectThread,
   onSelectProjectSkill,
@@ -548,6 +550,15 @@ export function AppShellSidebar({
                 >
                   <IconInline name="message" />
                   <span>{t('sidebar.newThread')}</span>
+                </button>
+                <button
+                  type="button"
+                  className="app-sidebar-search"
+                  id="btn-sidebar-search"
+                  onClick={onOpenSearch}
+                >
+                  <IconInline name="search" />
+                  <span>{t('search.open')}</span>
                 </button>
                 <div className="app-sidebar-section-heading">
                   <div className="app-sidebar-section-label">{t('sidebar.projectsSection')}</div>

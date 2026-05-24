@@ -109,11 +109,18 @@ function shouldStartNewSpeechSegment(previous: string, next: string) {
   return next.length + 1 < previous.length || sharedPrefixLength < Math.min(2, shorterLength)
 }
 
+function escapeCssAttributeValue(value: string): string {
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return CSS.escape(value)
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
+
 // --- Imperative handle / 命令式句柄 ---
 
 export type ChatPageHandle = {
   startNewThread: () => Promise<void>
   focusComposer: () => void
+  insertComposerText: (text: string) => void
+  revealMessage: (messageId: string) => boolean
   submitPromptInNewThread: (projectId: string, prompt: string) => Promise<boolean>
   submitPromptInThread: (
     projectId: string,
@@ -299,6 +306,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   /** 取消 / Esc 关闭编辑时抑制贴底，避免 ResizeObserver 误判 isNearBottom 把视口滚到底 */
   const suppressTranscriptResizeStickRef = useRef(false)
   const suppressTranscriptResizeStickTimerRef = useRef<number | null>(null)
+  const searchHighlightTimerRef = useRef<number | null>(null)
   const isFirstTranscriptLayoutRef = useRef(true)
   const isRunningRef = useRef(false)
   const globalDisplayModelRef = useRef(globalDisplayModel)
@@ -834,6 +842,9 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     return () => {
       if (suppressTranscriptResizeStickTimerRef.current !== null) {
         window.clearTimeout(suppressTranscriptResizeStickTimerRef.current)
+      }
+      if (searchHighlightTimerRef.current !== null) {
+        window.clearTimeout(searchHighlightTimerRef.current)
       }
     }
   }, [])
@@ -1640,6 +1651,34 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     })()
   }
 
+  const revealMessage = useCallback(
+    (messageId: string) => {
+      const sr = scrollRegionRef.current
+      if (!sr || !messageId) return false
+      const node = sr.querySelector<HTMLElement>(`[data-transcript-item-id="${escapeCssAttributeValue(messageId)}"]`)
+      if (!node) return false
+
+      suppressTranscriptResizeStick(1400)
+      scrollIntentRef.current = 'none'
+      node.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      node.classList.remove('is-search-highlight')
+      void node.offsetWidth
+      node.classList.add('is-search-highlight')
+
+      if (searchHighlightTimerRef.current !== null) {
+        window.clearTimeout(searchHighlightTimerRef.current)
+      }
+      searchHighlightTimerRef.current = window.setTimeout(() => {
+        node.classList.remove('is-search-highlight')
+        searchHighlightTimerRef.current = null
+        syncScrollButtonVisibility()
+      }, 1800)
+      window.setTimeout(syncScrollButtonVisibility, 320)
+      return true
+    },
+    [suppressTranscriptResizeStick, syncScrollButtonVisibility],
+  )
+
   // --- `forwardRef`: tray / shell entrypoints call into here / `forwardRef`：托盘等外部入口调用的命令式 API ---
 
   useImperativeHandle(
@@ -1657,6 +1696,16 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       focusComposer: () => {
         requestAnimationFrame(() => chatInputRef.current?.focus())
       },
+      insertComposerText: (text: string) => {
+        const next = text.trim()
+        if (!next) return
+        setInputValue((current) => {
+          const separator = current.trim().length > 0 && !current.endsWith('\n') ? '\n' : ''
+          return `${current}${separator}${next}`
+        })
+        requestAnimationFrame(() => chatInputRef.current?.focus())
+      },
+      revealMessage,
       submitPromptInNewThread: async (projectId: string, prompt: string) => {
         const projectForSubmit = projects.find((project) => project.id === projectId)
         if (!projectForSubmit) return false
@@ -1687,7 +1736,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
         return true
       },
     }),
-    [onNewThread, onStatusChange, projects, setThreadRunState, t],
+    [onNewThread, onStatusChange, projects, revealMessage, setThreadRunState, t],
   )
 
   // --- Cancel streaming + answer permission / tool questions from modal / 停止生成；在弹窗中应答权限或工具提问 ---

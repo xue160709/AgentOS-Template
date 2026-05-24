@@ -14,66 +14,66 @@ Build AgentOS search as a project context entry point, not only a chat title fin
 
 ## P0 - Basic Search Surface
 
-- [ ] Define search result types in shared frontend/Electron types.
+- [x] Define search result types in shared frontend/Electron types.
   - Include `kind`, `projectId`, `title`, `subtitle`, `path`, `threadId`, `score`, `updatedAt`, and optional highlight ranges.
-- [ ] Add a command/search modal.
+- [x] Add a command/search modal.
   - Suggested shortcuts: `Cmd/Ctrl+K` for global command menu, `Cmd/Ctrl+P` for project files, `Cmd/Ctrl+G` for chats.
   - Support keyboard navigation, Enter to open, Escape to close, and grouped result sections.
-- [ ] Implement project file search section.
+- [x] Implement project file search section.
   - Reuse `desktop:search-project-files`.
   - Improve scoring beyond simple `includes`: exact match, prefix match, path match, recent project weighting.
   - Keep ignored directories and search caps from `electron/agent-context.ts`.
-- [ ] Implement chat/thread search section.
+- [x] Implement chat/thread search section.
   - Search current project's `WorkspaceThread` list.
   - Match title, first user message, thread purpose, skill/task metadata, and project path.
   - Sort pinned threads and recent threads higher.
-- [ ] Add result actions.
+- [x] Add result actions.
   - File result: open preview or insert mention.
   - Chat result: open thread.
   - Skill result: run or open skill.
   - Task result: open task thread/card when available.
-- [ ] Add empty/loading/error states.
+- [x] Add empty/loading/error states.
   - Empty state should explain the scope, for example "No files or chats found in this project."
 
 ## P1 - Full-Text History Search
 
-- [ ] Design a local search index.
+- [x] Design a local search index.
   - Use SQLite FTS when available.
   - Fall back to JSON search if SQLite is unavailable.
-- [ ] Create a normalized search document table.
+- [x] Create a normalized search document table.
   - Suggested fields: `id`, `kind`, `project_id`, `thread_id`, `path`, `title`, `subtitle`, `body`, `metadata_json`, `updated_at`.
-- [ ] Index transcript content.
+- [x] Index transcript content.
   - User messages.
   - Assistant summaries or message text.
   - Important tool outputs and errors, with truncation rules.
   - Thread title and first prompt.
-- [ ] Keep the index updated from persistence.
+- [x] Keep the index updated from persistence.
   - Hook into workspace save / Electron mirror save.
   - Read rollout JSONL records for long-term transcript indexing.
   - Rebuild stale indexes on startup or on demand.
-- [ ] Add message-level result rendering.
+- [x] Add message-level result rendering.
   - Show chat title, matched snippet, author/type, and relative timestamp.
   - Jump to the matching thread and scroll to the matching message.
-- [ ] Add archive handling.
+- [x] Add archive handling.
   - Current project active threads by default.
   - Toggle archived threads on demand.
   - Archived results should rank lower.
 
 ## P2 - AgentOS Knowledge Search
 
-- [ ] Index Agent Mode files.
+- [x] Index Agent Mode files.
   - `AGENT.md`, `SOUL.md`, `MEMORY.md`, `TODO.md`, and files under `memory/`.
-- [ ] Index skills, commands, and sub-agents.
+- [x] Index skills, commands, and sub-agents.
   - Search name, description, frontmatter, file path, and scope.
-- [ ] Index Home Plugin and task records.
+- [x] Index Home Plugin and task records.
   - Search card title, task title, status, latest output summary, and related thread.
-- [ ] Add contextual actions.
+- [x] Add contextual actions.
   - "Add to composer context."
   - "Ask Agent about this."
   - "Open memory file."
   - "Run this skill."
   - "Continue from this thread."
-- [ ] Add filters.
+- [x] Add filters.
   - Current project / all projects.
   - Files / chats / messages / memory / skills / tasks.
   - Active / archived.
@@ -94,10 +94,9 @@ Build AgentOS search as a project context entry point, not only a chat title fin
 
 ## Acceptance Criteria
 
-- [ ] Users can find a file in the current project by partial name or path.
-- [ ] Users can find a chat by title, first prompt, or project path.
-- [ ] Search results are grouped, keyboard navigable, and actionable.
-- [ ] Full-text history search can find a phrase from a previous user/assistant message.
-- [ ] Search stays responsive on large projects.
-- [ ] Local search data can be rebuilt and cleared without deleting user project files.
-
+- [x] Users can find a file in the current project by partial name or path.
+- [x] Users can find a chat by title, first prompt, or project path.
+- [x] Search results are grouped, keyboard navigable, and actionable.
+- [x] Full-text history search can find a phrase from a previous user/assistant message.
+- [x] Search stays responsive on large projects.
+- [x] Local search data can be rebuilt and cleared without deleting user project files.

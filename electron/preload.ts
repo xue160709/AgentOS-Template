@@ -26,6 +26,11 @@ import type {
   ClaudeFileRewindPayload,
   ClaudePermissionResponsePayload,
   ClaudeChatSubmitPayload,
+  ChatHistorySearchOptions,
+  ChatHistorySearchResult,
+  AgentKnowledgeSearchOptions,
+  AgentKnowledgeSearchProject,
+  AgentKnowledgeSearchResult,
 } from '../src/claude-chat-types'
 
 const CLAUDE_CHAT_EVENT_CHANNEL = 'claude-chat:event'
@@ -57,6 +62,12 @@ contextBridge.exposeInMainWorld('desktop', {
   },
   searchProjectFiles(rootPath: string, query: string) {
     return ipcRenderer.invoke('desktop:search-project-files', rootPath, query)
+  },
+  searchChatHistory(projectId: string, query: string, options?: ChatHistorySearchOptions) {
+    return ipcRenderer.invoke('desktop:search-chat-history', projectId, query, options) as Promise<ChatHistorySearchResult>
+  },
+  searchAgentKnowledge(projects: AgentKnowledgeSearchProject[], query: string, options?: AgentKnowledgeSearchOptions) {
+    return ipcRenderer.invoke('desktop:search-agent-knowledge', projects, query, options) as Promise<AgentKnowledgeSearchResult>
   },
   listAgentContext(rootPath: string) {
     return ipcRenderer.invoke('desktop:list-agent-context', rootPath)

@@ -374,7 +374,7 @@ const ChatMessage = memo(function ChatMessage({
   )
 
   return (
-    <article className={`chat-message chat-message--${item.role} chat-message--${item.status}`}>
+    <article className={`chat-message chat-message--${item.role} chat-message--${item.status}`} data-transcript-item-id={item.id}>
       <div className="chat-message__stack">
         {durationLabel ? (
           <span className="chat-message__duration" title={t('chat.responseDurationTitle')} aria-label={t('chat.responseDurationTitle')}>
@@ -520,7 +520,7 @@ const ToolRow = memo(function ToolRow({ item }: { item: ChatToolItem }) {
 
   if (!hasDetails) {
     return (
-      <div className={`tool-row tool-row--${item.status} tool-row--static`}>
+      <div className={`tool-row tool-row--${item.status} tool-row--static`} data-transcript-item-id={item.id}>
         <div className="status-row__summary status-row__summary--static">{summary}</div>
       </div>
     )
@@ -529,6 +529,7 @@ const ToolRow = memo(function ToolRow({ item }: { item: ChatToolItem }) {
   return (
     <details
       className={`tool-row tool-row--${item.status}`}
+      data-transcript-item-id={item.id}
       open={isOpen}
       onToggle={(event) => handleTranscriptLayoutToggle(event, () => setIsOpen(event.currentTarget.open))}
     >
@@ -558,7 +559,7 @@ const ThinkingRow = memo(function ThinkingRow({ item }: { item: ChatThinkingItem
 
   if (!hasDetails) {
     return (
-      <div className={`thinking-row thinking-row--${item.status} thinking-row--static`}>
+      <div className={`thinking-row thinking-row--${item.status} thinking-row--static`} data-transcript-item-id={item.id}>
         <div className="thinking-row__header thinking-row__header--static">{summary}</div>
       </div>
     )
@@ -567,6 +568,7 @@ const ThinkingRow = memo(function ThinkingRow({ item }: { item: ChatThinkingItem
   return (
     <details
       className={`thinking-row thinking-row--${item.status}`}
+      data-transcript-item-id={item.id}
       open={isOpen}
       onToggle={(event) => handleTranscriptLayoutToggle(event, () => setIsOpen(event.currentTarget.open))}
     >
@@ -603,7 +605,7 @@ const ActivityRow = memo(function ActivityRow({ item }: { item: ChatActivityItem
 
   if (!hasDetails) {
     return (
-      <div className={`activity-row activity-row--${item.status} activity-row--static`}>
+      <div className={`activity-row activity-row--${item.status} activity-row--static`} data-transcript-item-id={item.id}>
         <div className="activity-row__main activity-row__main--static">{summary}</div>
       </div>
     )
@@ -612,6 +614,7 @@ const ActivityRow = memo(function ActivityRow({ item }: { item: ChatActivityItem
   return (
     <details
       className={`activity-row activity-row--${item.status}`}
+      data-transcript-item-id={item.id}
       open={isOpen}
       onToggle={(event) => handleTranscriptLayoutToggle(event, () => setIsOpen(event.currentTarget.open))}
     >
@@ -642,7 +645,7 @@ const FileDiffRow = memo(function FileDiffRow({
   }, [item.status])
 
   return (
-    <section className={`file-diff-row file-diff-row--${item.status}`} aria-label={t('chat.fileDiffAria')}>
+    <section className={`file-diff-row file-diff-row--${item.status}`} data-transcript-item-id={item.id} aria-label={t('chat.fileDiffAria')}>
       <div className="file-diff-row__header">
         <span className="file-diff-row__icon" aria-hidden="true">
           <IconInline name="files" />
