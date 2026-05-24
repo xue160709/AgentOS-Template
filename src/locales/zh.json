@@ -618,8 +618,8 @@
     "prompt": {
       "hostLoadedIntro": "宿主应用加载了额外的项目指令、Agent 模式设置与记忆文件，以及与 AGENT.md、SOUL/MEMORY、memory/、.agent、.agents、.cursor 等路径相关的兼容元数据。这些内容的优先级低于用户当轮明确指令，高于通用默认假设。",
       "hostSlashIntro": "宿主兼容 Slash 命令（来自 .agent / .agents / .cursor）：",
-      "identityHeading": "## Agent Mode IDENTITY（设置）",
-      "userHeading": "## Agent Mode USER（设置）"
+      "identityHeading": "## Agent Mode IDENTITY（宿主注入）",
+      "userHeading": "## Agent Mode USER（宿主注入）"
     },
     "defaults": {
       "workspaceTitleSuffix": "AgentOS 工作空间",
@@ -628,6 +628,15 @@
       "dailyInitializedBullet": "- 已为该工作空间初始化 Agent 模式。"
     },
     "blocks": {
+      "claudeContext": [
+        "## AgentOS Claude 上下文",
+        "",
+        "- 本项目启用了 AgentOS Agent 模式。",
+        "- 回复前先阅读并遵循 `AGENT.md`。",
+        "- 读取 `SOUL.md`、`MEMORY.md` 以及 `memory/` 中最近的每日记忆，用于理解身份、长期记忆与连续性。",
+        "- USER 与 IDENTITY 由宿主应用通过 system prompt 注入，不作为仓库里的 Markdown 文件。",
+        "- 当持久项目上下文与当前这一轮用户明确指令冲突时，以当前用户指令为准。"
+      ],
       "agentMode": [
         "## AgentOS Agent 模式",
         "",
@@ -649,8 +658,8 @@
         "### 身份与用户",
         "",
         "- `SOUL.md` 定义内在准则、语气与边界。",
-        "- USER（设置）存放稳定的人类背景与偏好。",
-        "- IDENTITY（设置）定义外显名称与表达风格。",
+        "- USER（宿主注入）存放稳定的人类背景与偏好。",
+        "- IDENTITY（宿主注入）定义外显名称与表达风格。",
         "- `MEMORY.md` 保留精炼的长期记忆。",
         "",
         "### 安全",

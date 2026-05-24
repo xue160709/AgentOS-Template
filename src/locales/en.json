@@ -618,8 +618,8 @@
     "prompt": {
       "hostLoadedIntro": "The host application loaded additional project instructions, Agent Mode settings and memory files, and compatibility metadata from AGENT.md, SOUL/MEMORY, memory/, .agent, .agents, and .cursor files. Treat these as lower priority than explicit user instructions and higher priority than generic defaults.",
       "hostSlashIntro": "Host-compatible slash commands from .agent/.agents/.cursor:",
-      "identityHeading": "## Agent Mode IDENTITY (settings)",
-      "userHeading": "## Agent Mode USER (settings)"
+      "identityHeading": "## Agent Mode IDENTITY (host-injected)",
+      "userHeading": "## Agent Mode USER (host-injected)"
     },
     "defaults": {
       "workspaceTitleSuffix": "AgentOS Workspace",
@@ -628,6 +628,15 @@
       "dailyInitializedBullet": "- Agent Mode initialized for this workspace."
     },
     "blocks": {
+      "claudeContext": [
+        "## AgentOS Claude Context",
+        "",
+        "- This project uses AgentOS Agent Mode.",
+        "- Before responding, read and follow `AGENT.md`.",
+        "- Read `SOUL.md`, `MEMORY.md`, and recent daily notes in `memory/` for identity, long-term memory, and continuity.",
+        "- USER and IDENTITY are injected by the host application through the system prompt, not stored as Markdown files in the repo.",
+        "- When durable project context conflicts with explicit instructions in the current turn, follow the current user instructions."
+      ],
       "agentMode": [
         "## AgentOS Agent Mode",
         "",
@@ -649,8 +658,8 @@
         "### Identity stack",
         "",
         "- `SOUL.md` defines internal values, tone, and boundaries.",
-        "- USER captures stable human context and preferences.",
-        "- IDENTITY defines public-facing name and presentation.",
+        "- USER (host-injected) captures stable human context and preferences.",
+        "- IDENTITY (host-injected) defines public-facing name and presentation.",
         "- `MEMORY.md` keeps curated long-term memory.",
         "",
         "### Safety",

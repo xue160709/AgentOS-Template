@@ -2,14 +2,14 @@
 
 ## 功能概述
 
-Agent Mode 为每个项目提供可长期沉淀的 Agent 身份、用户信息、项目灵魂、记忆和 TODO 协作协议。启用后，AgentOS 会在项目内维护 `AGENT.md`、`SOUL.md`、`MEMORY.md`、`memory/` 和可选 `TODO.md`，并在 Agent 运行时注入这些上下文。
+Agent Mode 为每个项目提供可长期沉淀的 Agent 身份、用户信息、项目灵魂、记忆和 TODO 协作协议。启用后，AgentOS 会在项目内维护 `CLAUDE.md`、`AGENT.md`、`SOUL.md`、`MEMORY.md`、`memory/` 和可选 `TODO.md`，并在 Agent 运行时注入这些上下文。
 
 ## 核心功能列表
 
 | 优先级 | 功能 | 说明 |
 | --- | --- | --- |
 | P0 | 启用/停用 Agent Mode | 以项目路径为键保存状态 |
-| P0 | 文件初始化 | 创建或更新 Agent Mode 所需文件 |
+| P0 | 文件初始化 | 创建或更新 Agent Mode 所需文件，并生成 Claude 原生桥接指令 |
 | P0 | 运行时注入 | 将用户身份、Agent 身份和记忆文件注入系统提示词 |
 | P1 | TODO 模式 | 开启后维护 `TODO.md` 和 `AGENT.md` 内 TODO 指令块 |
 | P1 | 近期记忆加载 | 自动确保今日记忆文件存在，运行时加载今天和昨天的每日记忆 |
@@ -27,6 +27,7 @@ interface AgentModeProjectSettings {
 }
 
 type AgentModeRequiredFile =
+  | 'CLAUDE.md'
   | 'AGENT.md'
   | 'SOUL.md'
   | 'MEMORY.md'
@@ -63,24 +64,27 @@ interface AgentModeFilesResult {
 ```mermaid
 flowchart TD
   A[用户启用 Agent Mode] --> B[保存项目设置]
-  B --> C[确保 AGENT.md 标记块]
-  C --> D[确保 SOUL.md]
-  D --> E[确保 MEMORY.md]
-  E --> F[确保 memory/ 和今日记忆]
-  F --> G{todoEnabled}
-  G -- 是 --> H[确保 TODO.md 和 TODO 指令块]
-  G -- 否 --> I[移除 TODO 托管内容]
-  H --> J[聊天运行时读取并注入上下文]
-  I --> J
+  B --> C[确保 CLAUDE.md 桥接指令]
+  C --> D[确保 AGENT.md 标记块]
+  D --> E[确保 SOUL.md]
+  E --> F[确保 MEMORY.md]
+  F --> G[确保 memory/ 和今日记忆]
+  G --> H{todoEnabled}
+  H -- 是 --> I[确保 TODO.md 和 TODO 指令块]
+  H -- 否 --> J[移除 TODO 托管内容]
+  I --> K[聊天运行时读取并注入上下文]
+  J --> K
 ```
 
 业务规则：
 
 - 文件维护必须幂等，不能覆盖用户在标记块外的内容。
+- `CLAUDE.md` 必须随 Agent Mode 自动创建；中文环境生成中文桥接指令，英文环境生成英文桥接指令。
+- `CLAUDE.md` 内应明确要求 Claude 读取 `AGENT.md`、`SOUL.md`、`MEMORY.md` 和 `memory/`。
 - TODO 模式关闭时，只移除 AgentOS 管理的 TODO 标记块和 `TODO.md`。
 - Agent Mode 设置优先读取 userData 中按项目路径保存的配置，缺省时可从项目 `USER.md` 和 `IDENTITY.md` 回退。
 - 聊天运行时在 Agent Mode 未显式关闭时加载相关 instruction files。
-- `USER` 与 `IDENTITY` 由设置注入 system prompt，不作为 AgentOS 必须维护的项目 Markdown 文件。
+- `USER` 与 `IDENTITY` 由宿主应用通过 system prompt 注入，不作为 AgentOS 必须维护的项目 Markdown 文件。
 - `AGENT.md` 使用 `<!-- AgentOS Agent Mode: start/end -->` 标记块，TODO 使用 `<!-- AgentOS TODO Mode: start/end -->` 标记块。
 - 当 Agent Mode 被显式关闭时，运行时会从 `AGENT.md`/`AGENTS.md` 中剥离 Agent Mode 和 TODO 标记块再注入；当仅关闭 TODO 时只剥离 TODO 标记块。
 - Agent Mode 模板文案只支持当前主进程规范化语言 `zh`/`en`。

@@ -1,6 +1,6 @@
 /**
- * Agent Mode 脚手架：检测缺失文件、生成 AGENT.md 与上下文模板。
- * Agent Mode scaffolding: detect gaps, generate AGENT.md and supporting templates.
+ * Agent Mode 脚手架：检测缺失文件、生成 CLAUDE/AGENT 与上下文模板。
+ * Agent Mode scaffolding: detect gaps, generate CLAUDE/AGENT and supporting templates.
  */
 
 import fs from 'node:fs/promises'
@@ -18,7 +18,10 @@ import type { AgentModeSettingsStore } from './agent-mode-settings-store'
 import { electronAgentCatalog } from './ui-locale'
 
 const REQUIRED_CONTEXT_FILES = ['SOUL.md', 'MEMORY.md'] as const
+const CLAUDE_INSTRUCTION_FILE = 'CLAUDE.md'
 const INSTRUCTION_FILE = 'AGENT.md'
+const CLAUDE_CONTEXT_MARKER_START = '<!-- AgentOS Claude Context: start -->'
+const CLAUDE_CONTEXT_MARKER_END = '<!-- AgentOS Claude Context: end -->'
 const AGENT_MODE_MARKER_START = '<!-- AgentOS Agent Mode: start -->'
 const AGENT_MODE_MARKER_END = '<!-- AgentOS Agent Mode: end -->'
 const TODO_MODE_MARKER_START = '<!-- AgentOS TODO Mode: start -->'
@@ -41,6 +44,7 @@ export async function getAgentModeStatus(
     const settings = await settingsStore.resolve(root)
     const instructionFile = INSTRUCTION_FILE
     const missingFiles: string[] = []
+    if (!(await exists(path.join(root, CLAUDE_INSTRUCTION_FILE)))) missingFiles.push(CLAUDE_INSTRUCTION_FILE)
     if (!(await exists(path.join(root, instructionFile)))) missingFiles.push(instructionFile)
     for (const fileName of REQUIRED_CONTEXT_FILES) {
       if (!(await exists(path.join(root, fileName)))) missingFiles.push(fileName)
@@ -80,6 +84,10 @@ export async function ensureAgentModeFiles(
 
     const files: AgentModeFileChange[] = []
     const settings = await settingsStore.resolve(root)
+    const claudeInstructionPath = path.join(root, CLAUDE_INSTRUCTION_FILE)
+    const claudeInstructionStatus = await ensureClaudeInstructionFile(claudeInstructionPath, locale)
+    files.push(fileChange(root, claudeInstructionPath, claudeInstructionStatus))
+
     const instructionFile = INSTRUCTION_FILE
     const instructionPath = path.join(root, instructionFile)
     const instructionStatus = await ensureInstructionFile(instructionPath, instructionFile, locale)
@@ -143,9 +151,27 @@ function wrappedAgentModeBlock(locale: AppUiLocale): string {
   return `${AGENT_MODE_MARKER_START}\n${body}\n${AGENT_MODE_MARKER_END}`
 }
 
+function wrappedClaudeContextBlock(locale: AppUiLocale): string {
+  const body = electronAgentCatalog(locale).blocks.claudeContext.join('\n')
+  return `${CLAUDE_CONTEXT_MARKER_START}\n${body}\n${CLAUDE_CONTEXT_MARKER_END}`
+}
+
 function wrappedTodoModeBlock(locale: AppUiLocale): string {
   const body = electronAgentCatalog(locale).blocks.todoMode.join('\n')
   return `${TODO_MODE_MARKER_START}\n${body}\n${TODO_MODE_MARKER_END}`
+}
+
+async function ensureClaudeInstructionFile(filePath: string, locale: AppUiLocale): Promise<AgentModeFileStatus> {
+  if (!(await exists(filePath))) {
+    await fs.writeFile(filePath, defaultClaudeTemplate(locale), 'utf8')
+    return 'created'
+  }
+
+  const content = await fs.readFile(filePath, 'utf8')
+  if (content.includes(CLAUDE_CONTEXT_MARKER_START)) return 'exists'
+  const next = `${content.trimEnd()}\n\n${wrappedClaudeContextBlock(locale)}\n`
+  await fs.writeFile(filePath, next, 'utf8')
+  return 'updated'
 }
 
 async function ensureInstructionFile(
@@ -222,6 +248,11 @@ function stripMarkedSection(content: string, startMarker: string, endMarker: str
   const before = content.slice(0, start).trimEnd()
   const after = content.slice(afterEnd).replace(/^\s*\n/, '').trimStart()
   return [before, after].filter(Boolean).join('\n\n') + (before || after ? '\n' : '')
+}
+
+function defaultClaudeTemplate(locale: AppUiLocale): string {
+  const title = locale === 'en' ? '# CLAUDE.md - AgentOS Bridge' : '# CLAUDE.md - AgentOS 桥接指令'
+  return `${title}\n\n${wrappedClaudeContextBlock(locale)}\n`
 }
 
 function defaultAgentsTemplate(fileName: string, locale: AppUiLocale): string {
