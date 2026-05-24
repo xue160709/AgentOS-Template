@@ -16,6 +16,7 @@ import type {
   ClaudeChatAttachment,
   ClaudePermissionMode,
 } from '../../claude-chat-types'
+import type { SpeechRecognitionStatus } from '../../desktop-types'
 import { IconInline } from '../../icon-inline'
 import { useI18n } from '../../i18n/i18n'
 import { AttachmentThumb } from './AttachmentThumb'
@@ -49,6 +50,8 @@ type ComposerProps = {
   activeComposerTrigger: ComposerTrigger | null
   composerSuggestions: ComposerSuggestion[]
   composerSuggestionIndex: number
+  speechRecognitionSupported: boolean
+  speechRecognitionStatus: SpeechRecognitionStatus
   chatInputRef: RefObject<HTMLTextAreaElement | null>
   composerAutocompleteSurfaceRef: RefObject<HTMLDivElement | null>
   permissionModePickerRef: RefObject<HTMLDivElement | null>
@@ -68,6 +71,7 @@ type ComposerProps = {
   onSyncComposerSelection: () => void
   onFormSubmit: (event: FormEvent<HTMLFormElement>) => void
   onSendClick: (event: MouseEvent<HTMLButtonElement>) => void
+  onToggleSpeechRecognition: () => void
   onAddComposerAttachments: () => void
   onRemoveComposerAttachment: (attachmentId: string) => void
   onInsertComposerSuggestion: (suggestion: ComposerSuggestion) => void
@@ -95,6 +99,8 @@ export function Composer({
   activeComposerTrigger,
   composerSuggestions,
   composerSuggestionIndex,
+  speechRecognitionSupported,
+  speechRecognitionStatus,
   chatInputRef,
   composerAutocompleteSurfaceRef,
   permissionModePickerRef,
@@ -114,6 +120,7 @@ export function Composer({
   onSyncComposerSelection,
   onFormSubmit,
   onSendClick,
+  onToggleSpeechRecognition,
   onAddComposerAttachments,
   onRemoveComposerAttachment,
   onInsertComposerSuggestion,
@@ -124,6 +131,25 @@ export function Composer({
   const hasComposerAttachments = pendingAttachments.length > 0
   const hasUnsupportedImageAttachment =
     !activeModelSupportsImages && pendingAttachments.some((attachment) => attachment.kind === 'image')
+  const speechRecognitionActive =
+    speechRecognitionStatus === 'starting' ||
+    speechRecognitionStatus === 'requesting_permission' ||
+    speechRecognitionStatus === 'listening' ||
+    speechRecognitionStatus === 'transcribing'
+  const speechRecognitionButtonTitle =
+    speechRecognitionStatus === 'listening'
+      ? t('chat.voiceStopTitle')
+      : speechRecognitionActive
+        ? t('chat.voiceCancelTitle')
+        : t('chat.voiceStartTitle')
+  const speechRecognitionButtonClassName = [
+    'composer-icon-button',
+    'composer-voice-button',
+    speechRecognitionStatus === 'listening' ? 'composer-voice-button--listening' : '',
+    speechRecognitionActive ? 'is-active' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
 
   return (
     <div className="chat-composer-wrap no-drag">
@@ -342,6 +368,19 @@ export function Composer({
                   )
                 : null}
             </div>
+            {speechRecognitionSupported ? (
+              <button
+                type="button"
+                className={speechRecognitionButtonClassName}
+                title={speechRecognitionButtonTitle}
+                aria-label={speechRecognitionActive ? t('chat.voiceStopAria') : t('chat.voiceStartAria')}
+                aria-pressed={speechRecognitionActive}
+                disabled={isRunning}
+                onClick={onToggleSpeechRecognition}
+              >
+                <IconInline name="mic" />
+              </button>
+            ) : null}
             <button
               type="submit"
               className="composer-send-button"

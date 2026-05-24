@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>CFBundleIdentifier</key>
+    <string>com.agentos.desktop.speech-cli</string>
+    <key>CFBundleName</key>
+    <string>AgentOS Speech Helper</string>
+    <key>CFBundleDisplayName</key>
+    <string>AgentOS Speech Helper</string>
+    <key>CFBundleExecutable</key>
+    <string>speech_cli</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>AgentOS uses the microphone to turn your speech into composer text.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>AgentOS uses Apple Speech Recognition to transcribe your voice locally when supported.</string>
+  </dict>
+</plist>

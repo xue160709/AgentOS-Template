@@ -7,7 +7,7 @@ import type { ReactNode } from 'react'
 import { IconInline } from '../../icon-inline'
 import { useI18n } from '../../i18n/i18n'
 import type { HomePluginRunItem } from '../../desktop-types'
-import type { WorkspaceProject } from '../types'
+import type { ProjectSkillRunRequest, ThreadRunState, WorkspaceProject, WorkspaceThread } from '../types'
 import { ProjectHomeSurface } from './ProjectHomeSurface'
 
 type ChatStartViewProps = {
@@ -16,9 +16,14 @@ type ChatStartViewProps = {
   agentModeEnabled: boolean
   todoEnabled: boolean
   agentModeLoading: boolean
+  threads: WorkspaceThread[]
+  threadRunStates: Record<string, ThreadRunState>
+  hiddenSkillPaths: string[]
   heading?: string
   onStartDataCardDraft: () => void
   onEditHomePluginCard: (item: HomePluginRunItem) => void
+  onRunProjectSkill: (projectId: string, skill: ProjectSkillRunRequest) => void
+  onStopProjectSkillRun: (projectId: string, skillPath: string) => void
 }
 
 /** 项目主页空状态 / Project home empty rail */
@@ -28,9 +33,14 @@ export function ChatStartView({
   agentModeEnabled,
   todoEnabled,
   agentModeLoading,
+  threads,
+  threadRunStates,
+  hiddenSkillPaths,
   heading,
   onStartDataCardDraft,
   onEditHomePluginCard,
+  onRunProjectSkill,
+  onStopProjectSkillRun,
 }: ChatStartViewProps) {
   const { t } = useI18n()
 
@@ -52,8 +62,13 @@ export function ChatStartView({
             project={project}
             todoEnabled={todoEnabled}
             loading={agentModeLoading}
+            threads={threads}
+            threadRunStates={threadRunStates}
+            hiddenSkillPaths={hiddenSkillPaths}
             onStartDataCardDraft={onStartDataCardDraft}
             onEditHomePluginCard={onEditHomePluginCard}
+            onRunProjectSkill={onRunProjectSkill}
+            onStopProjectSkillRun={onStopProjectSkillRun}
           />
         ) : (
           <div className="chat-start-view__project" title={project.path}>

@@ -14,6 +14,17 @@ function loadJson5(filePath) {
 
 const base = loadJson5(path.join(__dirname, 'electron-builder.json5'));
 const teamId = process.env.APPLE_TEAM_ID?.trim();
+const speechCliPath = path.join(__dirname, 'native', 'speech-cli', 'build', 'AgentOS Speech Helper.app');
+
+if (fs.existsSync(speechCliPath)) {
+  base.extraResources = [
+    ...(Array.isArray(base.extraResources) ? base.extraResources : []),
+    {
+      from: speechCliPath,
+      to: path.join('speech', 'AgentOS Speech Helper.app'),
+    },
+  ];
+}
 
 const hasAppleNotarizeCreds =
   Boolean(process.env.APPLE_ID && process.env.APPLE_APP_SPECIFIC_PASSWORD) ||

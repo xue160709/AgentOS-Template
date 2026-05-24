@@ -31,6 +31,9 @@ type ThreadRow = {
   title: string
   purpose: string | null
   homePluginSlug: string | null
+  skillPath: string | null
+  skillCommand: string | null
+  skillTitle: string | null
   createdAt: number
   updatedAt: number
   pinnedAt: number | null
@@ -108,6 +111,7 @@ export class ChatWorkspaceStore {
         [
           'SELECT',
           'id, project_id AS projectId, rollout_path AS rolloutPath, title, purpose, home_plugin_slug AS homePluginSlug,',
+          'skill_path AS skillPath, skill_command AS skillCommand, skill_title AS skillTitle,',
           'created_at AS createdAt, updated_at AS updatedAt,',
           'pinned_at AS pinnedAt, archived_at AS archivedAt,',
           'session_id AS sessionId, model, cwd',
@@ -142,6 +146,9 @@ export class ChatWorkspaceStore {
           title: thread.title,
           purpose: normalizeThreadPurpose(thread.purpose),
           homePluginSlug: thread.homePluginSlug?.trim() || undefined,
+          skillPath: thread.skillPath?.trim() || undefined,
+          skillCommand: thread.skillCommand?.trim() || undefined,
+          skillTitle: thread.skillTitle?.trim() || undefined,
           createdAt: thread.createdAt,
           updatedAt: thread.updatedAt,
           pinnedAt: thread.pinnedAt ?? undefined,
@@ -187,6 +194,9 @@ export class ChatWorkspaceStore {
           title TEXT NOT NULL,
           purpose TEXT,
           home_plugin_slug TEXT,
+          skill_path TEXT,
+          skill_command TEXT,
+          skill_title TEXT,
           pinned_at INTEGER,
           archived_at INTEGER,
           session_id TEXT,
@@ -246,12 +256,13 @@ export class ChatWorkspaceStore {
         statements.push(
           `INSERT INTO threads (
              id, project_id, rollout_path, created_at, updated_at, title, pinned_at, archived_at,
-             purpose, home_plugin_slug, session_id, model, cwd, message_count, first_user_message, preview, response_duration_ms
+             purpose, home_plugin_slug, skill_path, skill_command, skill_title, session_id, model, cwd, message_count, first_user_message, preview, response_duration_ms
            )
            VALUES (
              ${sqlValue(thread.id)}, ${sqlValue(thread.projectId)}, ${sqlValue(rolloutPath)}, ${sqlValue(thread.createdAt)},
              ${sqlValue(thread.updatedAt)}, ${sqlValue(thread.title)}, ${sqlValue(thread.pinnedAt)}, ${sqlValue(thread.archivedAt)},
-             ${sqlValue(thread.purpose)}, ${sqlValue(thread.homePluginSlug)}, ${sqlValue(thread.chatState.sessionId)}, ${sqlValue(thread.chatState.model)}, ${sqlValue(thread.chatState.cwd)},
+             ${sqlValue(thread.purpose)}, ${sqlValue(thread.homePluginSlug)}, ${sqlValue(thread.skillPath)}, ${sqlValue(thread.skillCommand)}, ${sqlValue(thread.skillTitle)},
+             ${sqlValue(thread.chatState.sessionId)}, ${sqlValue(thread.chatState.model)}, ${sqlValue(thread.chatState.cwd)},
              ${sqlValue(messageCount(thread.chatState.items))}, ${sqlValue(firstUser)}, ${sqlValue(preview)},
              ${sqlValue(responseDurationMs)}
            )
@@ -263,6 +274,9 @@ export class ChatWorkspaceStore {
              title = excluded.title,
              purpose = excluded.purpose,
              home_plugin_slug = excluded.home_plugin_slug,
+             skill_path = excluded.skill_path,
+             skill_command = excluded.skill_command,
+             skill_title = excluded.skill_title,
              pinned_at = excluded.pinned_at,
              archived_at = excluded.archived_at,
              session_id = excluded.session_id,
@@ -358,6 +372,15 @@ export class ChatWorkspaceStore {
       if (columns.length > 0 && !columns.some((column) => column.name === 'home_plugin_slug')) {
         this.runSql('ALTER TABLE threads ADD COLUMN home_plugin_slug TEXT;')
       }
+      if (columns.length > 0 && !columns.some((column) => column.name === 'skill_path')) {
+        this.runSql('ALTER TABLE threads ADD COLUMN skill_path TEXT;')
+      }
+      if (columns.length > 0 && !columns.some((column) => column.name === 'skill_command')) {
+        this.runSql('ALTER TABLE threads ADD COLUMN skill_command TEXT;')
+      }
+      if (columns.length > 0 && !columns.some((column) => column.name === 'skill_title')) {
+        this.runSql('ALTER TABLE threads ADD COLUMN skill_title TEXT;')
+      }
     } catch {
       /* Fresh databases create the column through CREATE TABLE. */
     }
@@ -400,6 +423,9 @@ function serializeRollout(thread: WorkspaceThread): string {
         title: thread.title,
         purpose: thread.purpose,
         homePluginSlug: thread.homePluginSlug,
+        skillPath: thread.skillPath,
+        skillCommand: thread.skillCommand,
+        skillTitle: thread.skillTitle,
         createdAt: thread.createdAt,
         updatedAt: thread.updatedAt,
         archivedAt: thread.archivedAt,
@@ -470,7 +496,10 @@ function lastAssistantDuration(items: TranscriptItem[]): number | undefined {
 }
 
 function normalizeThreadPurpose(value: string | null): WorkspaceThread['purpose'] {
-  return value === 'home-plugin-customization' || value === 'home-plugin-card-customization' || value === 'task-run'
+  return value === 'home-plugin-customization' ||
+    value === 'home-plugin-card-customization' ||
+    value === 'task-run' ||
+    value === 'skill-run'
     ? value
     : undefined
 }

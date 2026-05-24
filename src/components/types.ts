@@ -143,9 +143,13 @@ export type WorkspaceThread = {
   projectId: string
   title: string
   /** 特殊线程用途，例如项目首页插件定制 / Special thread purpose, such as project home customization */
-  purpose?: 'home-plugin-customization' | 'home-plugin-card-customization' | 'task-run'
+  purpose?: 'home-plugin-customization' | 'home-plugin-card-customization' | 'task-run' | 'skill-run'
   /** 关联的 Home Plugin 目录名；用于单卡片修改线程 / Bound Home Plugin slug for card customization threads */
   homePluginSlug?: string
+  /** Skill 运行线程的来源元数据 / Source metadata for Skill-run threads */
+  skillPath?: string
+  skillCommand?: string
+  skillTitle?: string
   createdAt: number
   updatedAt: number
   /** 置顶权重：越大越靠前（持久化）/ Pin rank: larger sorts higher (persisted) */
@@ -236,3 +240,9 @@ export type SelectedProjectSkill = Pick<
 > & {
   projectId: string
 }
+
+/** 可执行的项目 Skill 快照 / Executable project Skill snapshot */
+export type ProjectSkillRunRequest = Pick<
+  AgentContextSlashItem,
+  'title' | 'command' | 'description' | 'path' | 'relativePath'
+>

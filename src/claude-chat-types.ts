@@ -199,10 +199,16 @@ export type ProjectFileSearchResult =
 /** 配置来源：应用设置或环境变量 / Config origin: persisted settings or environment */
 export type ClaudeAgentConfigSource = 'settings' | 'env'
 
+/** 模型厂商鉴权写入方式 / How a provider credential is exposed to Claude-compatible runtimes */
+export type ClaudeAgentProviderAuthMode = 'apiKey' | 'authToken'
+
 /** 单个模型提供商的配置块 / Per-provider Claude/agent configuration block */
 export type ClaudeAgentModelProvider = {
   id: string
+  presetId: string
   name: string
+  apiKeyUrl: string
+  authMode: ClaudeAgentProviderAuthMode
   apiKey: string
   authToken: string
   baseUrl: string
@@ -261,6 +267,13 @@ export type ClaudeAgentResolvedConfig = {
   defaultHaikuModel: string
   defaultOpusModel: string
   defaultSonnetModel: string
+}
+
+/** 设置页测试单个模型厂商连接的结果 / Connection test result for a single provider row */
+export type ClaudeAgentProviderTestResult = {
+  ok: boolean
+  message: string
+  status?: number
 }
 
 /** 提交对话后主进程返回的请求 ID / Request id returned after submitting a chat turn */
@@ -469,6 +482,7 @@ export type ClaudeChatAPI = {
   rewindFiles(payload: ClaudeFileRewindPayload): Promise<ClaudeFileRewindResult>
   getSettings(): Promise<ClaudeAgentSettingsSnapshot>
   saveSettings(settings: ClaudeAgentSettings): Promise<ClaudeAgentSettingsSnapshot>
+  testProvider(provider: ClaudeAgentModelProvider): Promise<ClaudeAgentProviderTestResult>
   setActiveChatPick(payload: ActiveChatPickPayload): Promise<ClaudeAgentSettingsSnapshot>
   onEvent(handler: ClaudeChatEventHandler): () => void
 }

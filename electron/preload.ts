@@ -13,6 +13,9 @@ import type {
   HomePluginTaskRunResult,
   HomePluginTaskSaveResult,
   HomePluginTaskStopResult,
+  SpeechRecognitionCommandResult,
+  SpeechRecognitionEvent,
+  SpeechRecognitionSnapshot,
   TrayMenuAction,
 } from '../src/desktop-types'
 import type {
@@ -29,11 +32,13 @@ const CLAUDE_CHAT_EVENT_CHANNEL = 'claude-chat:event'
 const TRAY_MENU_ACTION_CHANNEL = 'desktop:tray-action'
 const TASK_HOME_PLUGIN_EVENT_CHANNEL = 'desktop:task-home-plugin-event'
 const APP_UPDATER_EVENT_CHANNEL = 'app-updater:event'
+const SPEECH_RECOGNITION_EVENT_CHANNEL = 'desktop:speech-recognition-event'
 
 // --- Desktop bridge / 桌面通用 API ---
 
 contextBridge.exposeInMainWorld('desktop', {
   platform: process.platform,
+  isDevRuntime: process.env.AGENTOS_DEV_RUNTIME === '1' || Boolean(process.env.VITE_DEV_SERVER_URL),
   windowEffects: {
     macVibrancy: process.platform === 'darwin',
     windowsTitlebarOverlay: process.platform === 'win32',
@@ -140,6 +145,23 @@ contextBridge.exposeInMainWorld('desktop', {
   copySvgToClipboard(svg: string) {
     return ipcRenderer.invoke('desktop:copy-svg-to-clipboard', svg) as Promise<boolean>
   },
+  getSpeechRecognitionStatus() {
+    return ipcRenderer.invoke('desktop:speech-recognition:get-status') as Promise<SpeechRecognitionSnapshot>
+  },
+  startSpeechRecognition(options?: { locale?: string; requiresOnDevice?: boolean }) {
+    return ipcRenderer.invoke('desktop:speech-recognition:start', options) as Promise<SpeechRecognitionCommandResult>
+  },
+  stopSpeechRecognition() {
+    return ipcRenderer.invoke('desktop:speech-recognition:stop') as Promise<SpeechRecognitionCommandResult>
+  },
+  cancelSpeechRecognition() {
+    return ipcRenderer.invoke('desktop:speech-recognition:cancel') as Promise<SpeechRecognitionCommandResult>
+  },
+  onSpeechRecognitionEvent(handler: (event: SpeechRecognitionEvent) => void) {
+    const listener = (_event: IpcRendererEvent, event: SpeechRecognitionEvent) => handler(event)
+    ipcRenderer.on(SPEECH_RECOGNITION_EVENT_CHANNEL, listener)
+    return () => ipcRenderer.off(SPEECH_RECOGNITION_EVENT_CHANNEL, listener)
+  },
   onTrayMenuAction(handler: (action: TrayMenuAction) => void) {
     const listener = (_event: IpcRendererEvent, raw: unknown) => {
       if (raw === 'new-thread') handler('new-thread')
@@ -222,6 +244,9 @@ contextBridge.exposeInMainWorld('claudeChat', {
   },
   saveSettings(settings: ClaudeAgentSettings) {
     return ipcRenderer.invoke('claude-agent-settings:save', settings)
+  },
+  testProvider(provider: ClaudeAgentSettings['providers'][number]) {
+    return ipcRenderer.invoke('claude-agent-settings:test-provider', provider)
   },
   setActiveChatPick(payload: ActiveChatPickPayload) {
     return ipcRenderer.invoke('claude-agent-settings:set-active-chat-pick', payload)

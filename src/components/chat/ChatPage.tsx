@@ -29,7 +29,7 @@ import type {
   ProjectFileSearchItem,
 } from '../../claude-chat-types'
 import { CLAUDE_AGENT_SETTINGS_CHANGED_EVENT } from '../../app-events'
-import type { HomePluginRunItem } from '../../desktop-types'
+import type { HomePluginRunItem, SpeechRecognitionStatus } from '../../desktop-types'
 import { useI18n } from '../../i18n/i18n'
 import type {
   ChatActivityItem,
@@ -39,6 +39,7 @@ import type {
   ChatState,
   ChatThinkingItem,
   ChatToolItem,
+  ProjectSkillRunRequest,
   ThreadRunState,
   TranscriptItem,
   WorkspaceProject,
@@ -54,6 +55,59 @@ import type { BuiltInSlashCommand, ChatModelMenuRow, ComposerSuggestion, Compose
 const PROCESS_TRACE_TOGGLE_EVENT = 'chat-process-trace:toggle'
 const MAX_COMPOSER_SUGGESTIONS = 64
 const MAX_COMPOSER_ATTACHMENTS = 8
+const ACTIVE_SPEECH_RECOGNITION_STATUSES = new Set<SpeechRecognitionStatus>([
+  'starting',
+  'requesting_permission',
+  'listening',
+  'transcribing',
+])
+
+type SpeechDraftRange = {
+  start: number
+  end: number
+  committedText: string
+  liveText: string
+}
+
+function isCjkCharacter(value: string) {
+  return /[\u3400-\u9fff\uf900-\ufaff]/u.test(value)
+}
+
+function needsSpeechSeparator(left: string, right: string) {
+  if (!left || !right) return false
+  const last = left.trimEnd().at(-1)
+  const first = right.trimStart().at(0)
+  if (!last || !first) return false
+  if (/^[,.;:!?，。！？；：、）)\]}]/u.test(first)) return false
+  if (isCjkCharacter(last) || isCjkCharacter(first)) return false
+  return true
+}
+
+function joinSpeechSegments(left: string, right: string) {
+  const cleanLeft = left.trim()
+  const cleanRight = right.trim()
+  if (!cleanLeft) return cleanRight
+  if (!cleanRight) return cleanLeft
+  return `${cleanLeft}${needsSpeechSeparator(cleanLeft, cleanRight) ? ' ' : ''}${cleanRight}`
+}
+
+function commonPrefixLength(a: string, b: string) {
+  const maxLength = Math.min(a.length, b.length)
+  let length = 0
+  while (length < maxLength && a[length] === b[length]) {
+    length += 1
+  }
+  return length
+}
+
+function shouldStartNewSpeechSegment(previous: string, next: string) {
+  if (!previous || !next || previous === next) return false
+  if (next.startsWith(previous) || previous.startsWith(next)) return false
+  const sharedPrefixLength = commonPrefixLength(previous, next)
+  const shorterLength = Math.min(previous.length, next.length)
+  if (shorterLength > 0 && sharedPrefixLength / shorterLength >= 0.6) return false
+  return next.length + 1 < previous.length || sharedPrefixLength < Math.min(2, shorterLength)
+}
 
 // --- Imperative handle / 命令式句柄 ---
 
@@ -86,8 +140,11 @@ type ChatPageProps = {
   todoEnabled: boolean
   agentModeLoading: boolean
   homeModeResetKey: number
+  hiddenSkillPaths: string[]
   onCreateHomePluginCardThread: (projectId: string, initialPrompt: string) => string | void
   onEditHomePluginCard: (projectId: string, item: HomePluginRunItem) => void
+  onRunProjectSkill: (projectId: string, skill: ProjectSkillRunRequest) => void
+  onStopProjectSkillRun: (projectId: string, skillPath: string) => void
 }
 
 // --- Internal helpers / 模块内辅助 ---
@@ -166,8 +223,11 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     todoEnabled,
     agentModeLoading,
     homeModeResetKey,
+    hiddenSkillPaths,
     onCreateHomePluginCardThread,
     onEditHomePluginCard,
+    onRunProjectSkill,
+    onStopProjectSkillRun,
   },
   ref,
 ) {
@@ -196,6 +256,9 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   /** 与 Electron Claude 设置对齐；Composer 展示此标签 / Mirrors Electron agent settings label shown in composer */
   const [globalDisplayModel, setGlobalDisplayModel] = useState('Claude Agent')
   const [homeComposerMode, setHomeComposerMode] = useState<'normal' | 'data-card-draft'>('normal')
+  const [speechRecognitionStatus, setSpeechRecognitionStatus] = useState<SpeechRecognitionStatus>(
+    window.desktop?.platform === 'darwin' ? 'idle' : 'unsupported',
+  )
 
   const scrollRegionRef = useRef<HTMLDivElement>(null)
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
@@ -233,6 +296,12 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   const isFirstTranscriptLayoutRef = useRef(true)
   const isRunningRef = useRef(false)
   const globalDisplayModelRef = useRef(globalDisplayModel)
+  const inputValueRef = useRef(inputValue)
+  const composerSelectionRef = useRef(composerSelection)
+  const speechDraftRangeRef = useRef<SpeechDraftRange | null>(null)
+  const lastSpeechAppliedValueRef = useRef<string | null>(null)
+  const ignoreSpeechRecognitionTextRef = useRef(false)
+  const speechRestartAfterEditRef = useRef(false)
 
   const [composerAutocompleteBox, setComposerAutocompleteBox] = useState<{
     left: number
@@ -245,11 +314,98 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   const activeUserInputPrompt = pendingUserInputPrompts[0] ?? null
   const permissionModeRows = useMemo(() => getPermissionModeRows(t), [t])
   const permissionModeLabel = permissionModeRows.find((row) => row.mode === permissionMode)?.label ?? t('chat.permissionModeAuto')
+  const speechRecognitionSupported =
+    window.desktop?.platform === 'darwin' &&
+    Boolean(
+      window.desktop?.startSpeechRecognition &&
+        window.desktop?.stopSpeechRecognition &&
+        window.desktop?.cancelSpeechRecognition &&
+        window.desktop?.onSpeechRecognitionEvent,
+    )
   const setThreadChatState = useCallback(
     (threadId: string, update: ChatState | ((prev: ChatState) => ChatState)) => {
       onThreadChatStateChange(threadId, update)
     },
     [onThreadChatStateChange],
+  )
+  const beginSpeechDraft = useCallback(() => {
+    const currentInput = inputValueRef.current
+    const selection = composerSelectionRef.current
+    const selectionStart = Math.max(0, Math.min(selection.start, currentInput.length))
+    const selectionEnd = Math.max(selectionStart, Math.min(selection.end, currentInput.length))
+    lastSpeechAppliedValueRef.current = currentInput
+    speechDraftRangeRef.current = {
+      start: selectionStart,
+      end: selectionEnd,
+      committedText: '',
+      liveText: '',
+    }
+  }, [])
+  const clearSpeechDraft = useCallback(() => {
+    speechDraftRangeRef.current = null
+    lastSpeechAppliedValueRef.current = null
+  }, [])
+  const replaceSpeechDraftText = useCallback((text: string) => {
+    const cleanText = text.trim()
+    const currentInput = inputValueRef.current
+
+    if (!speechDraftRangeRef.current) {
+      beginSpeechDraft()
+    }
+
+    const draftRange = speechDraftRangeRef.current
+    if (!draftRange) return false
+
+    let committedText = draftRange.committedText
+    let liveText = draftRange.liveText
+    if (committedText && (cleanText.startsWith(committedText) || cleanText.includes(committedText))) {
+      committedText = ''
+      liveText = cleanText
+    } else if (shouldStartNewSpeechSegment(liveText, cleanText)) {
+      committedText = joinSpeechSegments(committedText, liveText)
+      liveText = cleanText
+    } else {
+      liveText = cleanText
+    }
+
+    const draftText = joinSpeechSegments(committedText, liveText)
+
+    const replacementStart = Math.max(0, Math.min(draftRange.start, currentInput.length))
+    const replacementEnd = Math.max(replacementStart, Math.min(draftRange.end, currentInput.length))
+    const before = currentInput.slice(0, replacementStart)
+    const after = currentInput.slice(replacementEnd)
+    const leadingSpace = needsSpeechSeparator(before, draftText) ? ' ' : ''
+    const trailingSpace = needsSpeechSeparator(draftText, after) ? ' ' : ''
+    const insertion = draftText ? `${leadingSpace}${draftText}${trailingSpace}` : ''
+    const nextValue = `${before}${insertion}${after}`
+    const nextCursor = before.length + insertion.length
+
+    speechDraftRangeRef.current = {
+      start: replacementStart,
+      end: nextCursor,
+      committedText,
+      liveText,
+    }
+    inputValueRef.current = nextValue
+    composerSelectionRef.current = { start: nextCursor, end: nextCursor }
+    lastSpeechAppliedValueRef.current = nextValue
+    setInputValue(nextValue)
+    setComposerSelection({ start: nextCursor, end: nextCursor })
+    requestAnimationFrame(() => {
+      chatInputRef.current?.focus()
+      chatInputRef.current?.setSelectionRange(nextCursor, nextCursor)
+    })
+    return draftText.length > 0
+  }, [beginSpeechDraft])
+  const speechRecognitionErrorMessage = useCallback(
+    (code: string, fallback: string) => {
+      if (code === 'speech_denied') return t('chat.voiceSpeechDenied')
+      if (code === 'microphone_denied') return t('chat.voiceMicrophoneDenied')
+      if (code === 'on_device_unavailable') return t('chat.voiceOnDeviceUnavailable')
+      if (code === 'helper_start_failed') return t('chat.voiceHelperStartFailed')
+      return fallback || t('chat.voiceError')
+    },
+    [t],
   )
 
   // --- Agent context catalog (skills/agents for slash & @) / Agent 上下文目录（斜杠与 @ 联想数据来源） ---
@@ -284,6 +440,14 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   }, [isRunning])
 
   useEffect(() => {
+    inputValueRef.current = inputValue
+  }, [inputValue])
+
+  useEffect(() => {
+    composerSelectionRef.current = composerSelection
+  }, [composerSelection])
+
+  useEffect(() => {
     window.localStorage.setItem(PERMISSION_MODE_STORAGE_KEY, permissionMode)
   }, [permissionMode])
 
@@ -295,6 +459,70 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     if (!activeRunState) return
     onStatusChange(activeRunState.status === 'waiting' ? t('chat.waitingForPermission') : t('chat.statusProcessing'))
   }, [activeRunState, onStatusChange, t])
+
+  useEffect(() => {
+    if (!speechRecognitionSupported) {
+      setSpeechRecognitionStatus('unsupported')
+      return
+    }
+
+    let disposed = false
+    window.desktop?.getSpeechRecognitionStatus?.()
+      .then((snapshot) => {
+        if (!disposed) setSpeechRecognitionStatus(snapshot.status)
+      })
+      .catch(() => {
+        if (!disposed) setSpeechRecognitionStatus('error')
+      })
+
+    const unsubscribe = window.desktop?.onSpeechRecognitionEvent?.((event) => {
+      if (event.type === 'status') {
+        setSpeechRecognitionStatus(event.status)
+        if (event.status === 'requesting_permission') {
+          onStatusChange(t('chat.voiceRequestingPermission'))
+        } else if (event.status === 'listening') {
+          ignoreSpeechRecognitionTextRef.current = false
+          onStatusChange(t('chat.voiceListening'))
+        } else if (event.status === 'transcribing') {
+          onStatusChange(t('chat.voiceTranscribing'))
+        }
+        return
+      }
+
+      if (event.type === 'partial') {
+        if (ignoreSpeechRecognitionTextRef.current) return
+        replaceSpeechDraftText(event.text)
+        return
+      }
+
+      if (event.type === 'final') {
+        if (ignoreSpeechRecognitionTextRef.current) return
+        if (event.text.trim()) {
+          replaceSpeechDraftText(event.text)
+          clearSpeechDraft()
+          onStatusChange(t('chat.voiceInserted'))
+        } else if (speechDraftRangeRef.current?.committedText || speechDraftRangeRef.current?.liveText) {
+          clearSpeechDraft()
+          onStatusChange(t('chat.voiceInserted'))
+        } else {
+          clearSpeechDraft()
+          onStatusChange(t('chat.voiceNoSpeech'))
+        }
+        return
+      }
+
+      const message = speechRecognitionErrorMessage(event.code, event.message)
+      ignoreSpeechRecognitionTextRef.current = false
+      clearSpeechDraft()
+      setSpeechRecognitionStatus('error')
+      onStatusChange(message)
+    })
+
+    return () => {
+      disposed = true
+      unsubscribe?.()
+    }
+  }, [clearSpeechDraft, onStatusChange, replaceSpeechDraftText, speechRecognitionErrorMessage, speechRecognitionSupported, t])
 
   const applyGlobalModelFromSettings = useCallback(
     (snapshot: ClaudeAgentSettingsSnapshot) => {
@@ -1574,6 +1802,51 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     void cancelActiveRequest()
   }
 
+  const restartSpeechRecognitionAfterManualEdit = useCallback(() => {
+    if (
+      !speechRecognitionSupported ||
+      speechRecognitionStatus !== 'listening' ||
+      speechRestartAfterEditRef.current
+    ) {
+      return
+    }
+
+    speechRestartAfterEditRef.current = true
+    ignoreSpeechRecognitionTextRef.current = true
+    setSpeechRecognitionStatus('starting')
+    onStatusChange(t('chat.voiceStarting'))
+
+    void (async () => {
+      try {
+        await window.desktop?.cancelSpeechRecognition?.()
+        clearSpeechDraft()
+        beginSpeechDraft()
+        const result = await window.desktop?.startSpeechRecognition?.({ requiresOnDevice: true })
+        if (result && !result.ok) {
+          ignoreSpeechRecognitionTextRef.current = false
+          clearSpeechDraft()
+          setSpeechRecognitionStatus(result.status)
+          onStatusChange(result.message)
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : t('chat.voiceError')
+        ignoreSpeechRecognitionTextRef.current = false
+        clearSpeechDraft()
+        setSpeechRecognitionStatus('error')
+        onStatusChange(message)
+      } finally {
+        speechRestartAfterEditRef.current = false
+      }
+    })()
+  }, [
+    beginSpeechDraft,
+    clearSpeechDraft,
+    onStatusChange,
+    speechRecognitionStatus,
+    speechRecognitionSupported,
+    t,
+  ])
+
   const handleInputKeydown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (composerAutocompleteOpen && composerSuggestions.length > 0) {
       if (event.key === 'ArrowDown') {
@@ -1606,6 +1879,52 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     }
     void submitPrompt(inputValue, getActiveSubmitTarget(), pendingAttachments)
   }
+
+  const toggleSpeechRecognition = useCallback(async () => {
+    if (!speechRecognitionSupported) {
+      onStatusChange(t('chat.voiceUnavailable'))
+      return
+    }
+
+    const isActive = ACTIVE_SPEECH_RECOGNITION_STATUSES.has(speechRecognitionStatus)
+    try {
+      if (isActive) {
+        if (speechRecognitionStatus === 'listening') {
+          setSpeechRecognitionStatus('transcribing')
+          onStatusChange(t('chat.voiceTranscribing'))
+          const result = await window.desktop?.stopSpeechRecognition?.()
+          if (result && !result.ok) {
+            setSpeechRecognitionStatus(result.status)
+            onStatusChange(result.message)
+          }
+          return
+        }
+
+        const result = await window.desktop?.cancelSpeechRecognition?.()
+        clearSpeechDraft()
+        if (result && !result.ok) {
+          setSpeechRecognitionStatus(result.status)
+          onStatusChange(result.message)
+        }
+        return
+      }
+
+      setSpeechRecognitionStatus('starting')
+      beginSpeechDraft()
+      onStatusChange(t('chat.voiceStarting'))
+      const result = await window.desktop?.startSpeechRecognition?.({ requiresOnDevice: true })
+      if (result && !result.ok) {
+        clearSpeechDraft()
+        setSpeechRecognitionStatus(result.status)
+        onStatusChange(result.message)
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : t('chat.voiceError')
+      clearSpeechDraft()
+      setSpeechRecognitionStatus('error')
+      onStatusChange(message)
+    }
+  }, [beginSpeechDraft, clearSpeechDraft, onStatusChange, speechRecognitionStatus, speechRecognitionSupported, t])
 
   // --- File diff UX: mark reviewed + optional rewind via SDK / 文件 diff：标记已读与可选 SDK 回滚 ---
 
@@ -1670,6 +1989,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       activeComposerTrigger={activeComposerTrigger}
       composerSuggestions={composerSuggestions}
       composerSuggestionIndex={composerSuggestionIndex}
+      speechRecognitionSupported={speechRecognitionSupported}
+      speechRecognitionStatus={speechRecognitionStatus}
       chatInputRef={chatInputRef}
       composerAutocompleteSurfaceRef={composerAutocompleteSurfaceRef}
       permissionModePickerRef={permissionModePickerRef}
@@ -1683,6 +2004,12 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       setModelPickerOpen={setModelPickerOpen}
       setComposerSuggestionIndex={setComposerSuggestionIndex}
       onInputChange={(value, selectionStart, selectionEnd) => {
+        inputValueRef.current = value
+        composerSelectionRef.current = { start: selectionStart, end: selectionEnd }
+        if (speechDraftRangeRef.current && value !== lastSpeechAppliedValueRef.current) {
+          clearSpeechDraft()
+          restartSpeechRecognitionAfterManualEdit()
+        }
         setInputValue(value)
         setComposerSelection({ start: selectionStart, end: selectionEnd })
         setDismissedAutocompleteKey('')
@@ -1693,6 +2020,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       onSyncComposerSelection={syncComposerSelection}
       onFormSubmit={handleFormSubmit}
       onSendClick={handleSendClick}
+      onToggleSpeechRecognition={() => void toggleSpeechRecognition()}
       onAddComposerAttachments={() => void addComposerAttachments()}
       onRemoveComposerAttachment={removeComposerAttachment}
       onInsertComposerSuggestion={insertComposerSuggestion}
@@ -1706,7 +2034,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     hasMessages ||
     activeThread?.purpose === 'home-plugin-customization' ||
     activeThread?.purpose === 'home-plugin-card-customization' ||
-    activeThread?.purpose === 'task-run'
+    activeThread?.purpose === 'task-run' ||
+    activeThread?.purpose === 'skill-run'
 
   return (
     <section
@@ -1737,12 +2066,17 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
           agentModeEnabled={agentModeEnabled}
           todoEnabled={todoEnabled}
           agentModeLoading={agentModeLoading}
+          threads={threads.filter((thread) => thread.projectId === activeProject.id)}
+          threadRunStates={threadRunStates}
+          hiddenSkillPaths={hiddenSkillPaths}
           heading={homeComposerMode === 'data-card-draft' ? t('chat.dataCardDraftHeading') : undefined}
           onStartDataCardDraft={() => {
             setHomeComposerMode('data-card-draft')
             requestAnimationFrame(() => chatInputRef.current?.focus())
           }}
           onEditHomePluginCard={(item) => onEditHomePluginCard(activeProject.id, item)}
+          onRunProjectSkill={onRunProjectSkill}
+          onStopProjectSkillRun={onStopProjectSkillRun}
         />
       )}
       {activeUserInputPrompt
@@ -2003,8 +2337,8 @@ function resolvedChatSupportsImages(snapshot: ClaudeAgentSettingsSnapshot): bool
   if (!provider) return false
   const overlay = settings.activeAnthropicModel?.trim() ?? ''
   const primary = provider.model.trim()
-  const model = overlay && providerAcceptsAnthropicId(provider, overlay) ? overlay : primary || snapshot.env.model
-  return providerSupportsImagesForModel(provider, model, snapshot.env.supportsImages)
+  const model = overlay && providerAcceptsAnthropicId(provider, overlay) ? overlay : primary
+  return providerSupportsImagesForModel(provider, model, false)
 }
 
 function pickerSelectionKeyFromSettings(

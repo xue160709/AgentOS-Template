@@ -13,6 +13,7 @@ const { autoUpdater } = electronUpdater
 export const APP_UPDATER_EVENT_CHANNEL = 'app-updater:event'
 
 const STARTUP_CHECK_DELAY_MS = 8_000
+const UPDATE_POLL_INTERVAL_MS = 6 * 60 * 60 * 1000
 
 function formatReleaseNotes(notes: unknown): string | undefined {
   if (typeof notes === 'string' && notes.trim()) return notes.trim()
@@ -35,6 +36,9 @@ class AppUpdaterService {
   private getWindow: () => BrowserWindow | null = () => null
   private beforeQuitAndInstall: () => void = () => undefined
   private installed = false
+  private startupCheckTimer: ReturnType<typeof setTimeout> | null = null
+  private updatePollTimer: ReturnType<typeof setInterval> | null = null
+  private checkPromise: Promise<AppUpdaterState> | null = null
   private state: AppUpdaterState = {
     phase: 'idle',
     updatesSupported: false,
@@ -109,17 +113,45 @@ class AppUpdaterService {
     return this.installed
   }
 
-  scheduleStartupCheck() {
+  scheduleUpdateChecks() {
     if (!this.installed) return
-    setTimeout(() => {
-      void this.check()
-    }, STARTUP_CHECK_DELAY_MS)
+    if (!this.startupCheckTimer) {
+      this.startupCheckTimer = setTimeout(() => {
+        this.startupCheckTimer = null
+        void this.check()
+      }, STARTUP_CHECK_DELAY_MS)
+    }
+    if (!this.updatePollTimer) {
+      this.updatePollTimer = setInterval(() => {
+        void this.check()
+      }, UPDATE_POLL_INTERVAL_MS)
+    }
   }
 
   async check(): Promise<AppUpdaterState> {
     if (!this.installed) {
       return this.getState()
     }
+    if (this.checkPromise) {
+      return this.checkPromise
+    }
+    if (
+      this.state.phase === 'checking' ||
+      this.state.phase === 'available' ||
+      this.state.phase === 'downloading' ||
+      this.state.phase === 'downloaded'
+    ) {
+      return this.getState()
+    }
+    this.checkPromise = this.runCheck()
+    try {
+      return await this.checkPromise
+    } finally {
+      this.checkPromise = null
+    }
+  }
+
+  private async runCheck(): Promise<AppUpdaterState> {
     try {
       await autoUpdater.checkForUpdates()
     } catch (error) {
