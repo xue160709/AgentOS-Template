@@ -472,7 +472,13 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
 
   useEffect(() => {
     if (!activeRunState) return
-    onStatusChange(activeRunState.status === 'waiting' ? t('chat.waitingForPermission') : t('chat.statusProcessing'))
+    onStatusChange(
+      activeRunState.status === 'asking'
+        ? t('chat.waitingForAnswer')
+        : activeRunState.status === 'waiting'
+          ? t('chat.waitingForPermission')
+          : t('chat.statusProcessing'),
+    )
   }, [activeRunState, onStatusChange, t])
 
   useEffect(() => {
@@ -1239,7 +1245,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       }
 
       if (event.type === 'ask_user_question' || event.type === 'permission_request') {
-        markRequestRunning(eventThreadId, event.requestId, 'waiting')
+        markRequestRunning(eventThreadId, event.requestId, event.type === 'ask_user_question' ? 'asking' : 'waiting')
         setPendingUserInputPrompts((prev) =>
           prev.some((item) => item.permissionRequestId === event.permissionRequestId) ? prev : [...prev, event],
         )
@@ -1804,6 +1810,15 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     if (!prompt) return
 
     setPendingUserInputPrompts((prev) => prev.filter((item) => item.permissionRequestId !== prompt.permissionRequestId))
+    const promptThreadId = prompt.threadId ?? requestThreadIdsRef.current.get(prompt.requestId) ?? activeThreadIdRef.current
+    const promptRunState = threadRunStatesRef.current[promptThreadId]
+    if (promptRunState?.requestId === prompt.requestId && promptRunState.status === 'asking') {
+      setThreadRunState(promptThreadId, {
+        ...promptRunState,
+        status: 'running',
+        updatedAt: Date.now(),
+      })
+    }
     if (!window.claudeChat) return
     await window.claudeChat.answerPermissionRequest({
       permissionRequestId: prompt.permissionRequestId,

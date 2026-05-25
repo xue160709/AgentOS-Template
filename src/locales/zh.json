@@ -206,6 +206,8 @@
     "lastChatAria": "最后聊天时间 {{time}}",
     "threadRunning": "Agent 运行中",
     "threadWaiting": "Agent 等待确认",
+    "threadAsking": "Agent 正在提问",
+    "threadAskingTag": "提问",
     "confirmArchive": "确认归档",
     "archive": "归档",
     "confirmArchiveAria": "确认归档 {{title}}",
