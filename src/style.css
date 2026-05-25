@@ -5063,7 +5063,7 @@ button.app-file-tree-row {
   overflow-y: auto;
   overflow-x: hidden;
   padding: calc(var(--spacing) * 8) calc(var(--spacing) * 6) calc(var(--spacing) * 5);
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
 }
 
 .chat-transcript {
