@@ -8,6 +8,11 @@
 import type { ClaudeChatAPI } from '../src/claude-chat-types'
 import type {
   AgentContextResult,
+  AgentKnowledgeSearchOptions,
+  AgentKnowledgeSearchProject,
+  AgentKnowledgeSearchResult,
+  ChatHistorySearchOptions,
+  ChatHistorySearchResult,
   ClaudeChatAttachmentPickerResult,
   ProjectFileSearchResult,
 } from '../src/claude-chat-types'
@@ -78,6 +83,12 @@ declare global {
       listProjectFiles?: (rootPath: string) => Promise<FileTreeResult>
       readProjectFile?: (rootPath: string, filePath: string) => Promise<ProjectFilePreviewResult>
       searchProjectFiles?: (rootPath: string, query: string) => Promise<ProjectFileSearchResult>
+      searchChatHistory?: (projectId: string, query: string, options?: ChatHistorySearchOptions) => Promise<ChatHistorySearchResult>
+      searchAgentKnowledge?: (
+        projects: AgentKnowledgeSearchProject[],
+        query: string,
+        options?: AgentKnowledgeSearchOptions,
+      ) => Promise<AgentKnowledgeSearchResult>
       listAgentContext?: (rootPath: string) => Promise<AgentContextResult>
       validateProjectPaths?: (projectPaths: string[]) => Promise<Record<string, boolean>>
       /** 相对路径须不含 `..`；用于探测项目下目录/文件是否存在 / Relative path must not contain `..` */

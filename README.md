@@ -102,7 +102,7 @@ AgentOS 的核心不是「新建一个机器人」，而是「选择一个项目
 
 ### 4. Agent Mode 项目脚手架
 
-- 可为项目自动生成或补齐 `AGENT.md`、`SOUL.md`、`MEMORY.md`、`memory/`。
+- 可为项目自动生成或补齐 `CLAUDE.md`、`AGENT.md`、`SOUL.md`、`MEMORY.md`、`memory/`。
 - 可开启 TODO 模式，生成并维护 `TODO.md`。
 - 支持在设置中编辑项目级 USER / IDENTITY 文案，让 Agent 更明确地理解用户和自身角色。
 - Agent Mode 的上下文会被注入到 Agent 运行环境中。
@@ -225,6 +225,7 @@ AgentOS 会围绕项目目录读取和生成上下文。一个典型项目可以
 
 ```text
 your-project/
+├── CLAUDE.md                 # Claude 原生入口，指向 AgentOS 上下文
 ├── AGENT.md                  # 项目 Agent 指令
 ├── SOUL.md                   # 项目愿景、价值观、长期身份
 ├── MEMORY.md                 # 项目级记忆

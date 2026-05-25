@@ -4,14 +4,15 @@
  */
 
 import type { ReactNode } from 'react'
-import { IconInline } from '../../icon-inline'
 import { useI18n } from '../../i18n/i18n'
 import type { HomePluginRunItem } from '../../desktop-types'
 import type { ProjectSkillRunRequest, ThreadRunState, WorkspaceProject, WorkspaceThread } from '../types'
-import { ProjectHomeSurface } from './ProjectHomeSurface'
+import { ProjectHomeProjectSelector, ProjectHomeSurface } from './ProjectHomeSurface'
 
 type ChatStartViewProps = {
   project: WorkspaceProject
+  projects: WorkspaceProject[]
+  projectOrderIds: readonly string[]
   composer: ReactNode
   agentModeEnabled: boolean
   todoEnabled: boolean
@@ -21,6 +22,8 @@ type ChatStartViewProps = {
   hiddenSkillPaths: string[]
   heading?: string
   onStartDataCardDraft: () => void
+  onCreateProject: (mode: 'scratch' | 'existing') => void | Promise<void>
+  onSelectProject: (projectId: string) => void
   onEditHomePluginCard: (item: HomePluginRunItem) => void
   onRunProjectSkill: (projectId: string, skill: ProjectSkillRunRequest) => void
   onStopProjectSkillRun: (projectId: string, skillPath: string) => void
@@ -29,6 +32,8 @@ type ChatStartViewProps = {
 /** 项目主页空状态 / Project home empty rail */
 export function ChatStartView({
   project,
+  projects,
+  projectOrderIds,
   composer,
   agentModeEnabled,
   todoEnabled,
@@ -38,6 +43,8 @@ export function ChatStartView({
   hiddenSkillPaths,
   heading,
   onStartDataCardDraft,
+  onCreateProject,
+  onSelectProject,
   onEditHomePluginCard,
   onRunProjectSkill,
   onStopProjectSkillRun,
@@ -60,21 +67,28 @@ export function ChatStartView({
         {agentModeEnabled ? (
           <ProjectHomeSurface
             project={project}
+            projects={projects}
+            projectOrderIds={projectOrderIds}
             todoEnabled={todoEnabled}
             loading={agentModeLoading}
             threads={threads}
             threadRunStates={threadRunStates}
             hiddenSkillPaths={hiddenSkillPaths}
             onStartDataCardDraft={onStartDataCardDraft}
+            onCreateProject={onCreateProject}
+            onSelectProject={onSelectProject}
             onEditHomePluginCard={onEditHomePluginCard}
             onRunProjectSkill={onRunProjectSkill}
             onStopProjectSkillRun={onStopProjectSkillRun}
           />
         ) : (
-          <div className="chat-start-view__project" title={project.path}>
-            <IconInline name="folder" />
-            <span>{project.name}</span>
-          </div>
+          <ProjectHomeProjectSelector
+            project={project}
+            projects={projects}
+            projectOrderIds={projectOrderIds}
+            onCreateProject={onCreateProject}
+            onSelectProject={onSelectProject}
+          />
         )}
       </div>
     </div>

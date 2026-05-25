@@ -16,16 +16,21 @@ import type {
 import { IconInline } from '../../icon-inline'
 import { useI18n } from '../../i18n/i18n'
 import type { ProjectSkillRunRequest, ThreadRunState, WorkspaceProject, WorkspaceThread } from '../types'
+import { sortProjectsForSidebar } from '../project-order'
 import { renderMarkdown } from './markdown'
 
 type ProjectHomeSurfaceProps = {
   project: WorkspaceProject
+  projects: WorkspaceProject[]
+  projectOrderIds: readonly string[]
   todoEnabled: boolean
   loading: boolean
   threads: WorkspaceThread[]
   threadRunStates: Record<string, ThreadRunState>
   hiddenSkillPaths: string[]
   onStartDataCardDraft: () => void
+  onCreateProject: (mode: 'scratch' | 'existing') => void | Promise<void>
+  onSelectProject: (projectId: string) => void
   onEditHomePluginCard: (item: HomePluginRunItem) => void
   onRunProjectSkill: (projectId: string, skill: ProjectSkillRunRequest) => void
   onStopProjectSkillRun: (projectId: string, skillPath: string) => void
@@ -49,15 +54,131 @@ type HomeCardLayout = {
   sizes: Record<string, HomePluginCardSize>
 }
 
+type ProjectHomeProjectSelectorProps = {
+  project: WorkspaceProject
+  projects: WorkspaceProject[]
+  projectOrderIds: readonly string[]
+  onCreateProject: (mode: 'scratch' | 'existing') => void | Promise<void>
+  onSelectProject: (projectId: string) => void
+}
+
+/** Codex-style project switcher used on the project home surface. */
+export function ProjectHomeProjectSelector({
+  project,
+  projects,
+  projectOrderIds,
+  onCreateProject,
+  onSelectProject,
+}: ProjectHomeProjectSelectorProps) {
+  const { t } = useI18n()
+  const [open, setOpen] = useState(false)
+  const selectorRef = useRef<HTMLDivElement>(null)
+  const orderedProjects = useMemo(
+    () => sortProjectsForSidebar(projects, projectOrderIds),
+    [projectOrderIds, projects],
+  )
+
+  useEffect(() => {
+    if (!open) return
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node | null
+      if (target && selectorRef.current?.contains(target)) return
+      setOpen(false)
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [open])
+
+  return (
+    <div className="project-home-project-selector" ref={selectorRef}>
+      <button
+        type="button"
+        className="chat-start-view__project project-home-project-trigger"
+        title={project.path}
+        aria-label={t('chat.switchProject')}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <IconInline name="folder" />
+        <span className="project-home-project-trigger__copy">
+          <span>{project.name}</span>
+          {project.pathMissing ? (
+            <span className="project-home-project-trigger__badge">{t('sidebar.projectPathMissingBadge')}</span>
+          ) : null}
+        </span>
+        <IconInline name="chevron" className="project-home-project-trigger__chevron" />
+      </button>
+      {open ? (
+        <div className="project-home-project-menu" role="menu" aria-label={t('chat.projectMenuAria')}>
+          <div className="project-home-project-menu__list">
+            {orderedProjects.map((item) => {
+              const active = item.id === project.id
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="menuitem"
+                  className={`project-home-project-menu__item${active ? ' is-active' : ''}`}
+                  aria-current={active ? 'true' : undefined}
+                  title={item.path}
+                  onClick={() => {
+                    setOpen(false)
+                    if (!active) onSelectProject(item.id)
+                  }}
+                >
+                  <IconInline name="folder" />
+                  <span className="project-home-project-menu__copy">
+                    <span className="project-home-project-menu__name">{item.name}</span>
+                    <span className="project-home-project-menu__path">
+                      {item.pathMissing ? t('sidebar.projectPathMissingBadge') : item.path}
+                    </span>
+                  </span>
+                  {active ? <IconInline name="check" className="project-home-project-menu__check" /> : null}
+                </button>
+              )
+            })}
+          </div>
+          <div className="project-home-project-menu__footer">
+            <button
+              type="button"
+              role="menuitem"
+              className="project-home-project-menu__item project-home-project-menu__item--add"
+              onClick={() => {
+                setOpen(false)
+                void onCreateProject('existing')
+              }}
+            >
+              <IconInline name="plus" />
+              <span>{t('chat.addProjectTitle')}</span>
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 /** Runs all card Home Plugins and renders the Agent Mode card grid. */
 export function ProjectHomeSurface({
   project,
+  projects,
+  projectOrderIds,
   todoEnabled,
   loading,
   threads,
   threadRunStates,
   hiddenSkillPaths,
   onStartDataCardDraft,
+  onCreateProject,
+  onSelectProject,
   onEditHomePluginCard,
   onRunProjectSkill,
   onStopProjectSkillRun,
@@ -298,10 +419,13 @@ export function ProjectHomeSurface({
   return (
     <div className="project-home-area">
       <div className="project-home-toolbar">
-        <div className="chat-start-view__project" title={project.path}>
-          <IconInline name="folder" />
-          <span>{project.name}</span>
-        </div>
+        <ProjectHomeProjectSelector
+          project={project}
+          projects={projects}
+          projectOrderIds={projectOrderIds}
+          onCreateProject={onCreateProject}
+          onSelectProject={onSelectProject}
+        />
         <div className="project-home-toolbar__actions">
           <button
             type="button"

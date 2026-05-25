@@ -91,7 +91,7 @@ Current scheduling requires the Electron process to stay alive. It is not a syst
 
 ### Agent Mode Scaffolding
 
-- Generate or repair `AGENT.md`, `SOUL.md`, `MEMORY.md`, and `memory/`.
+- Generate or repair `CLAUDE.md`, `AGENT.md`, `SOUL.md`, `MEMORY.md`, and `memory/`.
 - Enable TODO mode and manage `TODO.md`.
 - Edit project-level USER and IDENTITY content in settings.
 - Inject Agent Mode context into the Agent runtime.
@@ -215,6 +215,7 @@ AgentOS reads and generates project context around the selected folder. A typica
 
 ```text
 your-project/
+├── CLAUDE.md                 # Claude-native entry pointing to AgentOS context
 ├── AGENT.md                  # Project Agent instructions
 ├── SOUL.md                   # Project vision, values, and long-term identity
 ├── MEMORY.md                 # Project-level memory

@@ -174,8 +174,7 @@ export function AppShell() {
       ? chatWorkspace.threads.find(
           (thread) =>
             thread.id === chatWorkspace.activeThreadId &&
-            thread.projectId === activeProject.id &&
-            !thread.archivedAt,
+            thread.projectId === activeProject.id,
         )
       : undefined
   const activeThread =
@@ -535,7 +534,7 @@ export function AppShell() {
     (threadId: string) => {
       setSelectedProjectSkill(null)
       updateChatWorkspace((prev) => {
-        const thread = prev.threads.find((item) => item.id === threadId && !item.archivedAt)
+        const thread = prev.threads.find((item) => item.id === threadId)
         if (!thread) return prev
         return {
           ...prev,
@@ -1774,6 +1773,7 @@ export function AppShell() {
           canBack={canBack}
           canForward={canForward}
           onCreateProject={createProject}
+          onOpenSearch={() => window.dispatchEvent(new CustomEvent('agentos:open-search', { detail: { scope: 'all' } }))}
           onSelectProject={selectProject}
           onSelectThread={selectThread}
           onSelectProjectSkill={selectProjectSkill}
@@ -1801,10 +1801,14 @@ export function AppShell() {
           activeThread={activeThread}
           threads={chatWorkspace.threads}
           projects={chatWorkspace.projects}
+          projectOrderIds={chatWorkspace.sidebarPrefs.projectOrderIds}
           threadRunStates={threadRunStates}
           chatRef={chatRef}
           onStatusChange={setHeaderStatus}
           onNewThread={createThreadInProject}
+          onCreateProject={createProject}
+          onSelectProject={selectProject}
+          onSelectThread={selectThread}
           onThreadChatStateChange={updateThreadChatState}
           onThreadPromptSubmit={handleThreadPromptSubmit}
           onThreadRunStateChange={updateThreadRunState}
@@ -1812,6 +1816,7 @@ export function AppShell() {
           onCreateHomePluginCardThread={createHomePluginCardThread}
           onEditHomePluginCard={openHomePluginCardThread}
           hiddenSkillPaths={hiddenSkillPathsByProject[activeProject.id] ?? []}
+          projectSkills={projectSkillStates[activeProject.id]?.skills ?? []}
           onRunProjectSkill={runProjectSkill}
           onStopProjectSkillRun={stopProjectSkillRun}
           showProjectSkillsInSidebar={showProjectSkillsInSidebar}
