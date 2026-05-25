@@ -13,6 +13,7 @@ const PREFS_FILE_NAME = 'desktop-preferences.json'
 const DEFAULT_PREFS: DesktopPreferences = {
   closeToTray: false,
   openAtLogin: false,
+  eyeComfortMode: false,
   locale: 'zh',
 }
 
@@ -22,6 +23,7 @@ function normalizePrefs(raw: unknown): DesktopPreferences {
   return {
     closeToTray: o.closeToTray === true,
     openAtLogin: o.openAtLogin === true,
+    eyeComfortMode: o.eyeComfortMode === true,
     locale: normalizeUiLocale(o.locale),
   }
 }

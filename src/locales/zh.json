@@ -381,6 +381,8 @@
       "closeToTrayHint": "开启后，关闭主窗口不会退出应用，可从托盘图标右键菜单继续操作。",
       "openAtLogin": "登录时自动启动",
       "openAtLoginHint": "登录本机系统后自动启动应用（可在系统「登录项」中查看或关闭）。",
+      "eyeComfortMode": "护眼模式",
+      "eyeComfortModeHint": "开启后，界面会整体变暖，减少偏冷的蓝色观感。",
       "updateHeading": "版本更新",
       "updateCaption": "启动后会自动检查新版本，并每 6 小时轮询一次；安装包下载完成后才会显示“版本更新”按钮，点击后会退出应用并安装。",
       "updateCurrentVersion": "当前版本",

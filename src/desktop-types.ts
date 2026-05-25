@@ -10,6 +10,8 @@ export type AppUiLocale = 'zh' | 'en'
 export type DesktopPreferences = {
   closeToTray: boolean
   openAtLogin: boolean
+  /** 界面整体暖色叠层 / Warm interface overlay */
+  eyeComfortMode: boolean
   /** 缺省或未识别时按 zh 处理 / Defaults to zh when missing or unknown */
   locale?: AppUiLocale
 }

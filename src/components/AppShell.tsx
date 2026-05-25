@@ -34,7 +34,7 @@ import {
 import { CHAT_WORKSPACE_CLEARED_EVENT, CLAUDE_AGENT_SETTINGS_CHANGED_EVENT } from '../app-events'
 import { defaultThreadTitleSet, getInitialLocale, translate, useI18n } from '../i18n/i18n'
 import { IconInline } from '../icon-inline'
-import type { HomePluginRunItem, HomePluginTaskEvent } from '../desktop-types'
+import type { DesktopPreferences, HomePluginRunItem, HomePluginTaskEvent } from '../desktop-types'
 import type { ClaudeAgentModelProvider, ClaudeAgentProviderAuthMode, ClaudeAgentSettingsSnapshot } from '../claude-chat-types'
 import {
   LOCAL_PROVIDER_PRESET_CATALOG,
@@ -62,6 +62,7 @@ import { projectIdsForSidebar } from './project-order'
 const CHAT_WORKSPACE_SAVE_DEBOUNCE_MS = 750
 const INITIAL_PROVIDER_SKIP_VALUE = '__skip'
 const INITIAL_PROVIDER_CUSTOM_VALUE = '__custom'
+const EYE_COMFORT_CLASS = 'is-eye-comfort'
 
 type InitialModelFormState = {
   presetId: string
@@ -159,6 +160,17 @@ export function AppShell() {
     void window.desktop.setDesktopPreferences({ locale })
     void window.desktop.syncTrayLocale?.(locale)
   }, [locale])
+
+  useEffect(() => {
+    if (!window.desktop?.getDesktopPreferences) return
+    let cancelled = false
+    void window.desktop.getDesktopPreferences().then((prefs) => {
+      if (!cancelled) applyEyeComfortPreference(prefs)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     initialModelTouchedRef.current = initialModelTouched
@@ -1962,6 +1974,10 @@ function writeStoredBoolean(key: string, value: boolean): void {
   } catch {
     /* ignore */
   }
+}
+
+function applyEyeComfortPreference(prefs: Pick<DesktopPreferences, 'eyeComfortMode'>) {
+  document.documentElement.classList.toggle(EYE_COMFORT_CLASS, prefs.eyeComfortMode)
 }
 
 function readHiddenSkillPathsMap(): Record<string, string[]> {

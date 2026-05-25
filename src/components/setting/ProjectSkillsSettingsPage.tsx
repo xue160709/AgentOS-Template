@@ -20,6 +20,7 @@ export function ProjectSkillsSettingsPage({ enabled, onEnabledChange }: ProjectS
   const languageRestartDialogRef = useRef<HTMLDialogElement>(null)
   const [closeToTray, setCloseToTray] = useState(false)
   const [openAtLogin, setOpenAtLogin] = useState(false)
+  const [eyeComfortMode, setEyeComfortMode] = useState(false)
   const [desktopPrefsHydrated, setDesktopPrefsHydrated] = useState(false)
 
   const desktopPrefsAvailable = typeof window !== 'undefined' && typeof window.desktop?.getDesktopPreferences === 'function'
@@ -31,6 +32,8 @@ export function ProjectSkillsSettingsPage({ enabled, onEnabledChange }: ProjectS
       if (cancelled) return
       setCloseToTray(prefs.closeToTray)
       setOpenAtLogin(prefs.openAtLogin)
+      setEyeComfortMode(prefs.eyeComfortMode)
+      applyEyeComfortMode(prefs.eyeComfortMode)
       setDesktopPrefsHydrated(true)
     })
     return () => {
@@ -60,6 +63,12 @@ export function ProjectSkillsSettingsPage({ enabled, onEnabledChange }: ProjectS
   const onOpenAtLoginChange = useCallback((next: boolean) => {
     setOpenAtLogin(next)
     void window.desktop?.setDesktopPreferences?.({ openAtLogin: next })
+  }, [])
+
+  const onEyeComfortModeChange = useCallback((next: boolean) => {
+    setEyeComfortMode(next)
+    applyEyeComfortMode(next)
+    void window.desktop?.setDesktopPreferences?.({ eyeComfortMode: next })
   }, [])
 
   useEffect(() => {
@@ -199,6 +208,24 @@ export function ProjectSkillsSettingsPage({ enabled, onEnabledChange }: ProjectS
                   </span>
                 </span>
               </label>
+              <label className="settings-switch-row">
+                <span className="settings-field-row__meta">
+                  <span className="settings-field-row__label">{t('settings.general.eyeComfortMode')}</span>
+                  <span className="settings-field-row__hint">{t('settings.general.eyeComfortModeHint')}</span>
+                </span>
+                <span className="settings-switch-control">
+                  <input
+                    type="checkbox"
+                    className="settings-switch-input"
+                    checked={eyeComfortMode}
+                    disabled={!desktopPrefsHydrated}
+                    onChange={(event) => onEyeComfortModeChange(event.target.checked)}
+                  />
+                  <span className="settings-switch-track" aria-hidden="true">
+                    <span className="settings-switch-thumb" />
+                  </span>
+                </span>
+              </label>
             </div>
           </section>
         ) : null}
@@ -237,4 +264,8 @@ export function ProjectSkillsSettingsPage({ enabled, onEnabledChange }: ProjectS
       </div>
     </section>
   )
+}
+
+function applyEyeComfortMode(enabled: boolean) {
+  document.documentElement.classList.toggle('is-eye-comfort', enabled)
 }

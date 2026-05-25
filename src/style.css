@@ -228,6 +228,16 @@ html[data-window-effects='mac-vibrancy'] .app-shell {
   background: transparent;
 }
 
+html.is-eye-comfort body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  pointer-events: none;
+  background: rgb(255 196 96 / 0.055);
+  mix-blend-mode: multiply;
+}
+
 .app-body {
   display: flex;
   flex-direction: row;
