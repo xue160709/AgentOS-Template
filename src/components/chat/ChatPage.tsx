@@ -2104,6 +2104,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
         <ChatThreadView
           items={chatItems}
           isRunning={isRunning}
+          activeRunState={activeRunState}
           composer={composer}
           scrollRegionRef={scrollRegionRef}
           showScrollButton={showScrollButton}
