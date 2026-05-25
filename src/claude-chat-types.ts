@@ -194,6 +194,102 @@ export type ProjectFileSearchResult =
       message: string
     }
 
+// --- Chat history search / 聊天历史搜索 ---
+
+/** 历史搜索索引中的文档类型 / Document kind stored in the chat-history search index */
+export type ChatHistorySearchDocumentKind = 'activity' | 'message' | 'thread' | 'tool'
+
+/** 历史消息搜索选项 / Chat-history search options */
+export type ChatHistorySearchOptions = {
+  includeArchived?: boolean
+  limit?: number
+}
+
+/** 单条历史搜索命中 / Single chat-history search hit */
+export type ChatHistorySearchItem = {
+  id: string
+  documentKind: ChatHistorySearchDocumentKind
+  projectId: string
+  threadId: string
+  itemId?: string
+  role?: 'assistant' | 'user'
+  threadTitle: string
+  title: string
+  subtitle: string
+  snippet: string
+  body: string
+  updatedAt: number
+  archivedAt?: number
+  score: number
+  metadata: Record<string, unknown>
+}
+
+/** 历史消息搜索结果 / Chat-history search outcome */
+export type ChatHistorySearchResult =
+  | {
+      ok: true
+      projectId: string
+      items: ChatHistorySearchItem[]
+    }
+  | {
+      ok: false
+      projectId: string
+      message: string
+    }
+
+// --- AgentOS knowledge search / AgentOS 知识搜索 ---
+
+/** 知识搜索项目输入 / Project input for knowledge search */
+export type AgentKnowledgeSearchProject = {
+  id: string
+  name: string
+  path: string
+}
+
+/** 知识搜索文档类型 / Knowledge search document kind */
+export type AgentKnowledgeSearchKind = 'agent' | 'command' | 'home-plugin' | 'memory' | 'skill' | 'task'
+
+/** 知识搜索选项 / Knowledge search options */
+export type AgentKnowledgeSearchOptions = {
+  limit?: number
+  kinds?: AgentKnowledgeSearchKind[]
+  recentDays?: number
+}
+
+/** 单条知识搜索命中 / Single knowledge search hit */
+export type AgentKnowledgeSearchItem = {
+  id: string
+  kind: AgentKnowledgeSearchKind
+  projectId: string
+  projectName: string
+  projectPath: string
+  title: string
+  subtitle: string
+  body: string
+  snippet: string
+  path?: string
+  relativePath?: string
+  command?: string
+  threadId?: string
+  slug?: string
+  scope?: AgentContextScope
+  source?: AgentContextSource
+  score: number
+  updatedAt?: number
+  metadata: Record<string, unknown>
+}
+
+/** 知识搜索结果 / Knowledge search outcome */
+export type AgentKnowledgeSearchResult =
+  | {
+      ok: true
+      items: AgentKnowledgeSearchItem[]
+    }
+  | {
+      ok: false
+      message: string
+    }
+
 // --- Claude Agent settings / Claude Agent 设置 ---
 
 /** 配置来源：应用设置或环境变量 / Config origin: persisted settings or environment */

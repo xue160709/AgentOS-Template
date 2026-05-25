@@ -14,6 +14,7 @@ import type {
   ChatMessageItem,
   ChatThinkingItem,
   ChatToolItem,
+  ThreadRunState,
   ToolStatus,
   TranscriptItem,
 } from '../types'
@@ -36,11 +37,18 @@ type TranscriptRenderEntry =
       message: ChatMessageItem
       processItems: ProcessTranscriptItem[]
     }
+  | {
+      kind: 'process-group'
+      requestId: string
+      startedAt?: number
+      processItems: ProcessTranscriptItem[]
+    }
 
 /** Memoized transcript map / Memoized transcript list renderer */
 export const Transcript = memo(function Transcript({
   items,
   isRunning = false,
+  activeRunState,
   onCopyMessage,
   onEditUserMessage,
   onUserMessageEditDismissed,
@@ -49,13 +57,15 @@ export const Transcript = memo(function Transcript({
 }: {
   items: TranscriptItem[]
   isRunning?: boolean
+  activeRunState?: ThreadRunState
   onCopyMessage?: (text: string) => void
   onEditUserMessage?: (messageId: string, text: string) => void
   onUserMessageEditDismissed?: () => void
   onReviewFileChanges?: (changeSetId: string) => void
   onRewindFileChanges?: (item: ChatFileDiffItem) => void
 }) {
-  const entries = useMemo(() => groupTranscriptForRendering(items), [items])
+  const now = useLiveNow(Boolean(activeRunState?.startedAt))
+  const entries = useMemo(() => groupTranscriptForRendering(items, activeRunState), [items, activeRunState])
   const renderItem = (item: TranscriptItem): ReactNode => {
     if (item.type === 'tool') return <ToolRow key={item.id} item={item} />
     if (item.type === 'thinking') return <ThinkingRow key={item.id} item={item} />
@@ -85,15 +95,32 @@ export const Transcript = memo(function Transcript({
   return (
     <>
       {entries.map((entry) => {
-        if (entry.kind !== 'assistant-turn') return renderItem(entry.item)
-        const hasProcessTrace = Boolean(entry.message.durationMs && entry.processItems.length > 0)
+        if (entry.kind === 'item') return renderItem(entry.item)
+        if (entry.kind === 'process-group') {
+          const elapsedMs = entry.startedAt ? Math.max(1, now - entry.startedAt) : undefined
+          return (
+            <ProcessTraceBlock
+              key={`process-group-${entry.requestId}`}
+              durationMs={elapsedMs}
+              processItems={entry.processItems}
+              renderItem={renderItem}
+              isRunning
+            />
+          )
+        }
+        const requestId = getAssistantRequestId(entry.message)
+        const isActiveAssistantTurn = Boolean(activeRunState?.requestId && activeRunState.requestId === requestId)
+        const activeElapsedMs = isActiveAssistantTurn && activeRunState?.startedAt ? Math.max(1, now - activeRunState.startedAt) : undefined
+        const processDurationMs = entry.message.durationMs ?? activeElapsedMs
+        const hasProcessTrace = Boolean(processDurationMs && (entry.processItems.length > 0 || isActiveAssistantTurn))
         return (
           <Fragment key={`assistant-turn-${entry.message.id}`}>
             {hasProcessTrace ? (
               <ProcessTraceBlock
-                durationMs={entry.message.durationMs}
+                durationMs={processDurationMs}
                 processItems={entry.processItems}
                 renderItem={renderItem}
+                isRunning={isActiveAssistantTurn}
               />
             ) : (
               entry.processItems.map((item) => renderItem(item))
@@ -113,7 +140,22 @@ export const Transcript = memo(function Transcript({
   )
 })
 
-function groupTranscriptForRendering(items: TranscriptItem[]): TranscriptRenderEntry[] {
+function useLiveNow(active: boolean): number {
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    if (!active) {
+      setNow(Date.now())
+      return
+    }
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [active])
+
+  return now
+}
+
+function groupTranscriptForRendering(items: TranscriptItem[], activeRunState?: ThreadRunState): TranscriptRenderEntry[] {
   const assistantRequestIds = new Set<string>()
   for (const item of items) {
     if (item.type === 'message' && item.role === 'assistant') {
@@ -132,17 +174,41 @@ function groupTranscriptForRendering(items: TranscriptItem[]): TranscriptRenderE
     processItemsByRequestId.set(requestId, current)
   }
 
+  const activeRequestId = activeRunState?.requestId
+  const shouldGroupActiveRequest = Boolean(activeRequestId && !assistantRequestIds.has(activeRequestId))
+  const activeProcessItems = shouldGroupActiveRequest
+    ? items.filter((item): item is ProcessTranscriptItem => isProcessTranscriptItem(item) && getProcessRequestId(item) === activeRequestId)
+    : []
+  const activeProcessKeys = new Set(activeProcessItems.map(getProcessItemKey))
+
   const entries: TranscriptRenderEntry[] = []
   let pendingProcessItems: ProcessTranscriptItem[] = []
   let lastAssistantEntry: Extract<TranscriptRenderEntry, { kind: 'assistant-turn' }> | null = null
+  let didInsertActiveProcessGroup = false
 
   const flushProcessItems = () => {
     for (const item of pendingProcessItems) entries.push({ kind: 'item', item })
     pendingProcessItems = []
   }
 
+  const insertActiveProcessGroup = () => {
+    if (!shouldGroupActiveRequest || didInsertActiveProcessGroup || !activeRequestId) return
+    flushProcessItems()
+    entries.push({
+      kind: 'process-group',
+      requestId: activeRequestId,
+      startedAt: activeRunState?.startedAt,
+      processItems: uniqueProcessItems(activeProcessItems),
+    })
+    didInsertActiveProcessGroup = true
+  }
+
   for (const item of items) {
     if (isProcessTranscriptItem(item)) {
+      if (activeProcessKeys.has(getProcessItemKey(item))) {
+        insertActiveProcessGroup()
+        continue
+      }
       const requestId = getProcessRequestId(item)
       if (requestId && assistantRequestIds.has(requestId)) continue
       if (lastAssistantEntry) {
@@ -172,6 +238,7 @@ function groupTranscriptForRendering(items: TranscriptItem[]): TranscriptRenderE
     if (item.type === 'message' && item.role === 'user') lastAssistantEntry = null
   }
 
+  insertActiveProcessGroup()
   flushProcessItems()
   return entries
 }
@@ -241,16 +308,18 @@ function ProcessTraceBlock({
   durationMs,
   processItems,
   renderItem,
+  isRunning = false,
 }: {
   durationMs?: number
   processItems: ProcessTranscriptItem[]
   renderItem: (item: TranscriptItem) => ReactNode
+  isRunning?: boolean
 }) {
   const { t } = useI18n()
   const [isOpen, setIsOpen] = useState(false)
   const durationLabel = durationMs ? formatDuration(durationMs) : ''
 
-  if (!durationLabel || processItems.length === 0) return null
+  if (!durationLabel || (!isRunning && processItems.length === 0)) return null
 
   return (
     <section className="chat-process-group">
@@ -266,7 +335,7 @@ function ProcessTraceBlock({
         <span>{durationLabel}</span>
         <IconInline name="chevron" />
       </button>
-      {isOpen ? <div className="chat-process-group__body">{processItems.map((item) => renderItem(item))}</div> : null}
+      {isOpen && processItems.length > 0 ? <div className="chat-process-group__body">{processItems.map((item) => renderItem(item))}</div> : null}
     </section>
   )
 }
@@ -374,7 +443,7 @@ const ChatMessage = memo(function ChatMessage({
   )
 
   return (
-    <article className={`chat-message chat-message--${item.role} chat-message--${item.status}`}>
+    <article className={`chat-message chat-message--${item.role} chat-message--${item.status}`} data-transcript-item-id={item.id}>
       <div className="chat-message__stack">
         {durationLabel ? (
           <span className="chat-message__duration" title={t('chat.responseDurationTitle')} aria-label={t('chat.responseDurationTitle')}>
@@ -502,6 +571,7 @@ const ToolRow = memo(function ToolRow({ item }: { item: ChatToolItem }) {
     running: t('chat.toolRunning'),
   }
   const hasDetails = Boolean(item.inputPreview?.trim())
+  const inlineDetail = summarizeInlineToolInput(item) ?? item.detail
   const [isOpen, setIsOpen] = useState(item.status === 'running')
 
   useEffect(() => {
@@ -514,13 +584,13 @@ const ToolRow = memo(function ToolRow({ item }: { item: ChatToolItem }) {
       <span className="tool-row__dot" />
       <span className="tool-row__name">{item.name}</span>
       <span className="tool-row__status">{statusLabel[item.status]}</span>
-      {item.detail ? <span className="tool-row__detail">{item.detail}</span> : null}
+      {inlineDetail ? <span className="tool-row__detail">{inlineDetail}</span> : null}
     </>
   )
 
   if (!hasDetails) {
     return (
-      <div className={`tool-row tool-row--${item.status} tool-row--static`}>
+      <div className={`tool-row tool-row--${item.status} tool-row--static`} data-transcript-item-id={item.id}>
         <div className="status-row__summary status-row__summary--static">{summary}</div>
       </div>
     )
@@ -529,6 +599,7 @@ const ToolRow = memo(function ToolRow({ item }: { item: ChatToolItem }) {
   return (
     <details
       className={`tool-row tool-row--${item.status}`}
+      data-transcript-item-id={item.id}
       open={isOpen}
       onToggle={(event) => handleTranscriptLayoutToggle(event, () => setIsOpen(event.currentTarget.open))}
     >
@@ -537,6 +608,59 @@ const ToolRow = memo(function ToolRow({ item }: { item: ChatToolItem }) {
     </details>
   )
 })
+
+const INLINE_TOOL_INPUT_NAMES = new Set(['Bash', 'Read', 'Glob', 'Grep', 'LS'])
+
+function summarizeInlineToolInput(item: ChatToolItem): string | undefined {
+  if (!INLINE_TOOL_INPUT_NAMES.has(item.name)) return undefined
+  const input = parseToolInputPreview(item.inputPreview)
+  if (!input) return item.inputPreview.trim() || undefined
+
+  if (item.name === 'Bash') {
+    return pickString(input.command) || pickString(input.description) || item.inputPreview.trim() || undefined
+  }
+  if (item.name === 'Read') {
+    return joinInlineParts([
+      pickString(input.file_path),
+      formatInlineNumber('offset', input.offset),
+      formatInlineNumber('limit', input.limit),
+    ])
+  }
+  if (item.name === 'Glob') {
+    return joinInlineParts([pickString(input.pattern), pickString(input.path)])
+  }
+  if (item.name === 'Grep') {
+    return joinInlineParts([pickString(input.pattern), pickString(input.path), pickString(input.include)])
+  }
+  if (item.name === 'LS') {
+    return pickString(input.path) || item.inputPreview.trim() || undefined
+  }
+  return undefined
+}
+
+function parseToolInputPreview(value: string): Record<string, unknown> | undefined {
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  try {
+    const parsed: unknown = JSON.parse(trimmed)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function pickString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function formatInlineNumber(label: string, value: unknown): string {
+  return typeof value === 'number' && Number.isFinite(value) ? `${label} ${value}` : ''
+}
+
+function joinInlineParts(parts: string[]): string | undefined {
+  const text = parts.filter(Boolean).join(' · ')
+  return text || undefined
+}
 
 const ThinkingRow = memo(function ThinkingRow({ item }: { item: ChatThinkingItem }) {
   const { t } = useI18n()
@@ -558,7 +682,7 @@ const ThinkingRow = memo(function ThinkingRow({ item }: { item: ChatThinkingItem
 
   if (!hasDetails) {
     return (
-      <div className={`thinking-row thinking-row--${item.status} thinking-row--static`}>
+      <div className={`thinking-row thinking-row--${item.status} thinking-row--static`} data-transcript-item-id={item.id}>
         <div className="thinking-row__header thinking-row__header--static">{summary}</div>
       </div>
     )
@@ -567,6 +691,7 @@ const ThinkingRow = memo(function ThinkingRow({ item }: { item: ChatThinkingItem
   return (
     <details
       className={`thinking-row thinking-row--${item.status}`}
+      data-transcript-item-id={item.id}
       open={isOpen}
       onToggle={(event) => handleTranscriptLayoutToggle(event, () => setIsOpen(event.currentTarget.open))}
     >
@@ -603,7 +728,7 @@ const ActivityRow = memo(function ActivityRow({ item }: { item: ChatActivityItem
 
   if (!hasDetails) {
     return (
-      <div className={`activity-row activity-row--${item.status} activity-row--static`}>
+      <div className={`activity-row activity-row--${item.status} activity-row--static`} data-transcript-item-id={item.id}>
         <div className="activity-row__main activity-row__main--static">{summary}</div>
       </div>
     )
@@ -612,6 +737,7 @@ const ActivityRow = memo(function ActivityRow({ item }: { item: ChatActivityItem
   return (
     <details
       className={`activity-row activity-row--${item.status}`}
+      data-transcript-item-id={item.id}
       open={isOpen}
       onToggle={(event) => handleTranscriptLayoutToggle(event, () => setIsOpen(event.currentTarget.open))}
     >
@@ -642,7 +768,7 @@ const FileDiffRow = memo(function FileDiffRow({
   }, [item.status])
 
   return (
-    <section className={`file-diff-row file-diff-row--${item.status}`} aria-label={t('chat.fileDiffAria')}>
+    <section className={`file-diff-row file-diff-row--${item.status}`} data-transcript-item-id={item.id} aria-label={t('chat.fileDiffAria')}>
       <div className="file-diff-row__header">
         <span className="file-diff-row__icon" aria-hidden="true">
           <IconInline name="files" />

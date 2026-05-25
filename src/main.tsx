@@ -3,6 +3,7 @@
  * React bootstrap: mount AppShell and subscribe to window safe-area updates.
  */
 
+import 'katex/dist/katex.min.css'
 import './style.css'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
