@@ -6032,6 +6032,21 @@ button.app-file-tree-row {
   color: var(--color-token-link);
 }
 
+.markdown-body .katex {
+  font-size: 1.04em;
+}
+
+.markdown-body .katex-display {
+  margin: 0 0 calc(var(--spacing) * 3);
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: calc(var(--spacing) * 1) 0;
+}
+
+.markdown-body .katex-display:last-child {
+  margin-bottom: 0;
+}
+
 .assistant-markdown__html:empty {
   display: none;
 }

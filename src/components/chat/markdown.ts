@@ -5,18 +5,25 @@
 
 import DOMPurify from 'dompurify'
 import { marked } from 'marked'
+import markedKatex from 'marked-katex-extension'
 
 marked.setOptions({
   breaks: true,
   gfm: true,
 })
 
+marked.use(
+  markedKatex({
+    throwOnError: false,
+  }),
+)
+
 /** 渲染助手 Markdown 为安全 HTML / Render assistant markdown into sanitized HTML */
 export function renderMarkdown(markdown: string): string {
   const html = marked.parse(markdown, { async: false }) as string
   return DOMPurify.sanitize(html, {
-    ADD_ATTR: ['target', 'rel'],
-    USE_PROFILES: { html: true },
+    ADD_ATTR: ['target', 'rel', 'display', 'encoding', 'xmlns'],
+    USE_PROFILES: { html: true, mathMl: true },
   })
 }
 
