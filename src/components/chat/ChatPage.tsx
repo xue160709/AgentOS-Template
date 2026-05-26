@@ -15,7 +15,7 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from 'react'
-import { createPortal, flushSync } from 'react-dom'
+import { flushSync } from 'react-dom'
 import type {
   AgentContextCatalog,
   AgentContextSource,
@@ -366,7 +366,16 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   } | null>(null)
 
   const hasMessages = chatItems.length > 0
-  const activeUserInputPrompt = pendingUserInputPrompts[0] ?? null
+  const activeUserInputPrompt = useMemo(() => {
+    const activeThreadId = activeThread?.id ?? activeThreadIdRef.current
+    if (!activeThreadId) return null
+    return (
+      pendingUserInputPrompts.find((prompt) => {
+        const promptThreadId = prompt.threadId ?? requestThreadIdsRef.current.get(prompt.requestId)
+        return promptThreadId === activeThreadId
+      }) ?? null
+    )
+  }, [activeThread?.id, pendingUserInputPrompts])
   const permissionModeRows = useMemo(() => getPermissionModeRows(t), [t])
   const permissionModeLabel = permissionModeRows.find((row) => row.mode === permissionMode)?.label ?? t('chat.permissionModeAuto')
   const speechRecognitionSupported =
@@ -1091,6 +1100,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       requestThreadIdsRef.current.set(requestId, threadId)
       const current = threadRunStatesRef.current[threadId]
       if (current && current.requestId !== requestId && !isPendingRequestId(current.requestId)) return
+      if (current?.requestId === requestId && current.status === 'asking' && status === 'running') return
       if (current?.requestId === requestId && current.status === status) return
       const startedAt = current?.startedAt ?? requestStartedAtRef.current.get(requestId) ?? Date.now()
       requestStartedAtRef.current.set(requestId, startedAt)
@@ -2097,9 +2107,14 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
         return
       }
       if (event.key === 'Enter' || event.key === 'Tab') {
-        event.preventDefault()
-        insertComposerSuggestion(composerSuggestions[composerSuggestionIndex] ?? composerSuggestions[0])
-        return
+        const suggestion = composerSuggestions[composerSuggestionIndex] ?? composerSuggestions[0]
+        if (event.key === 'Enter' && activeComposerTrigger && isComposerSuggestionAlreadyApplied(inputValue, activeComposerTrigger, suggestion)) {
+          setDismissedAutocompleteKey(activeAutocompleteKey)
+        } else {
+          event.preventDefault()
+          insertComposerSuggestion(suggestion)
+          return
+        }
       }
       if (event.key === 'Escape') {
         event.preventDefault()
@@ -2328,12 +2343,9 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
           onStopProjectSkillRun={onStopProjectSkillRun}
         />
       )}
-      {activeUserInputPrompt
-        ? createPortal(
-            <AgentInputPromptModal prompt={activeUserInputPrompt} onResolve={(decision) => void resolveActiveUserInputPrompt(decision)} />,
-            document.body,
-          )
-        : null}
+      {activeUserInputPrompt ? (
+        <AgentInputPromptModal prompt={activeUserInputPrompt} onResolve={(decision) => void resolveActiveUserInputPrompt(decision)} />
+      ) : null}
     </section>
   )
 })
@@ -2445,6 +2457,16 @@ function matchesSuggestion(query: string, ...values: string[]): boolean {
 
 function normalizeSuggestionQuery(value: string): string {
   return value.trim().toLowerCase()
+}
+
+function isComposerSuggestionAlreadyApplied(
+  value: string,
+  trigger: ComposerTrigger,
+  suggestion: ComposerSuggestion,
+): boolean {
+  const currentToken = value.slice(trigger.start, trigger.end).trim()
+  const insertedToken = suggestion.insertText.trim()
+  return currentToken.length > 0 && currentToken === insertedToken
 }
 
 function formatFileMention(relativePath: string, type: ProjectFileSearchItem['type']): string {

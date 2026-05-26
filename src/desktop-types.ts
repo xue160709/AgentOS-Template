@@ -164,6 +164,9 @@ export type ProjectContextResult =
       ok: true
       rootPath: string
       contextPath: string
+      contextMode: ProjectContextEntryMode
+      contextTargetPath?: string
+      readOnly: boolean
       instructions: string
       entries: ProjectContextEntry[]
     }
@@ -178,6 +181,9 @@ export type ProjectContextAddResult =
       ok: true
       rootPath: string
       contextPath: string
+      contextMode: ProjectContextEntryMode
+      contextTargetPath?: string
+      readOnly: boolean
       instructions: string
       entries: ProjectContextEntry[]
       added: ProjectContextEntry[]

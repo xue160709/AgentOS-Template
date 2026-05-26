@@ -1106,11 +1106,33 @@ async function readProjectContext(rootPath: string): Promise<ProjectContextResul
         ok: true,
         rootPath: root,
         contextPath,
+        contextMode: 'local',
+        readOnly: false,
         instructions: '',
         entries: [],
       }
     }
-    if (contextStat.isSymbolicLink() || !contextStat.isDirectory()) {
+    if (contextStat.isSymbolicLink()) {
+      const targetStat = await fs.stat(contextPath)
+      if (!targetStat.isDirectory()) {
+        return {
+          ok: false,
+          rootPath: root,
+          message: `${PROJECT_CONTEXT_DIR_NAME} 引用的原位置不是文件夹`,
+        }
+      }
+      return {
+        ok: true,
+        rootPath: root,
+        contextPath,
+        contextMode: 'reference',
+        contextTargetPath: await fs.realpath(contextPath),
+        readOnly: true,
+        instructions: await readProjectContextInstructions(contextPath),
+        entries: await readProjectContextEntries(root, contextPath),
+      }
+    }
+    if (!contextStat.isDirectory()) {
       return {
         ok: false,
         rootPath: root,
@@ -1122,6 +1144,8 @@ async function readProjectContext(rootPath: string): Promise<ProjectContextResul
       ok: true,
       rootPath: root,
       contextPath,
+      contextMode: 'local',
+      readOnly: false,
       instructions: await readProjectContextInstructions(contextPath),
       entries: await readProjectContextEntries(root, contextPath),
     }
@@ -1284,7 +1308,7 @@ async function ensureProjectContextDirectory(rootPath: string): Promise<string> 
     return contextPath
   }
   if (contextStat.isSymbolicLink() || !contextStat.isDirectory()) {
-    throw new Error(`${PROJECT_CONTEXT_DIR_NAME} 必须是当前项目内的真实文件夹`)
+    throw new Error(`${PROJECT_CONTEXT_DIR_NAME} 是外部文件夹引用，设置里只能读取，不能添加、移除或写入内容。请在原位置管理。`)
   }
   return contextPath
 }

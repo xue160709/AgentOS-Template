@@ -5048,6 +5048,17 @@ button.app-file-tree-row {
   margin-top: calc(var(--spacing) * 3);
 }
 
+.agent-context-readonly-note {
+  margin: calc(var(--spacing) * 2) 0 0;
+  padding: calc(var(--spacing) * 2.5) calc(var(--spacing) * 3);
+  border: 1px solid var(--color-token-border);
+  border-radius: var(--radius-md);
+  color: var(--color-token-description-foreground);
+  background: color-mix(in oklab, var(--color-token-list-hover-background) 64%, transparent);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
 .agent-context-actions .agent-card-secondary-button {
   display: inline-flex;
   align-items: center;
@@ -5144,6 +5155,11 @@ button.app-file-tree-row {
 
 .agent-context-chip--local {
   color: var(--color-token-text-secondary);
+}
+
+.agent-context-chip--external {
+  color: var(--color-token-text-secondary);
+  background: color-mix(in oklab, var(--color-token-border) 52%, transparent);
 }
 
 .agent-context-chip--warning {
@@ -7419,7 +7435,7 @@ button.app-file-tree-row {
 }
 
 .agent-input-backdrop {
-  position: fixed;
+  position: absolute;
   inset: 0;
   z-index: 10100;
   display: grid;

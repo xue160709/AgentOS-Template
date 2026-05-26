@@ -144,6 +144,8 @@ function AskUserQuestionModal({
                   [question.question]: label,
                 }))
               }
+              canSubmit={canSubmit}
+              onSubmit={submitAnswers}
             />
           ))}
         </div>
@@ -172,6 +174,8 @@ function AskUserQuestionBlock({
   onSingleChange,
   onMultiChange,
   onCustomChange,
+  canSubmit,
+  onSubmit,
 }: {
   question: ClaudeAskUserQuestion
   singleValue: string
@@ -180,6 +184,8 @@ function AskUserQuestionBlock({
   onSingleChange: (label: string) => void
   onMultiChange: (label: string, checked: boolean) => void
   onCustomChange: (value: string) => void
+  canSubmit: boolean
+  onSubmit: () => void
 }) {
   const { t } = useI18n()
   const inputName = `ask-${stableDomId(question.question)}`
@@ -228,6 +234,11 @@ function AskUserQuestionBlock({
           value={customValue}
           placeholder={t('chat.askQuestionCustomPlaceholder')}
           onChange={(event) => onCustomChange(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
+            event.preventDefault()
+            if (canSubmit) onSubmit()
+          }}
         />
       </label>
     </fieldset>

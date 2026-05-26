@@ -229,6 +229,8 @@ export function ProjectHomeSurface({
   const [projectContextEntries, setProjectContextEntries] = useState<ProjectContextEntry[]>([])
   const [projectContextInstructions, setProjectContextInstructions] = useState('')
   const [savedProjectContextInstructions, setSavedProjectContextInstructions] = useState('')
+  const [projectContextReadOnly, setProjectContextReadOnly] = useState(false)
+  const [projectContextTargetPath, setProjectContextTargetPath] = useState('')
   const [projectContextStatus, setProjectContextStatus] = useState('')
   const [projectContextBusy, setProjectContextBusy] = useState(false)
   const [skillModelOverrides, setSkillModelOverrides] = useState<Record<string, ChatModelPick>>({})
@@ -388,10 +390,12 @@ export function ProjectHomeSurface({
     void loadAgentProjectDocuments()
   }, [agentSettingsOpen, loadAgentProjectDocuments])
 
-  const applyProjectContext = useCallback((entries: ProjectContextEntry[], instructions: string) => {
-    setProjectContextEntries(entries)
-    setProjectContextInstructions(instructions)
-    setSavedProjectContextInstructions(instructions)
+  const applyProjectContext = useCallback((context: { entries: ProjectContextEntry[]; instructions: string; readOnly: boolean; contextTargetPath?: string }) => {
+    setProjectContextEntries(context.entries)
+    setProjectContextInstructions(context.instructions)
+    setSavedProjectContextInstructions(context.instructions)
+    setProjectContextReadOnly(context.readOnly)
+    setProjectContextTargetPath(context.contextTargetPath ?? '')
   }, [])
 
   const loadProjectContext = useCallback(async () => {
@@ -400,6 +404,8 @@ export function ProjectHomeSurface({
       setProjectContextEntries([])
       setProjectContextInstructions('')
       setSavedProjectContextInstructions('')
+      setProjectContextReadOnly(false)
+      setProjectContextTargetPath('')
       setProjectContextStatus(t('settings.agentMode.bridgeUnavailable'))
       return
     }
@@ -410,8 +416,8 @@ export function ProjectHomeSurface({
         setProjectContextStatus(result.message)
         return
       }
-      applyProjectContext(result.entries, result.instructions)
-      setProjectContextStatus(t('workspace.agentSettingsContextLoaded'))
+      applyProjectContext(result)
+      setProjectContextStatus(result.readOnly ? t('workspace.agentSettingsContextLoadedReadOnly') : t('workspace.agentSettingsContextLoaded'))
     } catch (error) {
       setProjectContextStatus(error instanceof Error ? error.message : String(error))
     } finally {
@@ -438,7 +444,7 @@ export function ProjectHomeSurface({
         setProjectContextStatus(result.message)
         return
       }
-      applyProjectContext(result.entries, result.instructions)
+      applyProjectContext(result)
       if (result.added.length === 0 && result.skipped.length === 0) {
         setProjectContextStatus(t('workspace.agentSettingsContextNoSelection'))
         return
@@ -469,7 +475,7 @@ export function ProjectHomeSurface({
         setProjectContextStatus(result.message)
         return
       }
-      applyProjectContext(result.entries, result.instructions)
+      applyProjectContext(result)
       setProjectContextStatus(t('settings.agentMode.saved'))
       window.dispatchEvent(new CustomEvent('agentos:project-agent-settings-changed', { detail: { projectPath: project.path } }))
     } catch (error) {
@@ -500,7 +506,7 @@ export function ProjectHomeSurface({
         setProjectContextStatus(result.message)
         return
       }
-      applyProjectContext(result.entries, result.instructions)
+      applyProjectContext(result)
       setProjectContextStatus(t('workspace.agentSettingsContextRemoved'))
       window.dispatchEvent(new CustomEvent('project-home:refresh'))
     } catch (error) {
@@ -878,6 +884,8 @@ export function ProjectHomeSurface({
           projectContextEntries={projectContextEntries}
           projectContextInstructions={projectContextInstructions}
           savedProjectContextInstructions={savedProjectContextInstructions}
+          projectContextReadOnly={projectContextReadOnly}
+          projectContextTargetPath={projectContextTargetPath}
           projectContextStatus={projectContextStatus}
           projectContextBusy={projectContextBusy}
           onDraftProjectModelPickChange={setDraftProjectModelPick}
@@ -1726,6 +1734,8 @@ function AgentSettingsModal({
   projectContextEntries,
   projectContextInstructions,
   savedProjectContextInstructions,
+  projectContextReadOnly,
+  projectContextTargetPath,
   projectContextStatus,
   projectContextBusy,
   onDraftProjectModelPickChange,
@@ -1764,6 +1774,8 @@ function AgentSettingsModal({
   projectContextEntries: ProjectContextEntry[]
   projectContextInstructions: string
   savedProjectContextInstructions: string
+  projectContextReadOnly: boolean
+  projectContextTargetPath: string
   projectContextStatus: string
   projectContextBusy: boolean
   onDraftProjectModelPickChange: (pick: ChatModelPick | undefined) => void
@@ -1871,6 +1883,8 @@ function AgentSettingsModal({
                 entries={projectContextEntries}
                 instructions={projectContextInstructions}
                 savedInstructions={savedProjectContextInstructions}
+                readOnly={projectContextReadOnly}
+                contextTargetPath={projectContextTargetPath}
                 status={projectContextStatus}
                 busy={projectContextBusy}
                 onInstructionsChange={onProjectContextInstructionsChange}
@@ -2084,6 +2098,8 @@ function ProjectContextSettingsPanel({
   entries,
   instructions,
   savedInstructions,
+  readOnly,
+  contextTargetPath,
   status,
   busy,
   onInstructionsChange,
@@ -2095,6 +2111,8 @@ function ProjectContextSettingsPanel({
   entries: ProjectContextEntry[]
   instructions: string
   savedInstructions: string
+  readOnly: boolean
+  contextTargetPath: string
   status: string
   busy: boolean
   onInstructionsChange: (instructions: string) => void
@@ -2113,6 +2131,13 @@ function ProjectContextSettingsPanel({
           {t('workspace.agentSettingsContext')}
         </h3>
         <p className="settings-section-caption">{t('workspace.agentSettingsContextHint')}</p>
+        {readOnly ? (
+          <p className="agent-context-readonly-note">
+            {t('workspace.agentSettingsContextReadOnlyNotice', {
+              path: contextTargetPath || 'Context',
+            })}
+          </p>
+        ) : null}
 
         <div className="agent-project-docs agent-context-docs">
           <label className="agent-project-doc-field" htmlFor="agent-settings-context-instructions">
@@ -2130,11 +2155,11 @@ function ProjectContextSettingsPanel({
         </div>
 
         <div className="agent-context-actions" aria-label={t('workspace.agentSettingsContextAdd')}>
-          <button type="button" className="agent-card-secondary-button" disabled={busy} onClick={() => onAdd('reference')}>
+          <button type="button" className="agent-card-secondary-button" disabled={busy || readOnly} onClick={() => onAdd('reference')}>
             <IconInline name="paperclip" />
             <span>{t('workspace.agentSettingsContextAddReference')}</span>
           </button>
-          <button type="button" className="agent-card-secondary-button" disabled={busy} onClick={() => onAdd('copy')}>
+          <button type="button" className="agent-card-secondary-button" disabled={busy || readOnly} onClick={() => onAdd('copy')}>
             <IconInline name="copy" />
             <span>{t('workspace.agentSettingsContextAddCopy')}</span>
           </button>
@@ -2156,8 +2181,14 @@ function ProjectContextSettingsPanel({
                 <div className="agent-context-row__body">
                   <div className="agent-context-row__title">
                     <span>{entry.name}</span>
-                    <span className={`agent-context-chip agent-context-chip--${entry.mode}`}>
-                      {t(entry.mode === 'reference' ? 'workspace.agentSettingsContextModeReference' : 'workspace.agentSettingsContextModeLocal')}
+                    <span className={`agent-context-chip agent-context-chip--${readOnly && entry.mode === 'local' ? 'external' : entry.mode}`}>
+                      {t(
+                        entry.mode === 'reference'
+                          ? 'workspace.agentSettingsContextModeReference'
+                          : readOnly
+                            ? 'workspace.agentSettingsContextModeExternal'
+                            : 'workspace.agentSettingsContextModeLocal',
+                      )}
                     </span>
                     <span className="agent-context-chip">
                       {t(
@@ -2181,7 +2212,7 @@ function ProjectContextSettingsPanel({
                 <button
                   type="button"
                   className="project-home-icon-button agent-context-row__remove"
-                  disabled={busy}
+                  disabled={busy || readOnly}
                   title={t('workspace.agentSettingsContextRemove')}
                   aria-label={t('workspace.agentSettingsContextRemoveNamed', { name: entry.name })}
                   onClick={() => onRemove(entry)}
@@ -2197,7 +2228,7 @@ function ProjectContextSettingsPanel({
           {status}
         </p>
         <div className="agent-settings-panel-actions">
-          <button type="button" className="agent-card-primary-button" disabled={busy || !instructionsDirty} onClick={onSaveInstructions}>
+          <button type="button" className="agent-card-primary-button" disabled={busy || readOnly || !instructionsDirty} onClick={onSaveInstructions}>
             {t('workspace.agentSettingsContextSaveInstructions')}
           </button>
         </div>
