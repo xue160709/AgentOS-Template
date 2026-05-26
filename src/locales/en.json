@@ -839,7 +839,9 @@
         "",
         "- Read `TODO.md` before starting implementation.",
         "- Treat `TODO.md` as the active task plan and source of truth for execution order.",
-        "- When completing work, update checkboxes or document blockers inside `TODO.md`."
+        "- Prioritize unfinished items in `## Current focus` and `## Next up`, then pull from `## Backlog`.",
+        "- When completing work, update checkboxes, last updated, blockers, and completed notes; do not delete context that collaborators still need.",
+        "- Add new work as `- [ ] P1 | Task title | owner:agent | due:TBD | tags:scope` so the project-home card can extract it reliably."
       ],
       "soul": [
         "# SOUL.md - Who you are",
@@ -888,7 +890,36 @@
         "",
         "- Nothing recorded yet."
       ],
-      "todoFile": ["# TODO.md", "", "## Current plan", "", "- [ ] Add tasks for this project."]
+      "todoFile": [
+        "# TODO.md",
+        "",
+        "## Status snapshot",
+        "",
+        "- Last updated: TBD",
+        "- Current phase: Starting",
+        "- Collaboration note: Keep task rows scannable; put details on indented lines under each task.",
+        "",
+        "## Current focus",
+        "",
+        "- [ ] P1 | Define the most important deliverable for this round | owner:agent | due:TBD | tags:planning",
+        "  - Acceptance: Goal, scope, and done criteria are written clearly.",
+        "",
+        "## Next up",
+        "",
+        "- [ ] P2 | Add the next executable tasks | owner:agent | due:TBD | tags:planning",
+        "",
+        "## Backlog",
+        "",
+        "- [ ] P3 | Capture future ideas or lower-priority work | owner:agent | due:TBD | tags:backlog",
+        "",
+        "## Blocked",
+        "",
+        "- None",
+        "",
+        "## Done",
+        "",
+        "- None"
+      ]
     }
   }
 }

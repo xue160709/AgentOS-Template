@@ -2,7 +2,7 @@
  * Agent Mode card home surface rendered from per-card Home Plugins.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type RefObject } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from 'react'
 import { A2uiSurface, basicCatalog, MarkdownContext, type ReactComponentImplementation } from '@a2ui/react/v0_9'
 import { MessageProcessor, type A2uiClientAction, type A2uiMessage, type SurfaceModel } from '@a2ui/web_core/v0_9'
 import type { AgentContextSlashItem, ChatModelPick, ClaudeAgentSettingsSnapshot } from '../../claude-chat-types'
@@ -27,7 +27,7 @@ import {
   validateModelPick,
   type ModelPickMenuRow,
 } from '../../model-pick'
-import type { AgentSettingsPanelId, ProjectSkillRunRequest, ThreadRunState, WorkspaceProject, WorkspaceThread } from '../types'
+import type { AgentSettingsPanelId, FileTreeNode, ProjectSkillRunRequest, ThreadRunState, WorkspaceProject, WorkspaceThread } from '../types'
 import type { WorkspaceAgentModeState } from '../useWorkspaceAgentMode'
 import { sortProjectsForSidebar } from '../project-order'
 import { formatBytes } from './format'
@@ -52,6 +52,7 @@ type ProjectHomeSurfaceProps = {
   onCreateProject: (mode: 'scratch' | 'existing') => void | Promise<void>
   onSelectProject: (projectId: string) => void
   onEditHomePluginCard: (item: HomePluginRunItem) => void
+  onOpenProjectFile: (node: FileTreeNode) => void
   onRunProjectSkill: (projectId: string, skill: ProjectSkillRunRequest) => void
   onStopProjectSkillRun: (projectId: string, skillPath: string) => void
 }
@@ -60,6 +61,7 @@ const pluginCache = new Map<string, { hashes: Record<string, string>; plugins: H
 const HOME_GRID_COLUMNS = 3
 const HOME_CARD_LAYOUT_STORAGE_KEY = 'agentos:project-home-card-layout:v1'
 const AGENT_PROJECT_DOCUMENT_NAMES: AgentProjectDocumentName[] = ['AGENTS.md', 'SOUL.md', 'GOAL.md']
+const TODO_HOME_PLUGIN_ID = 'agentos.todo-card'
 
 type HomeCardItem =
   | { kind: 'plugin'; cardId: string; item: HomePluginRunItem; size: HomePluginCardSize }
@@ -73,6 +75,27 @@ type HomeGridFillerItem = Extract<HomeGridItem, { kind: 'filler' }>
 type HomeCardLayout = {
   order: string[]
   sizes: Record<string, HomePluginCardSize>
+}
+
+type TodoHomeCardData = {
+  phase: string
+  progress: string
+  currentTask: string
+  nextStep: string
+  blocker: string
+  updatedAt: string
+  completed: number
+  total: number
+  percent: number
+  tasks: TodoHomeCardTask[]
+}
+
+type TodoHomeCardTask = {
+  id: string
+  title: string
+  checked: boolean
+  status: string
+  priority: string
 }
 
 type ProjectHomeProjectSelectorProps = {
@@ -207,6 +230,7 @@ export function ProjectHomeSurface({
   onCreateProject,
   onSelectProject,
   onEditHomePluginCard,
+  onOpenProjectFile,
   onRunProjectSkill,
   onStopProjectSkillRun,
 }: ProjectHomeSurfaceProps) {
@@ -861,6 +885,7 @@ export function ProjectHomeSurface({
                 item={card.item}
                 size={card.size}
                 projectPath={project.path}
+                onOpenProjectFile={onOpenProjectFile}
                 onEdit={() => {
                   if (card.item.manifest.kind === 'task') {
                     setEditingTaskSlug(card.item.slug)
@@ -968,20 +993,24 @@ function HomePluginCard({
   item,
   size,
   projectPath,
+  onOpenProjectFile,
   onEdit,
 }: {
   item: HomePluginRunItem
   size: HomePluginCardSize
   projectPath: string
+  onOpenProjectFile: (node: FileTreeNode) => void
   onEdit: () => void
 }) {
   const { t } = useI18n()
   const messages = messagesForSize(item, size)
+  const todoCard = isTodoHomeCard(item) ? todoHomeCardDataFromMessages(messages) : null
   const taskCard = item.manifest.kind === 'task' ? taskCardViewModelFromMessages(item, messages) : null
   const [menuOpen, setMenuOpen] = useState(false)
   const cardRef = useRef<HTMLDivElement>(null)
+  const editable = !todoCard
 
-  useMasonrySpan(cardRef, [messages, size])
+  useMasonrySpan(cardRef, [messages, size, todoCard])
 
   return (
     <div
@@ -989,7 +1018,7 @@ function HomePluginCard({
       className={`project-home-card project-home-card--${size} project-home-card--${item.manifest.kind}`}
       style={{ '--home-card-span': sizeToColumnSpan(size) } as CSSProperties}
     >
-      <div className="project-home-card__menu">
+      {editable ? <div className="project-home-card__menu">
         <button
           type="button"
           className="project-home-card__menu-button"
@@ -1015,10 +1044,16 @@ function HomePluginCard({
             </button>
           </div>
         ) : null}
-      </div>
+      </div> : null}
       <div className="project-home-card__measure">
         <div className="project-home-card__surface">
-          {taskCard ? (
+          {todoCard ? (
+            <TodoHomeCardView
+              todo={todoCard}
+              size={size}
+              onOpen={() => onOpenProjectFile(createProjectFileNode(projectPath, 'TODO.md'))}
+            />
+          ) : taskCard ? (
             <TaskHomeCardView task={taskCard} projectPath={projectPath} />
           ) : (
             <MarkdownContext.Provider value={(text) => Promise.resolve(renderMarkdown(text))}>
@@ -1044,6 +1079,80 @@ type TaskHomeCardViewModel = {
   meta: string[]
   threadTitle: string
   active: boolean
+}
+
+function TodoHomeCardView({ todo, size, onOpen }: { todo: TodoHomeCardData; size: HomePluginCardSize; onOpen: () => void }) {
+  const tone = todo.blocker && todo.blocker !== '无' ? 'error' : todo.percent >= 100 ? 'done' : 'active'
+  const visibleTasks = size === 'large'
+    ? todo.tasks.slice(0, 6)
+    : size === 'medium'
+      ? todo.tasks.slice(0, 3)
+      : []
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    event.preventDefault()
+    onOpen()
+  }
+
+  return (
+    <article
+      className={`todo-home-card todo-home-card--${tone}`}
+      role="button"
+      tabIndex={0}
+      aria-label="打开 TODO.md"
+      onClick={onOpen}
+      onKeyDown={handleKeyDown}
+    >
+      <header className="todo-home-card__header">
+        <span className="task-home-card__glyph todo-home-card__glyph" aria-hidden="true">
+          <IconInline name="checklist" />
+        </span>
+        <span className="task-home-card__heading">
+          <h3>TODO</h3>
+          <span>{todo.updatedAt || 'TODO.md'}</span>
+        </span>
+      </header>
+
+      <div className="todo-home-card__progress" aria-label={`TODO progress ${todo.percent}%`}>
+        <div className="todo-home-card__progress-head">
+          <span>{todo.progress || `${todo.completed}/${todo.total}`}</span>
+          <strong>{todo.percent}%</strong>
+        </div>
+        <span className="todo-home-card__bar" aria-hidden="true">
+          <span style={{ width: `${Math.min(100, Math.max(0, todo.percent))}%` }} />
+        </span>
+      </div>
+
+      <div className="todo-home-card__body">
+        <p className="task-home-card__summary">{todo.currentTask}</p>
+        {size !== 'small' ? <p className="task-home-card__detail">{todo.phase}</p> : null}
+      </div>
+
+      <div className="todo-home-card__facts">
+        <span>
+          <b>Next</b>
+          {todo.nextStep}
+        </span>
+        <span>
+          <b>Blocker</b>
+          {todo.blocker || '无'}
+        </span>
+      </div>
+
+      {visibleTasks.length > 0 ? (
+        <div className="todo-home-card__tasks" aria-label="TODO tasks">
+          {visibleTasks.map((task) => (
+            <span key={task.id} className={`todo-home-card__task todo-home-card__task--${task.status || 'todo'}`}>
+              <IconInline name={task.checked ? 'check' : 'branch'} />
+              <span>{task.id}</span>
+              <b>{task.title}</b>
+              {size === 'large' && task.priority ? <em>{task.priority}</em> : null}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </article>
+  )
 }
 
 function TaskHomeCardView({ task, projectPath }: { task: TaskHomeCardViewModel; projectPath: string }) {
@@ -2522,7 +2631,7 @@ function CardOrderSettingsPanel({
               <button type="button" className="project-home-icon-button" disabled={index === ordered.length - 1} onClick={() => move(card.cardId, 1)} aria-label={t('workspace.moveCardDown')}>
                 <IconInline name="arrowDown" />
               </button>
-              {card.kind === 'plugin' ? (
+              {card.kind === 'plugin' && !isTodoHomeCard(card.item) ? (
                 <button
                   type="button"
                   className="project-home-icon-button project-home-icon-button--danger"
@@ -2643,6 +2752,58 @@ function useMasonrySpan(ref: RefObject<HTMLElement | null>, deps: unknown[]) {
 
 function messagesForSize(item: HomePluginRunItem, size: HomePluginCardSize): A2uiMessage[] {
   return ((item.variants?.[size] ?? item.variants?.medium ?? item.variants?.large ?? item.variants?.small ?? item.messages ?? []) as A2uiMessage[])
+}
+
+function isTodoHomeCard(item: HomePluginRunItem): boolean {
+  return item.manifest.id === TODO_HOME_PLUGIN_ID
+}
+
+function todoHomeCardDataFromMessages(messages: A2uiMessage[]): TodoHomeCardData | null {
+  const data = messages
+    .map((message) => {
+      if (!isRecord(message) || !isRecord(message.updateDataModel)) return null
+      const value = message.updateDataModel.value
+      return isRecord(value) && isRecord(value.todo) ? value.todo : null
+    })
+    .find((todo): todo is Record<string, unknown> => Boolean(todo))
+
+  if (!data) return null
+  return {
+    phase: readTaskText(data.phase),
+    progress: readTaskText(data.progress),
+    currentTask: readTaskText(data.currentTask),
+    nextStep: readTaskText(data.nextStep),
+    blocker: readTaskText(data.blocker),
+    updatedAt: readTaskText(data.updatedAt),
+    completed: readFiniteNumber(data.completed),
+    total: readFiniteNumber(data.total),
+    percent: Math.round(Math.min(100, Math.max(0, readFiniteNumber(data.percent)))),
+    tasks: Array.isArray(data.tasks)
+      ? data.tasks.filter(isRecord).map((task) => ({
+          id: readTaskText(task.id),
+          title: readTaskText(task.title),
+          checked: task.checked === true,
+          status: readTaskText(task.status),
+          priority: readTaskText(task.priority),
+        })).filter((task) => task.id && task.title)
+      : [],
+  }
+}
+
+function readFiniteNumber(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0
+}
+
+function createProjectFileNode(projectPath: string, relativePath: string): FileTreeNode {
+  const normalizedProjectPath = projectPath.replace(/[\\/]+$/, '')
+  const normalizedRelativePath = normalizeProjectRelativePath(relativePath)
+  const name = normalizedRelativePath.split('/').filter(Boolean).at(-1) ?? normalizedRelativePath
+  return {
+    name,
+    path: `${normalizedProjectPath}/${normalizedRelativePath}`,
+    relativePath: normalizedRelativePath,
+    type: 'file',
+  }
 }
 
 function agentProjectDocumentHint(

@@ -372,6 +372,7 @@ export function AppShellWorkspace({
             hiddenSkillPaths={hiddenSkillPaths}
             onCreateHomePluginCardThread={onCreateHomePluginCardThread}
             onEditHomePluginCard={onEditHomePluginCard}
+            onOpenProjectFile={openProjectFilePreview}
             onRunProjectSkill={onRunProjectSkill}
             onStopProjectSkillRun={onStopProjectSkillRun}
           />

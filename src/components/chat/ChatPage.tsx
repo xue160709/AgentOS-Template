@@ -48,6 +48,7 @@ import type {
   ChatState,
   ChatThinkingItem,
   ChatToolItem,
+  FileTreeNode,
   AgentSettingsPanelId,
   ProjectSkillRunRequest,
   ThreadRunState,
@@ -179,6 +180,7 @@ type ChatPageProps = {
   hiddenSkillPaths: string[]
   onCreateHomePluginCardThread: (projectId: string, initialPrompt: string) => string | void
   onEditHomePluginCard: (projectId: string, item: HomePluginRunItem) => void
+  onOpenProjectFile: (node: FileTreeNode) => void
   onRunProjectSkill: (projectId: string, skill: ProjectSkillRunRequest) => void
   onStopProjectSkillRun: (projectId: string, skillPath: string) => void
 }
@@ -276,6 +278,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     hiddenSkillPaths,
     onCreateHomePluginCardThread,
     onEditHomePluginCard,
+    onOpenProjectFile,
     onRunProjectSkill,
     onStopProjectSkillRun,
   },
@@ -2339,6 +2342,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
           onCreateProject={onCreateProject}
           onSelectProject={onSelectProject}
           onEditHomePluginCard={(item) => onEditHomePluginCard(activeProject.id, item)}
+          onOpenProjectFile={onOpenProjectFile}
           onRunProjectSkill={onRunProjectSkill}
           onStopProjectSkillRun={onStopProjectSkillRun}
         />

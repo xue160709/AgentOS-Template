@@ -28,6 +28,8 @@ const HOME_PLUGIN_MANIFEST = 'manifest.json'
 const HOME_PLUGIN_ORDER = 'order.json'
 const BASIC_CATALOG_ID = 'https://a2ui.org/specification/v0_9/basic_catalog.json'
 const HOME_SURFACE_ID = 'project-home'
+const TODO_HOME_PLUGIN_SLUG = 'todo-md'
+const TODO_HOME_PLUGIN_ID = 'agentos.todo-card'
 const CARD_SIZES: HomePluginCardSize[] = ['small', 'medium', 'large']
 const MAX_LIST_FILES = 1200
 const MAX_READ_BYTES = 256 * 1024
@@ -78,6 +80,27 @@ type HomePluginOutput = {
   diagnostics?: unknown
 }
 
+type TodoCardSummary = {
+  phase: string
+  progress: string
+  currentTask: string
+  nextStep: string
+  blocker: string
+  updatedAt: string
+  completed: number
+  total: number
+  percent: number
+  tasks: TodoCardTask[]
+}
+
+type TodoCardTask = {
+  id: string
+  title: string
+  checked: boolean
+  status: string
+  priority: string
+}
+
 const outputHashCache = new Map<string, string>()
 const execFileAsync = promisify(execFile)
 
@@ -92,20 +115,39 @@ export async function runProjectHomePlugin(rootPath: string, options: HomePlugin
       return { ok: false, rootPath: resolvedRootPath, pluginPath: pluginRootPath, message: '当前项目路径不是文件夹' }
     }
 
+    const builtinCards = await runBuiltInHomePluginCards(resolvedRootPath, options)
+
     if (!(await exists(pluginRootPath))) {
       clearPluginHashCache(resolvedRootPath)
-      return { ok: true, rootPath: resolvedRootPath, pluginRootPath, status: 'empty', plugins: [], order: [] }
+      return {
+        ok: true,
+        rootPath: resolvedRootPath,
+        pluginRootPath,
+        status: builtinCards.length > 0 ? 'ready' : 'empty',
+        plugins: builtinCards,
+        order: builtinCards.map((plugin) => plugin.slug),
+      }
     }
 
     const discovered = await discoverHomePlugins(resolvedRootPath, pluginRootPath)
     if (discovered.length === 0) {
       clearPluginHashCache(resolvedRootPath)
-      return { ok: true, rootPath: resolvedRootPath, pluginRootPath, status: 'empty', plugins: [], order: [] }
+      return {
+        ok: true,
+        rootPath: resolvedRootPath,
+        pluginRootPath,
+        status: builtinCards.length > 0 ? 'ready' : 'empty',
+        plugins: builtinCards,
+        order: builtinCards.map((plugin) => plugin.slug),
+      }
     }
 
     const order = await readHomePluginOrder(pluginRootPath)
     const plugins = sortPlugins(discovered, order)
-    const runItems = await Promise.all(plugins.map((plugin) => runHomePluginCard(resolvedRootPath, plugin, options)))
+    const runItems = [
+      ...builtinCards,
+      ...(await Promise.all(plugins.map((plugin) => runHomePluginCard(resolvedRootPath, plugin, options)))),
+    ]
     const readyPlugins = runItems.filter((item) => item.status !== 'empty')
     const status = readyPlugins.length === 0 ? 'empty' : readyPlugins.every((item) => item.status === 'unchanged') ? 'unchanged' : 'ready'
 
@@ -115,7 +157,7 @@ export async function runProjectHomePlugin(rootPath: string, options: HomePlugin
       pluginRootPath,
       status,
       plugins: runItems,
-      order: plugins.map((plugin) => plugin.slug),
+      order: [...builtinCards.map((plugin) => plugin.slug), ...plugins.map((plugin) => plugin.slug)],
     }
   } catch (error) {
     clearPluginHashCache(resolvedRootPath)
@@ -304,6 +346,158 @@ async function runHomePluginCard(
       diagnostics: [error instanceof Error ? error.message : String(error)],
     }
   }
+}
+
+async function runBuiltInHomePluginCards(
+  projectRoot: string,
+  options: HomePluginRunOptions,
+): Promise<HomePluginRunItem[]> {
+  const todoCard = await runTodoMdHomePluginCard(projectRoot, options)
+  return todoCard ? [todoCard] : []
+}
+
+async function runTodoMdHomePluginCard(
+  projectRoot: string,
+  options: HomePluginRunOptions,
+): Promise<HomePluginRunItem | null> {
+  const todoPath = path.join(projectRoot, 'TODO.md')
+  const stat = await fs.stat(todoPath).catch(() => null)
+  if (!stat?.isFile()) return null
+
+  const summary = parseTodoCardSummary(await fs.readFile(todoPath, 'utf8'))
+  if (!summary) return null
+
+  const manifest: HomePluginManifest = {
+    id: TODO_HOME_PLUGIN_ID,
+    name: 'TODO',
+    version: '1.0.0',
+    description: '从项目根目录 TODO.md 自动生成的进度卡片',
+    entry: 'TODO.md',
+    outputFormat: 'agentos.todo-card.v1',
+    kind: 'data',
+    preferredSize: 'medium',
+    createdAt: stat.birthtime.toISOString(),
+    updatedAt: stat.mtime.toISOString(),
+    order: -100,
+  }
+  const messages = createTodoCardMessages(summary)
+  const outputHash = stableHash({ manifest, summary })
+  outputHashCache.set(pluginCacheKey(projectRoot, TODO_HOME_PLUGIN_SLUG), outputHash)
+  const knownHash = options.knownOutputHashes?.[TODO_HOME_PLUGIN_SLUG]
+  const status = knownHash && knownHash === outputHash ? 'unchanged' : 'ready'
+
+  return {
+    slug: TODO_HOME_PLUGIN_SLUG,
+    rootPath: projectRoot,
+    pluginPath: todoPath,
+    manifest,
+    status,
+    outputHash,
+    messages: status === 'unchanged' ? undefined : messages,
+    variants: status === 'unchanged' ? undefined : { small: messages, medium: messages, large: messages },
+  }
+}
+
+function parseTodoCardSummary(markdown: string): TodoCardSummary | null {
+  const section = extractMarkdownSection(markdown, /^##\s+0\.\s+首页卡片\s*$/m)
+  if (!section) return null
+  const fields = parseMarkdownTable(section)
+  const required = ['当前阶段', '总进度', '当前主任务', '下一步', '阻塞项', '最近更新']
+  if (required.some((field) => !fields.get(field))) return null
+
+  const progress = fields.get('总进度') ?? ''
+  const progressMatch = progress.match(/(\d+)\s*\/\s*(\d+)/)
+  const percentMatch = progress.match(/(\d+(?:\.\d+)?)\s*%/)
+  const completed = progressMatch ? Number(progressMatch[1]) : 0
+  const total = progressMatch ? Number(progressMatch[2]) : 0
+  const percent = percentMatch
+    ? clampNumber(Number(percentMatch[1]), 0, 100, 0)
+    : total > 0
+      ? Math.round((completed / total) * 100)
+      : 0
+
+  return {
+    phase: fields.get('当前阶段') ?? '',
+    progress,
+    currentTask: fields.get('当前主任务') ?? '',
+    nextStep: fields.get('下一步') ?? '',
+    blocker: fields.get('阻塞项') ?? '',
+    updatedAt: fields.get('最近更新') ?? '',
+    completed,
+    total,
+    percent,
+    tasks: parseTodoTasks(markdown),
+  }
+}
+
+function extractMarkdownSection(markdown: string, headingPattern: RegExp): string {
+  const match = headingPattern.exec(markdown)
+  if (!match || match.index === undefined) return ''
+  const start = match.index + match[0].length
+  const rest = markdown.slice(start)
+  const nextHeading = rest.search(/^##\s+/m)
+  return nextHeading >= 0 ? rest.slice(0, nextHeading) : rest
+}
+
+function parseMarkdownTable(markdown: string): Map<string, string> {
+  const fields = new Map<string, string>()
+  for (const line of markdown.split(/\r?\n/)) {
+    const trimmed = line.trim()
+    if (!trimmed.startsWith('|') || !trimmed.endsWith('|')) continue
+    const cells = trimmed
+      .slice(1, -1)
+      .split('|')
+      .map((cell) => cell.trim())
+    if (cells.length < 2 || cells[0] === '字段' || /^-+$/.test(cells[0])) continue
+    fields.set(cells[0], cells.slice(1).join(' | '))
+  }
+  return fields
+}
+
+function parseTodoTasks(markdown: string): TodoCardTask[] {
+  const lines = markdown.split(/\r?\n/)
+  const tasks: TodoCardTask[] = []
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = lines[index]?.match(/^- \[([ xX])\]\s+(T\d+)\.\s+(.+?)\s*$/)
+    if (!match) continue
+    const detailLines = lines.slice(index + 1, index + 8)
+    const status = readTodoTaskField(detailLines, '状态') || (match[1].toLowerCase() === 'x' ? 'done' : 'todo')
+    const priority = readTodoTaskField(detailLines, '优先级')
+    tasks.push({
+      id: match[2],
+      title: match[3].trim(),
+      checked: match[1].toLowerCase() === 'x',
+      status,
+      priority,
+    })
+  }
+  return tasks.slice(0, 24)
+}
+
+function readTodoTaskField(lines: string[], field: string): string {
+  const prefix = `- ${field}：`
+  const line = lines.find((item) => item.trim().startsWith(prefix))
+  return line ? line.trim().slice(prefix.length).trim() : ''
+}
+
+function createTodoCardMessages(summary: TodoCardSummary): unknown[] {
+  return [
+    {
+      version: 'v0.9',
+      createSurface: {
+        surfaceId: HOME_SURFACE_ID,
+        catalogId: BASIC_CATALOG_ID,
+      },
+    },
+    {
+      version: 'v0.9',
+      updateDataModel: {
+        surfaceId: HOME_SURFACE_ID,
+        path: '/',
+        value: { todo: summary },
+      },
+    },
+  ]
 }
 
 function normalizeVariantMessages(output: HomePluginOutput): Partial<Record<HomePluginCardSize, unknown[]>> {
