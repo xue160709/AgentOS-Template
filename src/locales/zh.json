@@ -71,6 +71,104 @@
     "agentMode": "Agent模式",
     "developer": "开发者模式"
   },
+  "search": {
+    "open": "搜索",
+    "inputLabel": "搜索当前项目",
+    "placeholder": "搜索 {{project}}",
+    "close": "关闭搜索",
+    "scopeAria": "搜索范围",
+    "resultsAria": "搜索结果",
+    "scope": {
+      "all": "全部",
+      "files": "文件",
+      "messages": "消息",
+      "memory": "记忆",
+      "chats": "对话",
+      "skills": "Skills",
+      "tasks": "任务"
+    },
+    "section": {
+      "files": "文件",
+      "messages": "消息历史",
+      "memory": "记忆与知识",
+      "chats": "对话",
+      "skills": "Skills",
+      "tasks": "任务"
+    },
+    "action": {
+      "openFile": "打开",
+      "openDirectory": "打开文件树",
+      "openMessage": "定位",
+      "openChat": "打开",
+      "openMemory": "打开",
+      "askAgent": "提问",
+      "addContext": "加上下文",
+      "continueThread": "继续",
+      "runSkill": "执行"
+    },
+    "knowledgeKind": {
+      "memory": "记忆",
+      "skill": "Skill",
+      "command": "命令",
+      "agent": "子 Agent",
+      "home-plugin": "卡片",
+      "task": "任务"
+    },
+    "messageKind": {
+      "thread": "线程",
+      "user": "用户",
+      "assistant": "助手",
+      "tool": "工具",
+      "activity": "活动"
+    },
+    "purpose": {
+      "chat": "对话",
+      "homePlugin": "Agent 面板定制",
+      "homePluginCard": "卡片定制",
+      "skill": "Skill 运行",
+      "task": "任务运行"
+    },
+    "currentProject": "当前项目",
+    "empty": "当前项目暂无可显示结果",
+    "noResults": "在 {{project}} 中没有找到匹配结果",
+    "typeForFiles": "输入文件名或路径",
+    "typeForMessages": "输入要查找的消息内容",
+    "typeForMemory": "输入要查找的记忆、AGENT 或 TODO 内容",
+    "noFileResults": "没有匹配的文件",
+    "noMessageResults": "没有匹配的历史消息",
+    "noMemoryResults": "没有匹配的记忆或知识",
+    "noChatResults": "没有匹配的对话",
+    "noTaskResults": "没有匹配的任务",
+    "noSkillResults": "没有匹配的 Skill",
+    "loading": "正在搜索…",
+    "running": "运行中",
+    "archived": "已归档",
+    "includeArchived": "包含已归档",
+    "filtersAria": "搜索过滤器",
+    "projectScope": {
+      "label": "项目",
+      "current": "当前",
+      "all": "全部"
+    },
+    "recent": {
+      "label": "时间",
+      "all": "不限",
+      "7d": "7天",
+      "30d": "30天"
+    },
+    "justNow": "刚刚",
+    "message": "消息",
+    "skill": "项目 Skill",
+    "fileSearchUnavailable": "当前运行环境无法搜索项目文件",
+    "fileSearchFailed": "搜索项目文件失败",
+    "messageSearchUnavailable": "当前运行环境无法搜索消息历史",
+    "messageSearchFailed": "搜索消息历史失败",
+    "knowledgeSearchUnavailable": "当前运行环境无法搜索项目知识",
+    "knowledgeSearchFailed": "搜索项目知识失败",
+    "askPromptIntro": "请基于这个项目知识继续分析：{{title}}",
+    "askPromptPath": "来源：{{path}}",
+    "askPromptSnippet": "相关片段：{{snippet}}"
+  },
   "sidebar": {
     "windowNav": "窗口导航",
     "toggleSidebar": "切换侧栏",
@@ -108,6 +206,8 @@
     "lastChatAria": "最后聊天时间 {{time}}",
     "threadRunning": "Agent 运行中",
     "threadWaiting": "Agent 等待确认",
+    "threadAsking": "Agent 正在提问",
+    "threadAskingTag": "提问",
     "confirmArchive": "确认归档",
     "archive": "归档",
     "confirmArchiveAria": "确认归档 {{title}}",
@@ -283,6 +383,8 @@
       "closeToTrayHint": "开启后，关闭主窗口不会退出应用，可从托盘图标右键菜单继续操作。",
       "openAtLogin": "登录时自动启动",
       "openAtLoginHint": "登录本机系统后自动启动应用（可在系统「登录项」中查看或关闭）。",
+      "eyeComfortMode": "护眼模式",
+      "eyeComfortModeHint": "开启后，界面会整体变暖，减少偏冷的蓝色观感。",
       "updateHeading": "版本更新",
       "updateCaption": "启动后会自动检查新版本，并每 6 小时轮询一次；安装包下载完成后才会显示“版本更新”按钮，点击后会退出应用并安装。",
       "updateCurrentVersion": "当前版本",
@@ -618,8 +720,8 @@
     "prompt": {
       "hostLoadedIntro": "宿主应用加载了额外的项目指令、Agent 模式设置与记忆文件，以及与 AGENT.md、SOUL/MEMORY、memory/、.agent、.agents、.cursor 等路径相关的兼容元数据。这些内容的优先级低于用户当轮明确指令，高于通用默认假设。",
       "hostSlashIntro": "宿主兼容 Slash 命令（来自 .agent / .agents / .cursor）：",
-      "identityHeading": "## Agent Mode IDENTITY（设置）",
-      "userHeading": "## Agent Mode USER（设置）"
+      "identityHeading": "## Agent Mode IDENTITY（宿主注入）",
+      "userHeading": "## Agent Mode USER（宿主注入）"
     },
     "defaults": {
       "workspaceTitleSuffix": "AgentOS 工作空间",
@@ -628,6 +730,15 @@
       "dailyInitializedBullet": "- 已为该工作空间初始化 Agent 模式。"
     },
     "blocks": {
+      "claudeContext": [
+        "## AgentOS Claude 上下文",
+        "",
+        "- 本项目启用了 AgentOS Agent 模式。",
+        "- 回复前先阅读并遵循 `AGENT.md`。",
+        "- 读取 `SOUL.md`、`MEMORY.md` 以及 `memory/` 中最近的每日记忆，用于理解身份、长期记忆与连续性。",
+        "- USER 与 IDENTITY 由宿主应用通过 system prompt 注入，不作为仓库里的 Markdown 文件。",
+        "- 当持久项目上下文与当前这一轮用户明确指令冲突时，以当前用户指令为准。"
+      ],
       "agentMode": [
         "## AgentOS Agent 模式",
         "",
@@ -649,8 +760,8 @@
         "### 身份与用户",
         "",
         "- `SOUL.md` 定义内在准则、语气与边界。",
-        "- USER（设置）存放稳定的人类背景与偏好。",
-        "- IDENTITY（设置）定义外显名称与表达风格。",
+        "- USER（宿主注入）存放稳定的人类背景与偏好。",
+        "- IDENTITY（宿主注入）定义外显名称与表达风格。",
         "- `MEMORY.md` 保留精炼的长期记忆。",
         "",
         "### 安全",

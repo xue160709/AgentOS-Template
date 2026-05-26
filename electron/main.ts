@@ -18,7 +18,7 @@ import type {
 } from '../src/desktop-types'
 import { ensureAgentModeFiles, getAgentModeStatus, setAgentModeState } from './agent-mode-files'
 import { AgentModeSettingsStore } from './agent-mode-settings-store'
-import { discoverAgentContext, searchProjectFiles } from './agent-context'
+import { discoverAgentContext, searchAgentKnowledge, searchProjectFiles } from './agent-context'
 import { ClaudeAgentRunner } from './claude-agent-runner'
 import { ClaudeAgentSettingsStore } from './claude-agent-settings'
 import { ChatWorkspaceStore } from './chat-workspace-store'
@@ -42,6 +42,12 @@ import type {
   ClaudeAgentSettings,
   ClaudeChatSubmitPayload,
   ClaudeFileRewindPayload,
+  ChatHistorySearchOptions,
+  ChatHistorySearchResult,
+  AgentKnowledgeSearchOptions,
+  AgentKnowledgeSearchKind,
+  AgentKnowledgeSearchProject,
+  AgentKnowledgeSearchResult,
   ClaudePermissionResponsePayload,
 } from '../src/claude-chat-types'
 import type { FileTreeNode, FileTreeResult, ProjectFilePreviewKind, ProjectFilePreviewResult } from '../src/components/types'
@@ -783,8 +789,42 @@ if (gotSingleInstanceLock) {
     ipcMain.handle('desktop:search-project-files', (_event, rootPath: string, query: string) => {
       return searchProjectFiles(rootPath, query)
     })
+    ipcMain.handle('desktop:search-chat-history', (_event, projectId: unknown, query: unknown, options: unknown) => {
+      const normalizedOptions: ChatHistorySearchOptions = isRecord(options)
+        ? {
+            includeArchived: options.includeArchived === true,
+            limit: typeof options.limit === 'number' ? options.limit : undefined,
+          }
+        : {}
+      return runChatWorkspaceOperation(async (): Promise<ChatHistorySearchResult> => {
+        return getChatWorkspaceStore().searchChatHistory(
+          typeof projectId === 'string' ? projectId : '',
+          typeof query === 'string' ? query : '',
+          normalizedOptions,
+        )
+      })
+    })
     ipcMain.handle('desktop:list-agent-context', (_event, rootPath: string) => {
       return discoverAgentContext(rootPath)
+    })
+    ipcMain.handle('desktop:search-agent-knowledge', (_event, projects: unknown, query: unknown, options: unknown) => {
+      const normalizedProjects: AgentKnowledgeSearchProject[] = Array.isArray(projects)
+        ? projects.flatMap((project): AgentKnowledgeSearchProject[] => {
+            if (!isRecord(project)) return []
+            const id = typeof project.id === 'string' ? project.id : ''
+            const name = typeof project.name === 'string' ? project.name : ''
+            const projectPath = typeof project.path === 'string' ? project.path : ''
+            return id && projectPath ? [{ id, name: name || id, path: projectPath }] : []
+          })
+        : []
+      const normalizedOptions: AgentKnowledgeSearchOptions = isRecord(options)
+        ? {
+            limit: typeof options.limit === 'number' ? options.limit : undefined,
+            recentDays: typeof options.recentDays === 'number' ? options.recentDays : undefined,
+            kinds: Array.isArray(options.kinds) ? options.kinds.filter(isAgentKnowledgeSearchKind) : undefined,
+          }
+        : {}
+      return searchAgentKnowledge(normalizedProjects, typeof query === 'string' ? query : '', normalizedOptions) satisfies Promise<AgentKnowledgeSearchResult>
     })
     ipcMain.handle('desktop:path-exists-under-project', async (_event, rootPath: unknown, relativePath: unknown) => {
       if (typeof rootPath !== 'string' || typeof relativePath !== 'string') return false
@@ -975,6 +1015,10 @@ function firstPreviewLine(value: string): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
+}
+
+function isAgentKnowledgeSearchKind(value: unknown): value is AgentKnowledgeSearchKind {
+  return value === 'agent' || value === 'command' || value === 'home-plugin' || value === 'memory' || value === 'skill' || value === 'task'
 }
 
 async function copySvgToClipboard(svg: string): Promise<boolean> {

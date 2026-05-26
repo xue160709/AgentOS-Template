@@ -26,6 +26,7 @@ Apple SFSpeechRecognizer
 - 通过 `open` 启动后拿不到 stdio，所以主进程和 helper 之间用 Unix domain socket 通信。
 - renderer 不应该把 partial 结果直接追加到输入框；partial 是不断修正的，应替换当前 live 片段。
 - Apple Speech 在停顿后可能重新返回一段短 partial，因此需要“已固定片段 + 当前 live 片段”的合并策略，避免停顿后覆盖前文。
+- 用户在听写过程中手动编辑或删除输入框内容时，要把用户编辑视为新的真实输入，清空旧 speech draft，并忽略旧识别任务残留的 partial/final，避免删掉的文字又被写回来。
 
 ## 文件结构
 
@@ -575,6 +576,15 @@ type SpeechDraftRange = {
 }
 ```
 
+同时建议配套维护几个 ref：
+
+```ts
+const speechDraftRangeRef = useRef<SpeechDraftRange | null>(null)
+const lastSpeechAppliedValueRef = useRef<string | null>(null)
+const ignoreSpeechRecognitionTextRef = useRef(false)
+const speechRestartAfterEditRef = useRef(false)
+```
+
 策略：
 
 - 开始录音时记录当前输入框光标和选区。
@@ -582,12 +592,67 @@ type SpeechDraftRange = {
 - 如果新的 partial 明显是在修正当前短语，更新 `liveText`。
 - 如果新的 partial 明显是停顿后的新短语，把旧 `liveText` 合并进 `committedText`，新 partial 成为新的 `liveText`。
 - final 到来时做最后一次替换，然后清空 draft range。
+- 每次由语音写入输入框后，把完整输入值记录到 `lastSpeechAppliedValueRef`。
+- `onInputChange` 里如果发现当前输入值和 `lastSpeechAppliedValueRef` 不一致，说明用户手动编辑了输入框；此时要清空 draft。
+- 如果用户编辑发生在 `listening` 状态，建议 `cancel` 当前识别任务并重新 `start`，同时在重新进入 `listening` 前把 `ignoreSpeechRecognitionTextRef` 设为 `true`，丢弃旧任务可能吐出的残留 partial/final。
+
+用户手动编辑的关键逻辑形态：
+
+```ts
+function onInputChange(value: string, selectionStart: number, selectionEnd: number) {
+  inputValueRef.current = value
+  composerSelectionRef.current = { start: selectionStart, end: selectionEnd }
+
+  if (speechDraftRangeRef.current && value !== lastSpeechAppliedValueRef.current) {
+    clearSpeechDraft()
+    restartSpeechRecognitionAfterManualEdit()
+  }
+
+  setInputValue(value)
+  setComposerSelection({ start: selectionStart, end: selectionEnd })
+}
+```
+
+重启识别段时要避免并发重启：
+
+```ts
+function restartSpeechRecognitionAfterManualEdit() {
+  if (speechRecognitionStatus !== 'listening' || speechRestartAfterEditRef.current) return
+
+  speechRestartAfterEditRef.current = true
+  ignoreSpeechRecognitionTextRef.current = true
+
+  void (async () => {
+    try {
+      await window.desktop?.cancelSpeechRecognition?.()
+      clearSpeechDraft()
+      beginSpeechDraft()
+      await window.desktop?.startSpeechRecognition?.({ requiresOnDevice: true })
+    } finally {
+      speechRestartAfterEditRef.current = false
+    }
+  })()
+}
+```
+
+收到新任务的 `listening` 状态后，再恢复接收识别文本：
+
+```ts
+if (event.type === 'status' && event.status === 'listening') {
+  ignoreSpeechRecognitionTextRef.current = false
+}
+
+if ((event.type === 'partial' || event.type === 'final') && ignoreSpeechRecognitionTextRef.current) {
+  return
+}
+```
 
 这样可以避免：
 
 - partial 重复追加。
 - 识别修正时留下脏文本。
 - 停顿后继续说话覆盖前文。
+- 用户手动删除或改写输入框后，旧识别任务的残留文本又把内容写回来。
 
 ## 12. 打包配置
 
@@ -733,6 +798,21 @@ if #available(macOS 13.0, *) {
 
 如果产品要求稳定标点，需要额外后处理。
 
+### 手动删除输入框内容后，旧识别文本又出现
+
+根因通常不是输入框状态本身，而是识别任务仍在继续吐旧的 partial/final：
+
+- renderer 仍然保留旧 `speechDraftRange`。
+- Apple Speech 的当前 task 在 `cancel/stop` 附近仍可能吐出残留事件。
+- 旧 partial/final 到来后，又按旧 draft range 写回输入框。
+
+修复策略：
+
+- 记录 `lastSpeechAppliedValueRef`，区分“语音写入”与“用户手动编辑”。
+- 用户手动编辑时立即 `clearSpeechDraft()`。
+- 如果当时还在 `listening`，先把 `ignoreSpeechRecognitionTextRef` 设为 `true`，再 `cancel` 旧识别任务并重新 `start`。
+- 只有收到新一轮 `listening` 状态后，才重新接收 partial/final。
+
 ## 15. 最小验证命令
 
 构建 helper：
@@ -774,6 +854,8 @@ npm run dev
 - [ ] `addsPunctuation` 在 macOS 13+ 开启。
 - [ ] renderer 对 partial 做 live 替换，不是简单追加。
 - [ ] 停顿后的新 partial 不会覆盖旧文本。
+- [ ] 用户手动编辑或删除 composer 内容时会清空 speech draft。
+- [ ] 重启识别段期间会忽略旧任务残留的 partial/final。
 - [ ] 打包时 helper `.app` 被放入 `extraResources`。
 - [ ] 主 App 和 helper 都有必要的权限声明。
 

@@ -6,12 +6,13 @@
 import type { ReactNode, RefObject } from 'react'
 import { IconInline } from '../../icon-inline'
 import { useI18n } from '../../i18n/i18n'
-import type { ChatFileDiffItem, TranscriptItem } from '../types'
+import type { ChatFileDiffItem, ThreadRunState, TranscriptItem } from '../types'
 import { Transcript } from './Transcript'
 
 type ChatThreadViewProps = {
   items: TranscriptItem[]
   isRunning: boolean
+  activeRunState?: ThreadRunState
   composer: ReactNode
   scrollRegionRef: RefObject<HTMLDivElement | null>
   showScrollButton: boolean
@@ -27,6 +28,7 @@ type ChatThreadViewProps = {
 export function ChatThreadView({
   items,
   isRunning,
+  activeRunState,
   composer,
   scrollRegionRef,
   showScrollButton,
@@ -47,6 +49,7 @@ export function ChatThreadView({
           <Transcript
             items={items}
             isRunning={isRunning}
+            activeRunState={activeRunState}
             onCopyMessage={onCopyMessage}
             onEditUserMessage={onEditUserMessage}
             onUserMessageEditDismissed={onUserMessageEditDismissed}

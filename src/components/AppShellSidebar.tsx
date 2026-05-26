@@ -66,6 +66,8 @@ type AppShellSidebarProps = {
   canBack: boolean
   canForward: boolean
   onCreateProject: (mode: 'scratch' | 'existing') => void | Promise<void>
+  onOpenSearch: () => void
+  onOpenSettingsCategory: (category: SettingsCategoryId) => void
   onSelectProject: (projectId: string) => void
   onSelectThread: (threadId: string) => void
   onSelectProjectSkill: (projectId: string, skill: Omit<SelectedProjectSkill, 'projectId'>) => void
@@ -103,6 +105,8 @@ export function AppShellSidebar({
   canBack,
   canForward,
   onCreateProject,
+  onOpenSearch,
+  onOpenSettingsCategory,
   onSelectProject,
   onSelectThread,
   onSelectProjectSkill,
@@ -530,7 +534,7 @@ export function AppShellSidebar({
                       if (item.disabled) {
                         return
                       }
-                      window.location.hash = `settings/${item.id}`
+                      onOpenSettingsCategory(item.id)
                     }}
                   >
                     <IconInline name={item.icon} />
@@ -543,13 +547,33 @@ export function AppShellSidebar({
                 <button
                   type="button"
                   className="app-sidebar-new-thread"
-                  id="btn-sidebar-new-project"
-                  onClick={() => void onCreateProject('existing')}
+                  id="btn-sidebar-new-thread"
+                  onClick={() => onSelectProject(activeProjectId)}
                 >
-                  <IconInline name="plus" />
-                  <span>{t('sidebar.addProject')}</span>
+                  <IconInline name="message" />
+                  <span>{t('sidebar.newThread')}</span>
                 </button>
-                <div className="app-sidebar-section-label">{t('sidebar.projectsSection')}</div>
+                <button
+                  type="button"
+                  className="app-sidebar-search"
+                  id="btn-sidebar-search"
+                  onClick={onOpenSearch}
+                >
+                  <IconInline name="search" />
+                  <span>{t('search.open')}</span>
+                </button>
+                <div className="app-sidebar-section-heading">
+                  <div className="app-sidebar-section-label">{t('sidebar.projectsSection')}</div>
+                  <button
+                    type="button"
+                    className="app-sidebar-section-action"
+                    title={t('sidebar.addProject')}
+                    aria-label={t('sidebar.addProject')}
+                    onClick={() => void onCreateProject('existing')}
+                  >
+                    <IconInline name="plus" />
+                  </button>
+                </div>
                 <div className="app-project-list">
                   {sortedProjects.map((project) => {
                     const projectThreads = threadsByProject.get(project.id) ?? []
@@ -803,7 +827,15 @@ export function AppShellSidebar({
                                       ) : null}
                                     </button>
                                     <div className="app-thread-trailing">
-                                      {runState ? (
+                                      {runState?.status === 'asking' ? (
+                                        <span
+                                          className="app-thread-ask-tag"
+                                          title={t('sidebar.threadAsking')}
+                                          aria-label={t('sidebar.threadAsking')}
+                                        >
+                                          {t('sidebar.threadAskingTag')}
+                                        </span>
+                                      ) : runState ? (
                                         <span
                                           className={`app-thread-running${runState.status === 'waiting' ? ' is-waiting' : ''}`}
                                           title={
@@ -888,7 +920,7 @@ export function AppShellSidebar({
               title={t('sidebar.settings')}
               aria-label={t('sidebar.settings')}
               onClick={() => {
-                window.location.hash = 'settings/general'
+                onOpenSettingsCategory('general')
               }}
             >
               <IconInline name="settings" />

@@ -13,6 +13,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
+import { flushSync } from 'react-dom'
 import {
   createEmptyChatState,
   createId,
@@ -34,7 +35,7 @@ import {
 import { CHAT_WORKSPACE_CLEARED_EVENT, CLAUDE_AGENT_SETTINGS_CHANGED_EVENT } from '../app-events'
 import { defaultThreadTitleSet, getInitialLocale, translate, useI18n } from '../i18n/i18n'
 import { IconInline } from '../icon-inline'
-import type { HomePluginRunItem, HomePluginTaskEvent } from '../desktop-types'
+import type { DesktopPreferences, HomePluginRunItem, HomePluginTaskEvent } from '../desktop-types'
 import type { ClaudeAgentModelProvider, ClaudeAgentProviderAuthMode, ClaudeAgentSettingsSnapshot } from '../claude-chat-types'
 import {
   LOCAL_PROVIDER_PRESET_CATALOG,
@@ -62,6 +63,7 @@ import { projectIdsForSidebar } from './project-order'
 const CHAT_WORKSPACE_SAVE_DEBOUNCE_MS = 750
 const INITIAL_PROVIDER_SKIP_VALUE = '__skip'
 const INITIAL_PROVIDER_CUSTOM_VALUE = '__custom'
+const EYE_COMFORT_CLASS = 'is-eye-comfort'
 
 type InitialModelFormState = {
   presetId: string
@@ -161,6 +163,17 @@ export function AppShell() {
   }, [locale])
 
   useEffect(() => {
+    if (!window.desktop?.getDesktopPreferences) return
+    let cancelled = false
+    void window.desktop.getDesktopPreferences().then((prefs) => {
+      if (!cancelled) applyEyeComfortPreference(prefs)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
     initialModelTouchedRef.current = initialModelTouched
   }, [initialModelTouched])
 
@@ -174,8 +187,7 @@ export function AppShell() {
       ? chatWorkspace.threads.find(
           (thread) =>
             thread.id === chatWorkspace.activeThreadId &&
-            thread.projectId === activeProject.id &&
-            !thread.archivedAt,
+            thread.projectId === activeProject.id,
         )
       : undefined
   const activeThread =
@@ -535,7 +547,7 @@ export function AppShell() {
     (threadId: string) => {
       setSelectedProjectSkill(null)
       updateChatWorkspace((prev) => {
-        const thread = prev.threads.find((item) => item.id === threadId && !item.archivedAt)
+        const thread = prev.threads.find((item) => item.id === threadId)
         if (!thread) return prev
         return {
           ...prev,
@@ -1375,6 +1387,24 @@ export function AppShell() {
     setCanForward(false)
   }, [])
 
+  const openSettingsCategory = useCallback(
+    (category: SettingsCategoryId) => {
+      flushSync(() => {
+        setActiveViewId('settings')
+        setSettingsCategory(category)
+      })
+
+      const nextHash = `settings/${category}`
+      const currentHash = window.location.hash.replace(/^#\/?/, '')
+      if (currentHash !== nextHash) {
+        window.location.hash = nextHash
+      } else {
+        syncHistoryButtons()
+      }
+    },
+    [syncHistoryButtons],
+  )
+
   // --- `hashchange` → settings view; keep back/forward mirrors in sync / hash 变化映射到设置视图；同步前进后退按钮态 ---
 
   useEffect(() => {
@@ -1774,6 +1804,8 @@ export function AppShell() {
           canBack={canBack}
           canForward={canForward}
           onCreateProject={createProject}
+          onOpenSearch={() => window.dispatchEvent(new CustomEvent('agentos:open-search', { detail: { scope: 'all' } }))}
+          onOpenSettingsCategory={openSettingsCategory}
           onSelectProject={selectProject}
           onSelectThread={selectThread}
           onSelectProjectSkill={selectProjectSkill}
@@ -1801,10 +1833,14 @@ export function AppShell() {
           activeThread={activeThread}
           threads={chatWorkspace.threads}
           projects={chatWorkspace.projects}
+          projectOrderIds={chatWorkspace.sidebarPrefs.projectOrderIds}
           threadRunStates={threadRunStates}
           chatRef={chatRef}
           onStatusChange={setHeaderStatus}
           onNewThread={createThreadInProject}
+          onCreateProject={createProject}
+          onSelectProject={selectProject}
+          onSelectThread={selectThread}
           onThreadChatStateChange={updateThreadChatState}
           onThreadPromptSubmit={handleThreadPromptSubmit}
           onThreadRunStateChange={updateThreadRunState}
@@ -1812,6 +1848,7 @@ export function AppShell() {
           onCreateHomePluginCardThread={createHomePluginCardThread}
           onEditHomePluginCard={openHomePluginCardThread}
           hiddenSkillPaths={hiddenSkillPathsByProject[activeProject.id] ?? []}
+          projectSkills={projectSkillStates[activeProject.id]?.skills ?? []}
           onRunProjectSkill={runProjectSkill}
           onStopProjectSkillRun={stopProjectSkillRun}
           showProjectSkillsInSidebar={showProjectSkillsInSidebar}
@@ -1957,6 +1994,10 @@ function writeStoredBoolean(key: string, value: boolean): void {
   } catch {
     /* ignore */
   }
+}
+
+function applyEyeComfortPreference(prefs: Pick<DesktopPreferences, 'eyeComfortMode'>) {
+  document.documentElement.classList.toggle(EYE_COMFORT_CLASS, prefs.eyeComfortMode)
 }
 
 function readHiddenSkillPathsMap(): Record<string, string[]> {

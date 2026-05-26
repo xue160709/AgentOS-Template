@@ -71,6 +71,104 @@
     "agentMode": "Agent Mode",
     "developer": "Developer Mode"
   },
+  "search": {
+    "open": "Search",
+    "inputLabel": "Search current project",
+    "placeholder": "Search {{project}}",
+    "close": "Close search",
+    "scopeAria": "Search scope",
+    "resultsAria": "Search results",
+    "scope": {
+      "all": "All",
+      "files": "Files",
+      "messages": "Messages",
+      "memory": "Memory",
+      "chats": "Chats",
+      "skills": "Skills",
+      "tasks": "Tasks"
+    },
+    "section": {
+      "files": "Files",
+      "messages": "Message history",
+      "memory": "Memory and knowledge",
+      "chats": "Chats",
+      "skills": "Skills",
+      "tasks": "Tasks"
+    },
+    "action": {
+      "openFile": "Open",
+      "openDirectory": "Open files",
+      "openMessage": "Reveal",
+      "openChat": "Open",
+      "openMemory": "Open",
+      "askAgent": "Ask",
+      "addContext": "Add context",
+      "continueThread": "Continue",
+      "runSkill": "Run"
+    },
+    "knowledgeKind": {
+      "memory": "Memory",
+      "skill": "Skill",
+      "command": "Command",
+      "agent": "Sub-agent",
+      "home-plugin": "Card",
+      "task": "Task"
+    },
+    "messageKind": {
+      "thread": "Thread",
+      "user": "User",
+      "assistant": "Assistant",
+      "tool": "Tool",
+      "activity": "Activity"
+    },
+    "purpose": {
+      "chat": "Chat",
+      "homePlugin": "Agent panel customization",
+      "homePluginCard": "Card customization",
+      "skill": "Skill run",
+      "task": "Task run"
+    },
+    "currentProject": "Current project",
+    "empty": "No visible results in this project",
+    "noResults": "No matches in {{project}}",
+    "typeForFiles": "Type a file name or path",
+    "typeForMessages": "Type message text to search",
+    "typeForMemory": "Type memory, AGENT, or TODO text to search",
+    "noFileResults": "No matching files",
+    "noMessageResults": "No matching history messages",
+    "noMemoryResults": "No matching memory or knowledge",
+    "noChatResults": "No matching chats",
+    "noTaskResults": "No matching tasks",
+    "noSkillResults": "No matching Skills",
+    "loading": "Searching…",
+    "running": "Running",
+    "archived": "Archived",
+    "includeArchived": "Include archived",
+    "filtersAria": "Search filters",
+    "projectScope": {
+      "label": "Project",
+      "current": "Current",
+      "all": "All"
+    },
+    "recent": {
+      "label": "Time",
+      "all": "Any",
+      "7d": "7 days",
+      "30d": "30 days"
+    },
+    "justNow": "Just now",
+    "message": "Message",
+    "skill": "Project Skill",
+    "fileSearchUnavailable": "Project file search is unavailable in this environment",
+    "fileSearchFailed": "Project file search failed",
+    "messageSearchUnavailable": "Message history search is unavailable in this environment",
+    "messageSearchFailed": "Message history search failed",
+    "knowledgeSearchUnavailable": "Project knowledge search is unavailable in this environment",
+    "knowledgeSearchFailed": "Project knowledge search failed",
+    "askPromptIntro": "Please continue from this project knowledge: {{title}}",
+    "askPromptPath": "Source: {{path}}",
+    "askPromptSnippet": "Relevant snippet: {{snippet}}"
+  },
   "sidebar": {
     "windowNav": "Window navigation",
     "toggleSidebar": "Toggle sidebar",
@@ -108,6 +206,8 @@
     "lastChatAria": "Last active {{time}}",
     "threadRunning": "Agent running",
     "threadWaiting": "Agent waiting for input",
+    "threadAsking": "Agent asking a question",
+    "threadAskingTag": "Ask",
     "confirmArchive": "Confirm archive",
     "archive": "Archive",
     "confirmArchiveAria": "Confirm archive {{title}}",
@@ -283,6 +383,8 @@
       "closeToTrayHint": "When enabled, closing the main window hides it instead of quitting; use the tray menu to continue.",
       "openAtLogin": "Open at login",
       "openAtLoginHint": "Launch this app when you log in to your computer (also visible in system login items).",
+      "eyeComfortMode": "Eye comfort mode",
+      "eyeComfortModeHint": "Adds a warm tint across the interface to reduce cool blue tones.",
       "updateHeading": "Version updates",
       "updateCaption": "The app checks for new builds after launch and every 6 hours afterward. The Update button appears only after the installer finishes downloading, then quits the app and installs it.",
       "updateCurrentVersion": "Current version",
@@ -618,8 +720,8 @@
     "prompt": {
       "hostLoadedIntro": "The host application loaded additional project instructions, Agent Mode settings and memory files, and compatibility metadata from AGENT.md, SOUL/MEMORY, memory/, .agent, .agents, and .cursor files. Treat these as lower priority than explicit user instructions and higher priority than generic defaults.",
       "hostSlashIntro": "Host-compatible slash commands from .agent/.agents/.cursor:",
-      "identityHeading": "## Agent Mode IDENTITY (settings)",
-      "userHeading": "## Agent Mode USER (settings)"
+      "identityHeading": "## Agent Mode IDENTITY (host-injected)",
+      "userHeading": "## Agent Mode USER (host-injected)"
     },
     "defaults": {
       "workspaceTitleSuffix": "AgentOS Workspace",
@@ -628,6 +730,15 @@
       "dailyInitializedBullet": "- Agent Mode initialized for this workspace."
     },
     "blocks": {
+      "claudeContext": [
+        "## AgentOS Claude Context",
+        "",
+        "- This project uses AgentOS Agent Mode.",
+        "- Before responding, read and follow `AGENT.md`.",
+        "- Read `SOUL.md`, `MEMORY.md`, and recent daily notes in `memory/` for identity, long-term memory, and continuity.",
+        "- USER and IDENTITY are injected by the host application through the system prompt, not stored as Markdown files in the repo.",
+        "- When durable project context conflicts with explicit instructions in the current turn, follow the current user instructions."
+      ],
       "agentMode": [
         "## AgentOS Agent Mode",
         "",
@@ -649,8 +760,8 @@
         "### Identity stack",
         "",
         "- `SOUL.md` defines internal values, tone, and boundaries.",
-        "- USER captures stable human context and preferences.",
-        "- IDENTITY defines public-facing name and presentation.",
+        "- USER (host-injected) captures stable human context and preferences.",
+        "- IDENTITY (host-injected) defines public-facing name and presentation.",
         "- `MEMORY.md` keeps curated long-term memory.",
         "",
         "### Safety",
