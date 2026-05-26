@@ -16,6 +16,7 @@
 | P1 | JSON 回退 | SQLite 不可用时仍保存 JSON |
 | P1 | JSONL rollout | 按线程保存长期事件/消息记录 |
 | P1 | 线程模型持久化 | 保存每个 thread 的 `modelPick`，用于恢复独立模型选择 |
+| P1 | 项目默认模型持久化 | 保存项目级 `projectModelPick`，用于新建普通对话默认模型 |
 | P1 | Agent Mode Skills 设置 | 保存项目级 Skill 到模型的覆盖映射 |
 | P1 | 路径缺失标记 | 校验项目路径并保留缺失状态 |
 | P1 | 开发者清理 | 开发者设置可清空工作区快照或模型设置 |
@@ -120,7 +121,9 @@ flowchart TD
 - 工作区清理会删除 localStorage key、`chat-workspace.json`、`chat-workspace.sqlite*` 和 `chat-sessions/`，不会删除用户项目目录。
 - Claude 设置清理只删除 `claude-agent-settings.json`，不会影响项目文件、工作区、Agent Mode 或桌面偏好。
 - Agent Mode 设置、模型 Provider 设置、桌面偏好和 Home Plugin task/runtime 分别由独立 store 或项目文件保存，不写入 `ChatWorkspaceState`。
-- `agent-mode-settings.json` 按项目根路径保存 `enabled`、`todoEnabled`、`user`、`identity` 和 `skillModelOverrides`；保存 USER/IDENTITY 或 Skills 面板时必须按字段局部合并，避免互相覆盖。
+- `agent-mode-settings.json` 按项目根路径保存 `enabled`、`todoEnabled`、`user`、`identity`、`projectModelPick` 和 `skillModelOverrides`；保存 USER/IDENTITY、项目面板或 Skills 面板时必须按字段局部合并，避免互相覆盖。
+- 项目面板的 `AGENTS.md`、`SOUL.md`、`GOAL.md` 内容直接读写项目根目录文件；文件不存在时读取为空，保存时创建。
+- 项目首页 composer 的草稿模型只保存在运行时内存中，不写入 `agent-mode-settings.json`；创建 thread 后会落到该 thread 的 `chatState.modelPick`，并清空当前项目的首页草稿模型。
 - `skillModelOverrides` 的 key 是 `skill.path`，value 是 `{ providerId, anthropicModel }`；读取时只做结构归一化，有效性由模型设置和运行时校验。
 - UI 语言偏好由 i18n 模块独立保存在 `CodeX-UI-Template-locale-v1`，不随工作区清理一起删除。
 

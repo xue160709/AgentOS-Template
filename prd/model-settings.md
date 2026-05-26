@@ -16,6 +16,7 @@
 | P1 | Provider 预设 | 从远程预设加载，失败时回退本地预设 |
 | P1 | 连接测试 | 发送测试请求验证配置 |
 | P1 | 聊天模型选择 | 聊天页可为当前 thread 设置 provider/model |
+| P1 | 项目默认模型 | Agent 设置“项目”面板可为当前项目设置新建对话默认模型 |
 | P1 | Skill 模型选项 | Agent 设置 Skills 面板复用同一聚合模型列表 |
 | P1 | 首次启动配置 | 空工作区引导中可直接写入当前 active Provider |
 | P1 | 环境变量模式 | 开发环境可选择 env 来源，打包环境强制 settings |
@@ -106,9 +107,10 @@ flowchart TD
 - 第三方 Anthropic 兼容服务通过环境变量传递模型名。
 - `activeAnthropicModel` 只允许匹配当前 Provider 的主模型或 Haiku/Sonnet/Opus 映射；等于主模型时归并为空字符串。
 - composer 和 Agent 设置 Skills 面板使用 `buildModelPickRows` 聚合模型选项；每个 Provider 的主模型、Haiku、Sonnet、Opus 映射都会生成可选项，重复模型名在同一 Provider 内去重。
-- `ChatModelPick` 是实际运行模型的最小闭包，只保存 `providerId` 和 `anthropicModel`；它可被 thread、Project Skill 覆盖和文件回滚请求复用。
+- `ChatModelPick` 是实际运行模型的最小闭包，只保存 `providerId` 和 `anthropicModel`；它可被 thread、项目默认模型、Project Skill 覆盖和文件回滚请求复用。
 - 活动 thread 存在时，聊天模型选择只更新该 thread 的 `chatState.modelPick` 并清空不匹配的 `sessionId`；没有活动 thread 时才更新全局 `activeProviderId/activeAnthropicModel`。
-- 全局 `activeProviderId/activeAnthropicModel` 是新 thread、无效模型覆盖和无活动 thread 场景的 fallback；如果当前全局模型被删除，则自动选择当前 Provider 的第一个有效模型，仍无有效模型时遍历其它 Provider。
+- 项目设置存在有效 `projectModelPick` 时，项目首页 composer 初始显示该模型；之后用户在项目首页 composer 中切换模型会写入当前项目的内存态草稿模型，下一次新建普通对话会继承该草稿模型并随即清空，后续新建对话重新回到项目默认模型。
+- 全局 `activeProviderId/activeAnthropicModel` 是无项目默认模型、无效模型覆盖和无活动 thread 场景的 fallback；如果当前全局模型被删除，则自动选择当前 Provider 的第一个有效模型，仍无有效模型时遍历其它 Provider。
 - `ClaudeAgentSettingsStore.resolve(modelPick)` 会优先校验并使用请求携带的 provider/model，构造本次 SDK 的 `ANTHROPIC_*` env；校验失败时回退原有 settings/env resolve 逻辑。
 - Provider id 会去重；重复 id 会追加序号后缀。
 - `authToken` 模式在测试请求中使用 `Authorization: Bearer`，`apiKey` 模式使用 `x-api-key`。

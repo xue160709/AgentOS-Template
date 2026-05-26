@@ -18,6 +18,7 @@ import type {
 } from '../src/claude-chat-types'
 import type {
   AgentModeFilesResult,
+  AgentProjectDocumentsResult,
   AgentModeProjectSettings,
   AgentModeSettingsResult,
   AgentModeStatusResult,
@@ -35,6 +36,9 @@ import type {
   HomePluginTaskRunResult,
   HomePluginTaskSaveResult,
   HomePluginTaskStopResult,
+  ProjectContextAddMode,
+  ProjectContextAddResult,
+  ProjectContextResult,
   SpeechRecognitionCommandResult,
   SpeechRecognitionEvent,
   SpeechRecognitionSnapshot,
@@ -118,8 +122,14 @@ declare global {
       getAgentModeSettings?: (rootPath: string) => Promise<AgentModeSettingsResult>
       saveAgentModeSettings?: (
         rootPath: string,
-        payload: Partial<Pick<AgentModeProjectSettings, 'user' | 'identity' | 'skillModelOverrides'>>,
+        payload: Partial<Pick<AgentModeProjectSettings, 'user' | 'identity' | 'projectModelPick' | 'skillModelOverrides'>>,
       ) => Promise<AgentModeSettingsResult>
+      readAgentProjectDocuments?: (rootPath: string) => Promise<AgentProjectDocumentsResult>
+      saveAgentProjectDocuments?: (rootPath: string, files: Record<string, string>) => Promise<AgentProjectDocumentsResult>
+      listProjectContext?: (rootPath: string) => Promise<ProjectContextResult>
+      saveProjectContextInstructions?: (rootPath: string, instructions: string) => Promise<ProjectContextResult>
+      addProjectContextEntries?: (rootPath: string, mode: ProjectContextAddMode) => Promise<ProjectContextAddResult>
+      removeProjectContextEntry?: (rootPath: string, relativePath: string) => Promise<ProjectContextResult>
       getChatWorkspace?: () => Promise<ChatWorkspaceState | null>
       saveChatWorkspace?: (state: ChatWorkspaceState) => Promise<ChatWorkspaceState>
       clearChatWorkspaceData?: () => Promise<void>

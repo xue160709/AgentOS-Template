@@ -43,7 +43,7 @@ import {
   normalizePresetCatalog,
   type ProviderPreset,
 } from '../model-provider-presets'
-import { resolveEffectiveModelPick, validateModelPick } from '../model-pick'
+import { resolveEffectiveModelPick, sameModelPick, validateModelPick } from '../model-pick'
 import type {
   AppViewId,
   ChatState,
@@ -52,6 +52,7 @@ import type {
   ProjectSkillListState,
   SelectedProjectSkill,
   SettingsCategoryId,
+  ThreadCompletionState,
   ThreadRunState,
   WorkspaceProject,
   WorkspaceThread,
@@ -98,7 +99,10 @@ export function AppShell() {
     readStoredBoolean(SIDEBAR_PROJECT_SKILLS_STORAGE_KEY, true),
   )
   const [projectSkillStates, setProjectSkillStates] = useState<Record<string, ProjectSkillListState>>({})
+  const [projectDefaultModelPick, setProjectDefaultModelPick] = useState<ChatModelPick | undefined>(undefined)
+  const [projectHomeDraftModelPicks, setProjectHomeDraftModelPicks] = useState<Record<string, ChatModelPick>>({})
   const [threadRunStates, setThreadRunStates] = useState<Record<string, ThreadRunState>>({})
+  const [threadCompletionStates, setThreadCompletionStates] = useState<Record<string, ThreadCompletionState>>({})
   const [selectedProjectSkill, setSelectedProjectSkill] = useState<SelectedProjectSkill | null>(null)
   const [hiddenSkillPathsByProject, setHiddenSkillPathsByProject] = useState<Record<string, string[]>>(() =>
     readHiddenSkillPathsMap(),
@@ -155,6 +159,19 @@ export function AppShell() {
     })
   }, [])
 
+  const updateThreadCompletionState = useCallback((threadId: string, completedAt: number | null) => {
+    setThreadCompletionStates((prev) => {
+      if (completedAt === null) {
+        if (!prev[threadId]) return prev
+        const next = { ...prev }
+        delete next[threadId]
+        return next
+      }
+      if (prev[threadId]?.completedAt === completedAt) return prev
+      return { ...prev, [threadId]: { completedAt } }
+    })
+  }, [])
+
   // --- Desktop bridge: mirror `locale` into desktop prefs + tray strings / 桌面桥：将 locale 写入桌面偏好与托盘文案 ---
 
   useEffect(() => {
@@ -196,10 +213,89 @@ export function AppShell() {
     (chatWorkspace?.activeThreadId && activeProject
       ? latestVisibleThreadForProject(chatWorkspace, activeProject.id)
       : undefined)
+  const projectHomeModelPick = activeProject
+    ? projectHomeDraftModelPicks[activeProject.id] ?? projectDefaultModelPick
+    : undefined
+
+  const loadProjectDefaultModelPick = useCallback(async (project = activeProject) => {
+    if (!project) {
+      setProjectDefaultModelPick((prev) => (sameModelPick(prev, undefined) ? prev : undefined))
+      return
+    }
+    try {
+      const [settingsSnapshot, agentSettings] = await Promise.all([
+        window.claudeChat?.getSettings?.().catch(() => undefined),
+        window.desktop?.getAgentModeSettings?.(project.path).catch(() => undefined),
+      ])
+      const pick = settingsSnapshot && agentSettings?.ok
+        ? validateModelPick(settingsSnapshot.settings, agentSettings.settings.projectModelPick)
+        : undefined
+      if (settingsSnapshot) {
+        setProjectHomeDraftModelPicks((prev) => {
+          let changed = false
+          const next: Record<string, ChatModelPick> = {}
+          for (const [projectId, draftPick] of Object.entries(prev)) {
+            const valid = validateModelPick(settingsSnapshot.settings, draftPick)
+            if (valid) next[projectId] = valid
+            if (!valid || !sameModelPick(valid, draftPick)) changed = true
+          }
+          return changed ? next : prev
+        })
+      }
+      setProjectDefaultModelPick((prev) => (sameModelPick(prev, pick) ? prev : pick))
+    } catch {
+      setProjectDefaultModelPick((prev) => (sameModelPick(prev, undefined) ? prev : undefined))
+    }
+  }, [activeProject])
+
+  useEffect(() => {
+    void loadProjectDefaultModelPick()
+  }, [loadProjectDefaultModelPick])
+
+  useEffect(() => {
+    const onSettingsChanged = () => {
+      void loadProjectDefaultModelPick()
+    }
+    const onProjectSettingsChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ projectPath?: string; projectModelPickChanged?: boolean }>).detail
+      const projectPath = detail?.projectPath
+      if (!projectPath || !activeProject || sameProjectPath(projectPath, activeProject.path)) {
+        if (detail?.projectModelPickChanged && activeProject) {
+          setProjectHomeDraftModelPicks((prev) => {
+            if (!prev[activeProject.id]) return prev
+            const next = { ...prev }
+            delete next[activeProject.id]
+            return next
+          })
+        }
+        void loadProjectDefaultModelPick()
+      }
+    }
+    window.addEventListener(CLAUDE_AGENT_SETTINGS_CHANGED_EVENT, onSettingsChanged)
+    window.addEventListener('agentos:project-agent-settings-changed', onProjectSettingsChanged)
+    return () => {
+      window.removeEventListener(CLAUDE_AGENT_SETTINGS_CHANGED_EVENT, onSettingsChanged)
+      window.removeEventListener('agentos:project-agent-settings-changed', onProjectSettingsChanged)
+    }
+  }, [activeProject, loadProjectDefaultModelPick])
+
   const projectSkillProjectKey = useMemo(
     () => chatWorkspace?.projects.map((project) => `${project.id}:${project.path}`).join('\n') ?? '',
     [chatWorkspace?.projects],
   )
+
+  const setProjectHomeDraftModelPick = useCallback((projectId: string, pick: ChatModelPick | undefined) => {
+    setProjectHomeDraftModelPicks((prev) => {
+      if (!pick) {
+        if (!prev[projectId]) return prev
+        const next = { ...prev }
+        delete next[projectId]
+        return next
+      }
+      if (sameModelPick(prev[projectId], pick)) return prev
+      return { ...prev, [projectId]: pick }
+    })
+  }, [])
 
   const projectIdsKey = useMemo(
     () => chatWorkspace?.projects.map((project) => project.id).sort().join('\n') ?? '',
@@ -373,7 +469,26 @@ export function AppShell() {
       }
       return changed ? next : current
     })
+
+    setThreadCompletionStates((current) => {
+      const threadIds = new Set(chatWorkspace.threads.map((thread) => thread.id))
+      let changed = false
+      const next: Record<string, ThreadCompletionState> = {}
+      for (const [threadId, state] of Object.entries(current)) {
+        if (!threadIds.has(threadId)) {
+          changed = true
+          continue
+        }
+        next[threadId] = state
+      }
+      return changed ? next : current
+    })
   }, [projectSkillProjectKey, threadIdsKey, chatWorkspace])
+
+  useEffect(() => {
+    if (!activeThread?.id) return
+    updateThreadCompletionState(activeThread.id, null)
+  }, [activeThread?.id, updateThreadCompletionState])
 
   useEffect(() => {
     projectSkillStatesRef.current = projectSkillStates
@@ -547,6 +662,7 @@ export function AppShell() {
   const selectThread = useCallback(
     (threadId: string) => {
       setSelectedProjectSkill(null)
+      updateThreadCompletionState(threadId, null)
       updateChatWorkspace((prev) => {
         const thread = prev.threads.find((item) => item.id === threadId)
         if (!thread) return prev
@@ -558,7 +674,7 @@ export function AppShell() {
       })
       goHome()
     },
-    [goHome, updateChatWorkspace],
+    [goHome, updateChatWorkspace, updateThreadCompletionState],
   )
 
   const createThreadInProject = useCallback(
@@ -566,15 +682,20 @@ export function AppShell() {
       setSelectedProjectSkill(null)
       const threadId = createId('thread')
       const now = Date.now()
+      const draftProjectId = projectId ?? activeProject?.id
+      const shouldClearHomeDraft = Boolean(draftProjectId && projectHomeDraftModelPicks[draftProjectId])
       updateChatWorkspace((prev) => {
         const targetProjectId = projectId ?? prev.activeProjectId
+        const defaultModelPick = targetProjectId === activeProject?.id
+          ? projectHomeDraftModelPicks[targetProjectId] ?? projectDefaultModelPick
+          : projectHomeDraftModelPicks[targetProjectId]
         const nextThread: WorkspaceThread = {
           id: threadId,
           projectId: targetProjectId,
           title: t('thread.newThreadTitle'),
           createdAt: now,
           updatedAt: now,
-          chatState: createEmptyChatState(),
+          chatState: createEmptyChatState(defaultModelPick),
         }
         return {
           ...prev,
@@ -584,12 +705,15 @@ export function AppShell() {
           threads: [nextThread, ...prev.threads],
         }
       })
+      if (shouldClearHomeDraft && draftProjectId) {
+        setProjectHomeDraftModelPick(draftProjectId, undefined)
+      }
       void window.claudeChat?.newThread(threadId)
       goHome()
       requestAnimationFrame(() => void chatRef.current?.focusComposer())
       return threadId
     },
-    [goHome, updateChatWorkspace, t],
+    [activeProject?.id, goHome, projectDefaultModelPick, projectHomeDraftModelPicks, setProjectHomeDraftModelPick, updateChatWorkspace, t],
   )
 
   const createHomePluginCardThread = useCallback(
@@ -1817,6 +1941,7 @@ export function AppShell() {
           projectOrderIds={chatWorkspace.sidebarPrefs.projectOrderIds}
           threads={chatWorkspace.threads}
           threadRunStates={threadRunStates}
+          threadCompletionStates={threadCompletionStates}
           activeProjectId={chatWorkspace.activeProjectId}
           activeThreadId={chatWorkspace.activeThreadId}
           collapsedProjectIds={chatWorkspace.sidebarPrefs.collapsedProjectIds}
@@ -1854,6 +1979,8 @@ export function AppShell() {
           settingsCategory={settingsCategory}
           activeProject={activeProject}
           activeThread={activeThread}
+          projectDefaultModelPick={projectDefaultModelPick}
+          projectHomeModelPick={projectHomeModelPick}
           threads={chatWorkspace.threads}
           projects={chatWorkspace.projects}
           projectOrderIds={chatWorkspace.sidebarPrefs.projectOrderIds}
@@ -1867,6 +1994,8 @@ export function AppShell() {
           onThreadChatStateChange={updateThreadChatState}
           onThreadPromptSubmit={handleThreadPromptSubmit}
           onThreadRunStateChange={updateThreadRunState}
+          onThreadCompletionStateChange={updateThreadCompletionState}
+          onProjectHomeModelPickChange={setProjectHomeDraftModelPick}
           homeModeResetKey={homeModeResetKey}
           onCreateHomePluginCardThread={createHomePluginCardThread}
           onEditHomePluginCard={openHomePluginCardThread}

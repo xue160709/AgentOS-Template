@@ -13,6 +13,9 @@ import type {
   HomePluginTaskRunResult,
   HomePluginTaskSaveResult,
   HomePluginTaskStopResult,
+  ProjectContextAddMode,
+  ProjectContextAddResult,
+  ProjectContextResult,
   SpeechRecognitionCommandResult,
   SpeechRecognitionEvent,
   SpeechRecognitionSnapshot,
@@ -116,6 +119,24 @@ contextBridge.exposeInMainWorld('desktop', {
   },
   saveAgentModeSettings(rootPath: string, payload: unknown) {
     return ipcRenderer.invoke('desktop:save-agent-mode-settings', rootPath, payload)
+  },
+  readAgentProjectDocuments(rootPath: string) {
+    return ipcRenderer.invoke('desktop:read-agent-project-documents', rootPath)
+  },
+  saveAgentProjectDocuments(rootPath: string, files: Record<string, string>) {
+    return ipcRenderer.invoke('desktop:save-agent-project-documents', rootPath, files)
+  },
+  listProjectContext(rootPath: string) {
+    return ipcRenderer.invoke('desktop:list-project-context', rootPath) as Promise<ProjectContextResult>
+  },
+  saveProjectContextInstructions(rootPath: string, instructions: string) {
+    return ipcRenderer.invoke('desktop:save-project-context-instructions', rootPath, instructions) as Promise<ProjectContextResult>
+  },
+  addProjectContextEntries(rootPath: string, mode: ProjectContextAddMode) {
+    return ipcRenderer.invoke('desktop:add-project-context-entries', rootPath, mode) as Promise<ProjectContextAddResult>
+  },
+  removeProjectContextEntry(rootPath: string, relativePath: string) {
+    return ipcRenderer.invoke('desktop:remove-project-context-entry', rootPath, relativePath) as Promise<ProjectContextResult>
   },
   getChatWorkspace() {
     return ipcRenderer.invoke('chat-workspace:get')

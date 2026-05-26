@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { IconInline } from '../icon-inline'
 import { useI18n } from '../i18n/i18n'
-import type { AgentContextSlashItem, AgentKnowledgeSearchItem, ProjectFileSearchItem } from '../claude-chat-types'
+import type { AgentContextSlashItem, AgentKnowledgeSearchItem, ChatModelPick, ProjectFileSearchItem } from '../claude-chat-types'
 import type {
   AgentSettingsPanelId,
   AppSearchScope,
@@ -44,6 +44,8 @@ type AppShellWorkspaceProps = {
   settingsCategory: SettingsCategoryId
   activeProject: WorkspaceProject
   activeThread: WorkspaceThread | undefined
+  projectDefaultModelPick?: ChatModelPick
+  projectHomeModelPick?: ChatModelPick
   threads: WorkspaceThread[]
   projects: WorkspaceProject[]
   projectOrderIds: readonly string[]
@@ -57,6 +59,8 @@ type AppShellWorkspaceProps = {
   onThreadChatStateChange: (threadId: string, update: ChatState | ((prev: ChatState) => ChatState)) => void
   onThreadPromptSubmit: (threadId: string, prompt: string) => void
   onThreadRunStateChange: (threadId: string, state: ThreadRunState | null) => void
+  onThreadCompletionStateChange: (threadId: string, completedAt: number | null) => void
+  onProjectHomeModelPickChange: (projectId: string, pick: ChatModelPick | undefined) => void
   homeModeResetKey: number
   onCreateHomePluginCardThread: (projectId: string, initialPrompt: string) => string | void
   onEditHomePluginCard: (projectId: string, item: HomePluginRunItem) => void
@@ -76,6 +80,8 @@ export function AppShellWorkspace({
   settingsCategory,
   activeProject,
   activeThread,
+  projectDefaultModelPick,
+  projectHomeModelPick,
   threads,
   projects,
   projectOrderIds,
@@ -89,6 +95,8 @@ export function AppShellWorkspace({
   onThreadChatStateChange,
   onThreadPromptSubmit,
   onThreadRunStateChange,
+  onThreadCompletionStateChange,
+  onProjectHomeModelPickChange,
   homeModeResetKey,
   onCreateHomePluginCardThread,
   onEditHomePluginCard,
@@ -108,7 +116,7 @@ export function AppShellWorkspace({
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchScope, setSearchScope] = useState<AppSearchScope>('all')
   const [agentSettingsOpen, setAgentSettingsOpen] = useState(false)
-  const [agentSettingsPanel, setAgentSettingsPanel] = useState<AgentSettingsPanelId>('general')
+  const [agentSettingsPanel, setAgentSettingsPanel] = useState<AgentSettingsPanelId>('project')
   const filePaneRef = useRef<AppFileTreePaneHandle>(null)
   const filePreviewRequestRef = useRef(0)
   const agentMode = useWorkspaceAgentMode(activeProject)
@@ -312,7 +320,7 @@ export function AppShellWorkspace({
           </span>
           <div className="app-workspace-drag-gap draggable" aria-hidden="true" />
           <div className="app-workspace-actions no-drag">
-            {showAgentModeToolbar ? <AgentModeMenu agent={agentMode} onOpenSettings={() => openAgentSettings('general')} /> : null}
+            {showAgentModeToolbar ? <AgentModeMenu agent={agentMode} onOpenSettings={() => openAgentSettings('project')} /> : null}
             <button
               type="button"
               className={`btn btn-toolbar${folderToolbarActive ? ' is-active' : ''}`}
@@ -336,6 +344,8 @@ export function AppShellWorkspace({
             hidden={activeViewId !== 'home'}
             activeProject={activeProject}
             activeThread={activeThread}
+            projectDefaultModelPick={projectDefaultModelPick}
+            projectHomeModelPick={projectHomeModelPick}
             threads={threads}
             projects={projects}
             projectOrderIds={projectOrderIds}
@@ -347,6 +357,8 @@ export function AppShellWorkspace({
             onThreadChatStateChange={onThreadChatStateChange}
             onThreadPromptSubmit={onThreadPromptSubmit}
             onThreadRunStateChange={onThreadRunStateChange}
+            onThreadCompletionStateChange={onThreadCompletionStateChange}
+            onProjectHomeModelPickChange={onProjectHomeModelPickChange}
             agentMode={agentMode}
             agentModeEnabled={agentMode.enabled}
             todoEnabled={agentMode.todoEnabled}

@@ -19,7 +19,7 @@ export type AppViewId = 'home' | 'docs' | 'settings'
 export type SettingsCategoryId = 'general' | 'skills' | 'updates' | 'agent' | 'developer'
 
 /** Agent Mode 首页模态设置页签 / Agent Mode home modal settings panel id */
-export type AgentSettingsPanelId = 'general' | 'card-order' | 'skills'
+export type AgentSettingsPanelId = 'project' | 'context' | 'general' | 'card-order' | 'skills'
 
 /** 消息气泡渲染状态 / Chat bubble render status */
 export type MessageStatus = 'done' | 'streaming' | 'error' | 'cancelled'
@@ -170,6 +170,11 @@ export type ThreadRunState = {
   status: ThreadRunStatus
   startedAt?: number
   updatedAt: number
+}
+
+/** 会话任务已完成但尚未查看的侧栏提示 / Sidebar notice for a completed task that has not been viewed */
+export type ThreadCompletionState = {
+  completedAt: number
 }
 
 /** 文件树节点（递归）/ Recursive file tree node */

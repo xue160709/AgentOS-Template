@@ -10,11 +10,17 @@ import path from 'node:path'
 import zh from '../src/locales/zh.json'
 import en from '../src/locales/en.json'
 import type {
+  AgentProjectDocumentsResult,
   AgentModeProjectSettings,
   AppUiLocale,
   DesktopPreferences,
   HomePluginRunOptions,
   HomePluginTaskEvent,
+  ProjectContextAddMode,
+  ProjectContextAddResult,
+  ProjectContextEntry,
+  ProjectContextSkippedEntry,
+  ProjectContextResult,
 } from '../src/desktop-types'
 import { ensureAgentModeFiles, getAgentModeStatus, setAgentModeState } from './agent-mode-files'
 import { AgentModeSettingsStore } from './agent-mode-settings-store'
@@ -112,6 +118,11 @@ const PROJECT_FILE_PREVIEW_TEXT_SAMPLE_BYTES = 8192
 const CLIPBOARD_PNG_MAX_DATA_URL_LENGTH = 25_000_000
 const CLIPBOARD_SVG_MAX_CHARS = 4_000_000
 const CLIPBOARD_SVG_MAX_DIMENSION = 4096
+const AGENT_PROJECT_DOCUMENT_NAMES = ['AGENTS.md', 'SOUL.md', 'GOAL.md'] as const
+const AGENT_PROJECT_DOCUMENT_MAX_CHARS = 512_000
+const PROJECT_CONTEXT_DIR_NAME = 'Context'
+const PROJECT_CONTEXT_INSTRUCTIONS_FILE = 'CONTEXT.md'
+const PROJECT_CONTEXT_INSTRUCTIONS_MAX_CHARS = 512_000
 const CHAT_IMAGE_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024
 const CHAT_TEXT_EXTENSIONS = new Set(['.md', '.markdown', '.txt'])
 const PROJECT_FILE_PREVIEW_TEXT_EXTENSIONS = new Set([
@@ -881,6 +892,24 @@ if (gotSingleInstanceLock) {
     ipcMain.handle('desktop:save-agent-mode-settings', (_event, rootPath: string, payload: Partial<AgentModeProjectSettings>) => {
       return getAgentModeSettingsStore().saveSettings(rootPath, payload)
     })
+    ipcMain.handle('desktop:read-agent-project-documents', (_event, rootPath: string) => {
+      return readAgentProjectDocuments(rootPath)
+    })
+    ipcMain.handle('desktop:save-agent-project-documents', (_event, rootPath: string, files: unknown) => {
+      return saveAgentProjectDocuments(rootPath, files)
+    })
+    ipcMain.handle('desktop:list-project-context', (_event, rootPath: string) => {
+      return readProjectContext(rootPath)
+    })
+    ipcMain.handle('desktop:save-project-context-instructions', (_event, rootPath: string, instructions: unknown) => {
+      return saveProjectContextInstructions(rootPath, instructions)
+    })
+    ipcMain.handle('desktop:add-project-context-entries', (_event, rootPath: string, rawMode: unknown) => {
+      return pickAndAddProjectContextEntries(rootPath, rawMode)
+    })
+    ipcMain.handle('desktop:remove-project-context-entry', (_event, rootPath: string, relativePath: unknown) => {
+      return removeProjectContextEntry(rootPath, relativePath)
+    })
     ipcMain.handle('desktop:quit', () => {
       app.quit()
     })
@@ -1011,6 +1040,377 @@ function firstPreviewLine(value: string): string {
   const firstLine = normalized.split('\n').find((line) => line.trim())?.trim() ?? ''
   if (!firstLine) return ''
   return firstLine.length > 160 ? `${firstLine.slice(0, 157)}...` : firstLine
+}
+
+async function readAgentProjectDocuments(rootPath: string): Promise<AgentProjectDocumentsResult> {
+  const root = resolveProjectPath(rootPath)
+  try {
+    const rootStat = await fs.stat(root)
+    if (!rootStat.isDirectory()) return { ok: false, rootPath: root, message: '当前项目路径不是文件夹' }
+    const files = Object.fromEntries(
+      await Promise.all(
+        AGENT_PROJECT_DOCUMENT_NAMES.map(async (name) => {
+          const filePath = path.join(root, name)
+          try {
+            const stat = await fs.stat(filePath)
+            if (!stat.isFile()) return [name, ''] as const
+            if (stat.size > AGENT_PROJECT_DOCUMENT_MAX_CHARS * 4) {
+              return [name, ''] as const
+            }
+            const content = await fs.readFile(filePath, 'utf8')
+            return [name, content.slice(0, AGENT_PROJECT_DOCUMENT_MAX_CHARS)] as const
+          } catch (error) {
+            if (isNodeError(error) && error.code === 'ENOENT') return [name, ''] as const
+            throw error
+          }
+        }),
+      ),
+    ) as Record<(typeof AGENT_PROJECT_DOCUMENT_NAMES)[number], string>
+    return { ok: true, rootPath: root, files }
+  } catch (error) {
+    return { ok: false, rootPath: root, message: formatProjectPathError(error) }
+  }
+}
+
+async function saveAgentProjectDocuments(rootPath: string, rawFiles: unknown): Promise<AgentProjectDocumentsResult> {
+  const root = resolveProjectPath(rootPath)
+  if (!isRecord(rawFiles)) {
+    return { ok: false, rootPath: root, message: '文件内容无效' }
+  }
+  try {
+    const rootStat = await fs.stat(root)
+    if (!rootStat.isDirectory()) return { ok: false, rootPath: root, message: '当前项目路径不是文件夹' }
+    for (const name of AGENT_PROJECT_DOCUMENT_NAMES) {
+      const content = typeof rawFiles[name] === 'string' ? rawFiles[name] : ''
+      if (content.length > AGENT_PROJECT_DOCUMENT_MAX_CHARS) {
+        return { ok: false, rootPath: root, message: `${name} 内容超过长度限制` }
+      }
+      await fs.writeFile(path.join(root, name), content, 'utf8')
+    }
+    return readAgentProjectDocuments(root)
+  } catch (error) {
+    return { ok: false, rootPath: root, message: formatProjectPathError(error) }
+  }
+}
+
+async function readProjectContext(rootPath: string): Promise<ProjectContextResult> {
+  const root = resolveProjectPath(rootPath)
+  try {
+    const rootStat = await fs.stat(root)
+    if (!rootStat.isDirectory()) return { ok: false, rootPath: root, message: '当前项目路径不是文件夹' }
+
+    const contextPath = path.join(root, PROJECT_CONTEXT_DIR_NAME)
+    const contextStat = await lstatIfExists(contextPath)
+    if (!contextStat) {
+      return {
+        ok: true,
+        rootPath: root,
+        contextPath,
+        instructions: '',
+        entries: [],
+      }
+    }
+    if (contextStat.isSymbolicLink() || !contextStat.isDirectory()) {
+      return {
+        ok: false,
+        rootPath: root,
+        message: `${PROJECT_CONTEXT_DIR_NAME} 必须是当前项目内的真实文件夹`,
+      }
+    }
+
+    return {
+      ok: true,
+      rootPath: root,
+      contextPath,
+      instructions: await readProjectContextInstructions(contextPath),
+      entries: await readProjectContextEntries(root, contextPath),
+    }
+  } catch (error) {
+    return { ok: false, rootPath: root, message: formatProjectPathError(error) }
+  }
+}
+
+async function saveProjectContextInstructions(rootPath: string, rawInstructions: unknown): Promise<ProjectContextResult> {
+  const root = resolveProjectPath(rootPath)
+  if (typeof rawInstructions !== 'string') {
+    return { ok: false, rootPath: root, message: '上下文说明无效' }
+  }
+  if (rawInstructions.length > PROJECT_CONTEXT_INSTRUCTIONS_MAX_CHARS) {
+    return { ok: false, rootPath: root, message: `${PROJECT_CONTEXT_INSTRUCTIONS_FILE} 内容超过长度限制` }
+  }
+
+  try {
+    const contextPath = await ensureProjectContextDirectory(root)
+    await fs.writeFile(path.join(contextPath, PROJECT_CONTEXT_INSTRUCTIONS_FILE), rawInstructions, 'utf8')
+    return readProjectContext(root)
+  } catch (error) {
+    return { ok: false, rootPath: root, message: formatProjectPathError(error) }
+  }
+}
+
+async function pickAndAddProjectContextEntries(rootPath: string, rawMode: unknown): Promise<ProjectContextAddResult> {
+  const root = resolveProjectPath(rootPath)
+  const mode = normalizeProjectContextAddMode(rawMode)
+  const parent = BrowserWindow.getFocusedWindow() ?? win
+  if (!parent) return { ok: false, rootPath: root, message: '当前窗口不可用' }
+
+  const result = await dialog.showOpenDialog(parent, {
+    properties: ['openFile', 'openDirectory', 'multiSelections'],
+    title: mode === 'reference' ? '引用原位置到上下文' : '复制到项目上下文',
+  })
+  if (result.canceled || result.filePaths.length === 0) {
+    return projectContextAddResultFromContext(await readProjectContext(root), [], [])
+  }
+
+  return addProjectContextEntries(root, result.filePaths, mode)
+}
+
+async function addProjectContextEntries(
+  rootPath: string,
+  sourcePaths: string[],
+  mode: ProjectContextAddMode,
+): Promise<ProjectContextAddResult> {
+  const root = resolveProjectPath(rootPath)
+  const addedPaths = new Set<string>()
+  const skipped: ProjectContextSkippedEntry[] = []
+
+  try {
+    const contextPath = await ensureProjectContextDirectory(root)
+    const [rootRealPath, contextRealPath] = await Promise.all([fs.realpath(root), fs.realpath(contextPath)])
+
+    for (const rawSourcePath of sourcePaths) {
+      const sourcePath = resolveProjectPath(rawSourcePath)
+      const sourceName = path.basename(sourcePath) || sourcePath
+      try {
+        const sourceStat = await fs.stat(sourcePath)
+        if (!sourceStat.isFile() && !sourceStat.isDirectory()) {
+          skipped.push({ name: sourceName, path: sourcePath, reason: '仅支持文件或文件夹' })
+          continue
+        }
+
+        const sourceRealPath = await fs.realpath(sourcePath)
+        if (isSameOrInsidePath(contextRealPath, sourceRealPath)) {
+          skipped.push({ name: sourceName, path: sourcePath, reason: '已经在 Context 文件夹中' })
+          continue
+        }
+        if (sourceStat.isDirectory() && isSameOrInsidePath(sourceRealPath, rootRealPath)) {
+          skipped.push({ name: sourceName, path: sourcePath, reason: '不能添加当前项目或它的上级目录' })
+          continue
+        }
+        if (sourceName === PROJECT_CONTEXT_INSTRUCTIONS_FILE) {
+          skipped.push({ name: sourceName, path: sourcePath, reason: `${PROJECT_CONTEXT_INSTRUCTIONS_FILE} 用于保存上下文说明` })
+          continue
+        }
+
+        const destinationPath = await nextAvailableContextEntryPath(contextPath, sourceName)
+        if (mode === 'reference') {
+          await fs.symlink(sourceRealPath, destinationPath, projectContextSymlinkType(sourceStat))
+        } else if (sourceStat.isDirectory()) {
+          await fs.cp(sourceRealPath, destinationPath, {
+            recursive: true,
+            force: false,
+            errorOnExist: true,
+            dereference: true,
+          })
+        } else {
+          await fs.copyFile(sourceRealPath, destinationPath)
+        }
+        addedPaths.add(path.resolve(destinationPath))
+      } catch (error) {
+        skipped.push({
+          name: sourceName,
+          path: sourcePath,
+          reason: error instanceof Error ? error.message : '添加失败',
+        })
+      }
+    }
+
+    const context = await readProjectContext(root)
+    return projectContextAddResultFromContext(
+      context,
+      context.ok ? context.entries.filter((entry) => addedPaths.has(path.resolve(entry.path))) : [],
+      skipped,
+    )
+  } catch (error) {
+    return { ok: false, rootPath: root, message: formatProjectPathError(error) }
+  }
+}
+
+async function removeProjectContextEntry(rootPath: string, rawRelativePath: unknown): Promise<ProjectContextResult> {
+  const root = resolveProjectPath(rootPath)
+  if (typeof rawRelativePath !== 'string') {
+    return { ok: false, rootPath: root, message: '上下文路径无效' }
+  }
+
+  try {
+    const contextPath = await ensureProjectContextDirectory(root)
+    const relativePath = normalizeRelativePath(rawRelativePath)
+    const prefix = `${PROJECT_CONTEXT_DIR_NAME}/`
+    const entryName = relativePath.startsWith(prefix) ? relativePath.slice(prefix.length) : relativePath
+    if (
+      !entryName ||
+      entryName === PROJECT_CONTEXT_INSTRUCTIONS_FILE ||
+      entryName.split('/').some((segment) => !segment || segment === '..')
+    ) {
+      return { ok: false, rootPath: root, message: '上下文路径无效' }
+    }
+    if (entryName.includes('/')) {
+      return { ok: false, rootPath: root, message: '只能移除 Context 下的一级文件或文件夹' }
+    }
+
+    const targetPath = path.join(contextPath, entryName)
+    const contextRealPath = await fs.realpath(contextPath)
+    const targetParent = path.dirname(path.resolve(targetPath))
+    if (!isSameOrInsidePath(contextRealPath, targetParent)) {
+      return { ok: false, rootPath: root, message: '上下文路径无效' }
+    }
+
+    await fs.rm(targetPath, { recursive: true, force: true })
+    return readProjectContext(root)
+  } catch (error) {
+    return { ok: false, rootPath: root, message: formatProjectPathError(error) }
+  }
+}
+
+async function ensureProjectContextDirectory(rootPath: string): Promise<string> {
+  const root = resolveProjectPath(rootPath)
+  const rootStat = await fs.stat(root)
+  if (!rootStat.isDirectory()) throw new Error('当前项目路径不是文件夹')
+
+  const contextPath = path.join(root, PROJECT_CONTEXT_DIR_NAME)
+  const contextStat = await lstatIfExists(contextPath)
+  if (!contextStat) {
+    await fs.mkdir(contextPath, { recursive: true })
+    return contextPath
+  }
+  if (contextStat.isSymbolicLink() || !contextStat.isDirectory()) {
+    throw new Error(`${PROJECT_CONTEXT_DIR_NAME} 必须是当前项目内的真实文件夹`)
+  }
+  return contextPath
+}
+
+async function readProjectContextInstructions(contextPath: string): Promise<string> {
+  const filePath = path.join(contextPath, PROJECT_CONTEXT_INSTRUCTIONS_FILE)
+  try {
+    const stat = await fs.stat(filePath)
+    if (!stat.isFile()) return ''
+    if (stat.size > PROJECT_CONTEXT_INSTRUCTIONS_MAX_CHARS * 4) return ''
+    const content = await fs.readFile(filePath, 'utf8')
+    return content.slice(0, PROJECT_CONTEXT_INSTRUCTIONS_MAX_CHARS)
+  } catch (error) {
+    if (isNodeError(error) && error.code === 'ENOENT') return ''
+    throw error
+  }
+}
+
+async function readProjectContextEntries(rootPath: string, contextPath: string): Promise<ProjectContextEntry[]> {
+  const entries = await fs.readdir(contextPath, { withFileTypes: true })
+  const items = await Promise.all(
+    entries
+      .filter((entry) => entry.name !== PROJECT_CONTEXT_INSTRUCTIONS_FILE)
+      .map((entry) => createProjectContextEntry(rootPath, contextPath, entry.name)),
+  )
+  return items.sort(
+    (a, b) =>
+      Number(b.kind === 'directory') - Number(a.kind === 'directory') ||
+      a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }),
+  )
+}
+
+async function createProjectContextEntry(
+  rootPath: string,
+  contextPath: string,
+  name: string,
+): Promise<ProjectContextEntry> {
+  const entryPath = path.join(contextPath, name)
+  const lstat = await fs.lstat(entryPath)
+  const relativePath = normalizeRelativePath(path.relative(rootPath, entryPath))
+
+  if (!lstat.isSymbolicLink()) {
+    return {
+      name,
+      path: entryPath,
+      relativePath,
+      mode: 'local',
+      kind: projectContextEntryKind(lstat),
+      size: lstat.isFile() ? lstat.size : undefined,
+      updatedAt: lstat.mtimeMs,
+    }
+  }
+
+  const rawTarget = await fs.readlink(entryPath).catch(() => '')
+  const targetPath = rawTarget ? path.resolve(contextPath, rawTarget) : undefined
+  const targetStat = await fs.stat(entryPath).catch(() => null)
+  return {
+    name,
+    path: entryPath,
+    relativePath,
+    mode: 'reference',
+    kind: targetStat ? projectContextEntryKind(targetStat) : 'other',
+    targetPath,
+    targetMissing: !targetStat,
+    size: targetStat?.isFile() ? targetStat.size : undefined,
+    updatedAt: targetStat?.mtimeMs ?? lstat.mtimeMs,
+  }
+}
+
+async function lstatIfExists(targetPath: string): Promise<import('node:fs').Stats | null> {
+  try {
+    return await fs.lstat(targetPath)
+  } catch (error) {
+    if (isNodeError(error) && error.code === 'ENOENT') return null
+    throw error
+  }
+}
+
+function projectContextAddResultFromContext(
+  context: ProjectContextResult,
+  added: ProjectContextEntry[],
+  skipped: ProjectContextSkippedEntry[],
+): ProjectContextAddResult {
+  if (!context.ok) return context
+  return {
+    ...context,
+    added,
+    skipped,
+  }
+}
+
+async function nextAvailableContextEntryPath(contextPath: string, preferredName: string): Promise<string> {
+  const parsed = path.parse(preferredName)
+  const baseName = parsed.name || preferredName
+  const extension = parsed.ext
+  let candidate = path.join(contextPath, preferredName)
+  let index = 2
+  while (await lstatIfExists(candidate)) {
+    candidate = path.join(contextPath, `${baseName} ${index}${extension}`)
+    index += 1
+  }
+  return candidate
+}
+
+function normalizeProjectContextAddMode(value: unknown): ProjectContextAddMode {
+  return value === 'copy' ? 'copy' : 'reference'
+}
+
+function projectContextSymlinkType(stat: import('node:fs').Stats): 'file' | 'dir' | 'junction' {
+  if (!stat.isDirectory()) return 'file'
+  return process.platform === 'win32' ? 'junction' : 'dir'
+}
+
+function projectContextEntryKind(stat: import('node:fs').Stats): ProjectContextEntry['kind'] {
+  if (stat.isDirectory()) return 'directory'
+  if (stat.isFile()) return 'file'
+  return 'other'
+}
+
+function isSameOrInsidePath(parentPath: string, childPath: string): boolean {
+  const relativePath = path.relative(parentPath, childPath)
+  return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath))
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return typeof error === 'object' && error !== null && 'code' in error
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

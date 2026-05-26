@@ -57,6 +57,8 @@ interface DesktopApi {
   stopSpeechRecognition(): Promise<SpeechRecognitionCommandResult>
   cancelSpeechRecognition(): Promise<SpeechRecognitionCommandResult>
   onSpeechRecognitionEvent(handler: (event: SpeechRecognitionEvent) => void): () => void
+  readAgentProjectDocuments(rootPath: string): Promise<AgentProjectDocumentsResult>
+  saveAgentProjectDocuments(rootPath: string, files: Record<string, string>): Promise<AgentProjectDocumentsResult>
 }
 
 type SpeechRecognitionStatus =

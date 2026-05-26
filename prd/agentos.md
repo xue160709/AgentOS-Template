@@ -75,7 +75,7 @@ flowchart TD
 - 会话、Home Plugin、任务卡片和 Agent Mode 都必须归属某个项目。
 - React 入口只负责挂载 `AppShell`、注入初始 i18n Context、写入窗口 chrome dataset 和安装安全区/外链拦截等全局副作用。
 - 侧边栏底部全局设置入口使用与搜索入口一致的图标加文字按钮；项目首页右上角 Agent Mode 未开启时显示 Switch，开启后显示设置按钮并打开 Agent 模式设置模态。
-- Agent 模式设置模态只承载项目首页运行态设置（常规、卡片顺序、Skills 模型覆盖）；全局设置页仍承载模型 Provider、Project Skills 开关、Agent Mode USER/IDENTITY、更新和开发者设置。
+- Agent 模式设置模态只承载项目首页运行态设置（项目默认模型与 Agent 文档、卡片顺序、Skills 模型覆盖、常规）；全局设置页仍承载模型 Provider、Project Skills 开关、Agent Mode USER/IDENTITY、更新和开发者设置。
 - 全局设置页和 Agent 模式设置模态共用设置界面视觉规范：设置项导航与内容区分离，内容复用分区、分组行、说明文案、焦点态和确认弹窗样式。
 - 每个聊天线程可以独立保存当前使用的模型选择；composer 模型按钮显示活动线程的模型，线程没有有效模型时回退全局 Provider 设置中的当前可用模型。
 - Project Skill 从项目首页或侧栏运行时会创建 `skill-run` 线程，并优先使用 Agent 模式 Skills 面板中按 `skill.path` 保存的模型覆盖；Skill 或模型配置失效时回退 composer/default 模型。

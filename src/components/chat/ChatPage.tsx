@@ -150,6 +150,8 @@ type ChatPageProps = {
   hidden: boolean
   activeProject: WorkspaceProject
   activeThread: WorkspaceThread | undefined
+  projectDefaultModelPick?: ChatModelPick
+  projectHomeModelPick?: ChatModelPick
   /** 按 threadId 查找持久化 sessionId（重启后恢复 SDK）/ Threads list for resolving persisted session ids */
   threads: WorkspaceThread[]
   projects: WorkspaceProject[]
@@ -162,6 +164,8 @@ type ChatPageProps = {
   onThreadChatStateChange: (threadId: string, update: ChatState | ((prev: ChatState) => ChatState)) => void
   onThreadPromptSubmit: (threadId: string, prompt: string) => void
   onThreadRunStateChange: (threadId: string, state: ThreadRunState | null) => void
+  onThreadCompletionStateChange: (threadId: string, completedAt: number | null) => void
+  onProjectHomeModelPickChange: (projectId: string, pick: ChatModelPick | undefined) => void
   agentMode: WorkspaceAgentModeState
   agentModeEnabled: boolean
   todoEnabled: boolean
@@ -244,6 +248,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     hidden,
     activeProject,
     activeThread,
+    projectDefaultModelPick,
+    projectHomeModelPick,
     threads,
     projects,
     projectOrderIds,
@@ -255,6 +261,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     onThreadChatStateChange,
     onThreadPromptSubmit,
     onThreadRunStateChange,
+    onThreadCompletionStateChange,
+    onProjectHomeModelPickChange,
     agentMode,
     agentModeEnabled,
     todoEnabled,
@@ -333,6 +341,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     width: number
     maxHeight: number
   } | null>(null)
+  const newThreadModelPick = projectHomeModelPick ?? projectDefaultModelPick
   const scrollIntentRef = useRef<'none' | 'force-bottom'>('none')
   /** 取消 / Esc 关闭编辑时抑制贴底，避免 ResizeObserver 误判 isNearBottom 把视口滚到底 */
   const suppressTranscriptResizeStickRef = useRef(false)
@@ -595,7 +604,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   useEffect(() => {
     if (!claudeSettingsSnapshot) return
     const settings = claudeSettingsSnapshot.settings
-    const effectivePick = resolveEffectiveModelPick(settings, activeThread?.chatState.modelPick)
+    const requestedPick = activeThread?.id ? activeThread.chatState.modelPick : newThreadModelPick
+    const effectivePick = resolveEffectiveModelPick(settings, requestedPick)
     const row = modelRowForPick(modelMenuRows, effectivePick)
     const displayModel = row?.anthropicModelId ?? displayModelForPick(settings, effectivePick, t('chat.modelFallback'))
     const supportsImages = supportsImagesForPick(settings, effectivePick, false)
@@ -606,7 +616,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     if (!isRunningRef.current) {
       onStatusChange(compactModelName(displayModel, t))
     }
-  }, [activeThread?.chatState.modelPick, activeThread?.id, claudeSettingsSnapshot, modelMenuRows, onStatusChange, t])
+  }, [activeThread?.chatState.modelPick, activeThread?.id, claudeSettingsSnapshot, modelMenuRows, newThreadModelPick, onStatusChange, t])
 
   useEffect(() => {
     setHomeComposerMode('normal')
@@ -737,18 +747,13 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       return
     }
 
-    if (!window.claudeChat) return
-    try {
-      const snapshot = await window.claudeChat.setActiveChatPick({
-        providerId: row.providerId,
-        anthropicModel: row.useOverlayPick ? row.anthropicModelId : undefined,
-      })
-      window.dispatchEvent(new CustomEvent(CLAUDE_AGENT_SETTINGS_CHANGED_EVENT, { detail: snapshot }))
-      setModelPickerOpen(false)
-    } catch {
-      /* 设置写入失败时静默 / Ignore settings write failures */
-    }
-  }, [activeThread?.id, setThreadChatState])
+    onProjectHomeModelPickChange(activeProject.id, pick)
+    currentModelPickRef.current = pick
+    setModelMenuSelectionKey(row.pickKey)
+    setGlobalDisplayModel(pick.anthropicModel)
+    setActiveModelSupportsImages(row.supportsImages)
+    setModelPickerOpen(false)
+  }, [activeProject.id, activeThread?.id, onProjectHomeModelPickChange, setThreadChatState])
 
   useLayoutEffect(() => {
     if (!modelPickerOpen || !modelPopoverAnchorRef.current) {
@@ -1082,6 +1087,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
 
   const markRequestRunning = useCallback(
     (threadId: string, requestId: string, status: ThreadRunState['status'] = 'running') => {
+      onThreadCompletionStateChange(threadId, null)
       requestThreadIdsRef.current.set(requestId, threadId)
       const current = threadRunStatesRef.current[threadId]
       if (current && current.requestId !== requestId && !isPendingRequestId(current.requestId)) return
@@ -1090,11 +1096,11 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       requestStartedAtRef.current.set(requestId, startedAt)
       setThreadRunState(threadId, { requestId, status, startedAt, updatedAt: Date.now() })
     },
-    [setThreadRunState],
+    [onThreadCompletionStateChange, setThreadRunState],
   )
 
   const finishRequest = useCallback(
-    (requestId: string, statusText: string, notify = false, clearPendingRun = false) => {
+    (requestId: string, statusText: string, notify = false, clearPendingRun = false, markCompleted = false) => {
       let threadId = requestThreadIdsRef.current.get(requestId)
       if (!threadId) {
         for (const [candidateThreadId, runState] of Object.entries(threadRunStatesRef.current)) {
@@ -1117,6 +1123,9 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
         if (!runState || runState.requestId === requestId || (clearPendingRun && isPendingRequestId(runState.requestId))) {
           setThreadRunState(threadId, null)
         }
+        if (markCompleted) {
+          onThreadCompletionStateChange(threadId, activeThreadIdRef.current === threadId ? null : Date.now())
+        }
       }
 
       if (!threadId || activeThreadIdRef.current === threadId) {
@@ -1124,7 +1133,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       }
       if (notify) playAgentDoneSound()
     },
-    [onStatusChange, setThreadRunState],
+    [onStatusChange, onThreadCompletionStateChange, setThreadRunState],
   )
 
   // --- Map every `ClaudeChatEvent` into `ChatState.items` / 将每条 SDK 事件折叠进对话时间线 items ---
@@ -1433,7 +1442,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
             return { ...prev, sessionId: event.sessionId, items }
           })
         })
-        finishRequest(event.requestId, compactModelName(globalDisplayModelRef.current, t), true, !knownRequestBeforeEvent)
+        finishRequest(event.requestId, compactModelName(globalDisplayModelRef.current, t), true, !knownRequestBeforeEvent, true)
         return
       }
 
@@ -1568,10 +1577,12 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       return
     }
     let submittingThreadId = target?.threadId ?? activeThreadIdRef.current
+    let createdThreadModelPick: ChatModelPick | undefined
     if (!submittingThreadId) {
       const createdThreadId = onNewThread(projectForSubmit.id)
       if (!createdThreadId) return
       submittingThreadId = createdThreadId
+      createdThreadModelPick = newThreadModelPick
       activeThreadIdRef.current = createdThreadId
       isFirstTranscriptLayoutRef.current = true
       scrollIntentRef.current = 'force-bottom'
@@ -1584,7 +1595,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     const modelPickForSubmit =
       target?.modelPick ??
       (settings
-        ? resolveEffectiveModelPick(settings, submittingThread?.chatState.modelPick ?? currentModelPickRef.current)
+        ? resolveEffectiveModelPick(settings, submittingThread?.chatState.modelPick ?? createdThreadModelPick ?? currentModelPickRef.current)
         : currentModelPickRef.current)
     const modelPickChanged = !sameModelPick(submittingThread?.chatState.modelPick, modelPickForSubmit)
     const resumeSessionId = target?.resetSession || modelPickChanged
@@ -1827,11 +1838,12 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       startNewThread: async () => {
         const threadId = onNewThread()
         if (threadId) activeThreadIdRef.current = threadId
-        if (threadId && currentModelPickRef.current) {
+        const modelPick = newThreadModelPick ?? projectDefaultModelPick ?? currentModelPickRef.current
+        if (threadId && modelPick) {
           setThreadChatState(threadId, (prev) => ({
             ...prev,
-            model: currentModelPickRef.current?.anthropicModel ?? prev.model,
-            modelPick: currentModelPickRef.current,
+            model: modelPick.anthropicModel,
+            modelPick,
           }))
         }
         scrollIntentRef.current = 'force-bottom'
@@ -1862,7 +1874,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
         activeThreadIdRef.current = threadId
         isFirstTranscriptLayoutRef.current = true
         scrollIntentRef.current = 'force-bottom'
-        const modelPick = currentModelPickRef.current
+        const modelPick = newThreadModelPick ?? projectDefaultModelPick ?? currentModelPickRef.current
         if (modelPick) {
           setThreadChatState(threadId, (prev) => ({ ...prev, model: modelPick.anthropicModel, modelPick }))
         }
@@ -1897,7 +1909,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
         return true
       },
     }),
-    [onNewThread, onStatusChange, projects, revealMessage, setThreadChatState, t],
+    [newThreadModelPick, onNewThread, onStatusChange, projectDefaultModelPick, projects, revealMessage, setThreadChatState, t],
   )
 
   // --- Cancel streaming + answer permission / tool questions from modal / 停止生成；在弹窗中应答权限或工具提问 ---

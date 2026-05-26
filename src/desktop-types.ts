@@ -88,6 +88,7 @@ export type AgentModeProjectSettings = {
   todoEnabled: boolean
   user: string
   identity: string
+  projectModelPick?: ChatModelPick
   skillModelOverrides: Record<string, ChatModelPick>
 }
 
@@ -113,6 +114,74 @@ export type AgentModeSettingsResult =
       ok: true
       rootPath: string
       settings: AgentModeProjectSettings
+    }
+  | {
+      ok: false
+      rootPath: string
+      message: string
+    }
+
+export type AgentProjectDocumentName = 'AGENTS.md' | 'SOUL.md' | 'GOAL.md'
+
+export type AgentProjectDocumentsResult =
+  | {
+      ok: true
+      rootPath: string
+      files: Record<AgentProjectDocumentName, string>
+    }
+  | {
+      ok: false
+      rootPath: string
+      message: string
+    }
+
+export type ProjectContextEntryMode = 'reference' | 'local'
+
+export type ProjectContextEntryKind = 'file' | 'directory' | 'other'
+
+export type ProjectContextEntry = {
+  name: string
+  path: string
+  relativePath: string
+  mode: ProjectContextEntryMode
+  kind: ProjectContextEntryKind
+  targetPath?: string
+  targetMissing?: boolean
+  size?: number
+  updatedAt?: number
+}
+
+export type ProjectContextSkippedEntry = {
+  name: string
+  path: string
+  reason: string
+}
+
+export type ProjectContextAddMode = 'reference' | 'copy'
+
+export type ProjectContextResult =
+  | {
+      ok: true
+      rootPath: string
+      contextPath: string
+      instructions: string
+      entries: ProjectContextEntry[]
+    }
+  | {
+      ok: false
+      rootPath: string
+      message: string
+    }
+
+export type ProjectContextAddResult =
+  | {
+      ok: true
+      rootPath: string
+      contextPath: string
+      instructions: string
+      entries: ProjectContextEntry[]
+      added: ProjectContextEntry[]
+      skipped: ProjectContextSkippedEntry[]
     }
   | {
       ok: false

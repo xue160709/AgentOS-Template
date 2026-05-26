@@ -25,6 +25,7 @@ import type {
   ProjectSkillListState,
   SelectedProjectSkill,
   SettingsCategoryId,
+  ThreadCompletionState,
   ThreadRunState,
   WorkspaceProject,
   WorkspaceThread,
@@ -56,6 +57,7 @@ type AppShellSidebarProps = {
   projectOrderIds: readonly string[]
   threads: WorkspaceThread[]
   threadRunStates: Record<string, ThreadRunState>
+  threadCompletionStates: Record<string, ThreadCompletionState>
   activeProjectId: string
   activeThreadId: string
   collapsedProjectIds: readonly string[]
@@ -95,6 +97,7 @@ export function AppShellSidebar({
   projectOrderIds,
   threads,
   threadRunStates,
+  threadCompletionStates,
   activeProjectId,
   activeThreadId,
   collapsedProjectIds,
@@ -704,6 +707,11 @@ export function AppShellSidebar({
                                             aria-describedby={tipActive ? 'app-sidebar-skill-tip' : undefined}
                                             onClick={() => {
                                               setConfirmingArchiveThreadId(null)
+                                              if (skillActive) {
+                                                setSkillTip(null)
+                                                onRunProjectSkill(project.id, skill)
+                                                return
+                                              }
                                               onSelectProjectSkill(project.id, {
                                                 title: skill.title,
                                                 description: skill.description,
@@ -787,6 +795,7 @@ export function AppShellSidebar({
                                 const isSkillRunThread = thread.purpose === 'skill-run'
                                 const runState = threadRunStates[thread.id]
                                 const isThreadRunning = Boolean(runState)
+                                const showCompletionDot = Boolean(threadCompletionStates[thread.id] && !isThreadActive && !runState)
                                 const timeLabel = formatThreadTime(thread.updatedAt, locale, t)
                                 return (
                                   <div
@@ -848,6 +857,12 @@ export function AppShellSidebar({
                                               ? t('sidebar.threadWaiting')
                                               : t('sidebar.threadRunning')
                                           }
+                                        />
+                                      ) : showCompletionDot ? (
+                                        <span
+                                          className="app-thread-completed-dot"
+                                          title={t('sidebar.threadCompleted')}
+                                          aria-label={t('sidebar.threadCompleted')}
                                         />
                                       ) : (
                                         <span className="app-thread-time" aria-label={t('sidebar.lastChatAria', { time: timeLabel })}>

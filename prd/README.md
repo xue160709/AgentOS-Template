@@ -2,7 +2,7 @@
 
 本目录按功能模块维护 AgentOS 的 PRD。每个功能文档都包含 `功能概述`、`核心功能列表`、`数据结构`、`业务逻辑`、`相关代码文件`、`关联PRD文档` 六个标准章节。
 
-生成依据：2026-05-21 对当前仓库的 `src/`、`electron/`、`.agents/`、构建配置、README 与发布配置进行代码阅读后整理；2026-05-22 继续补充入口、i18n、安全区、Generative UI、自动更新轮询和 macOS Apple Speech 语音输入细节；2026-05-26 同步线程级模型选择、Project Skill 模型覆盖、Agent 设置 Skills 面板和相关持久化字段。
+生成依据：2026-05-21 对当前仓库的 `src/`、`electron/`、`.agents/`、构建配置、README 与发布配置进行代码阅读后整理；2026-05-22 继续补充入口、i18n、安全区、Generative UI、自动更新轮询和 macOS Apple Speech 语音输入细节；2026-05-26 同步线程级模型选择、项目默认模型、Project Skill 模型覆盖、Agent 设置项目/Skills 面板和相关持久化字段。
 
 ## 文档清单
 
@@ -55,7 +55,7 @@ flowchart TD
 - 改动项目/线程/侧栏/工作台入口时，同步更新 [workspace-session.md](./workspace-session.md)。
 - 改动聊天提交、SDK 事件、权限、工具调用、diff、回滚或 composer 语音输入时，同步更新 [chat-agent-runtime.md](./chat-agent-runtime.md)。
 - 改动文件树、预览、附件或项目路径安全时，同步更新 [file-context.md](./file-context.md)。
-- 改动 `AGENT.md`、`SOUL.md`、`MEMORY.md`、`TODO.md` 协议时，同步更新 [agent-mode.md](./agent-mode.md)。
+- 改动 `AGENT.md`/`AGENTS.md`、`SOUL.md`、`GOAL.md`、`MEMORY.md`、`TODO.md` 协议时，同步更新 [agent-mode.md](./agent-mode.md)。
 - 改动 `.agents/home-plugins`、A2UI 卡片或卡片布局时，同步更新 [home-plugin.md](./home-plugin.md)。
 - 改动任务卡片、定时运行或 Skills 编排时，同步更新 [task-home-plugin.md](./task-home-plugin.md)。
 - 改动 Provider、模型、API Key、Base URL 或连接测试时，同步更新 [model-settings.md](./model-settings.md)。
