@@ -94,6 +94,14 @@ flowchart TD
 - 卡片布局同时写入项目内 `order.json`、各卡片 `manifest.json` 的 `preferredSize/order/updatedAt`，并在渲染层 localStorage 保存 Skill 卡片混排顺序。
 - 项目首页卡片自定义依赖 `/a2ui-project-home-panel` Skill 名称和定制提示词；仓库当前构建配置引用该内置 Skill 目录，但目录本身未随当前代码树出现，`test:home-plugin` 通过 `--allow-missing` 容忍缺失。
 
+模态蒙层设计规范：
+
+- 项目首页内的任务卡片创建、卡片排序等模态窗口统一使用搜索弹窗的蒙层风格。
+- 蒙层定位基于右侧工作区居中，不把左侧侧边栏计入水平居中范围。
+- 蒙层背景使用主表面色与透明混合，不叠加黑色半透明遮罩。
+- 支持 `backdrop-filter` 时启用 10px 高斯模糊；不支持时仅保留透明主表面色兜底。
+- 蒙层只负责弱化后景，内容面板自身仍使用明确边框、主表面背景和阴影来建立层级。
+
 ## 相关代码文件
 
 ### 核心页面组件

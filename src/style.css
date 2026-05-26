@@ -4779,12 +4779,22 @@ button.app-file-tree-row {
 .project-home-modal-backdrop {
   position: fixed;
   z-index: 10050;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: var(--sidebar-current-width, 0px);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: calc(var(--spacing) * 4);
-  background: color-mix(in oklab, var(--color-token-foreground) 22%, transparent);
+  background: color-mix(in oklab, var(--color-token-main-surface-primary) 42%, transparent);
+}
+
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .project-home-modal-backdrop {
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+  }
 }
 
 .project-home-modal {

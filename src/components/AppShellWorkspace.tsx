@@ -307,17 +307,6 @@ export function AppShellWorkspace({
             {showAgentModeToolbar ? <AgentModeMenu agent={agentMode} /> : null}
             <button
               type="button"
-              className={`btn btn-toolbar${searchOpen ? ' is-active' : ''}`}
-              id="btn-open-search"
-              title={t('search.open')}
-              aria-label={t('search.open')}
-              aria-expanded={searchOpen}
-              onClick={() => openSearch('all')}
-            >
-              <IconInline name="search" />
-            </button>
-            <button
-              type="button"
               className={`btn btn-toolbar${folderToolbarActive ? ' is-active' : ''}`}
               id="btn-toggle-file-panel"
               title={t('workspace.fileTree')}
