@@ -32,6 +32,8 @@ export const AppFileTreePane = forwardRef<AppFileTreePaneHandle, AppFileTreePane
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => new Set())
   const loadRequestRef = useRef(0)
   const lastLoadedPathRef = useRef<string | null>(null)
+  const watchedRootPathRef = useRef<string | null>(null)
+  const autoRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     setResult(null)
@@ -39,10 +41,11 @@ export const AppFileTreePane = forwardRef<AppFileTreePaneHandle, AppFileTreePane
     lastLoadedPathRef.current = null
   }, [project.path])
 
-  const loadProjectFiles = useCallback(async () => {
+  const loadProjectFiles = useCallback(async (options?: { showLoading?: boolean }) => {
     const requestId = loadRequestRef.current + 1
     loadRequestRef.current = requestId
-    setLoading(true)
+    const showLoading = options?.showLoading !== false
+    if (showLoading) setLoading(true)
 
     const listProjectFiles = window.desktop?.listProjectFiles
     if (!listProjectFiles) {
@@ -59,7 +62,6 @@ export const AppFileTreePane = forwardRef<AppFileTreePaneHandle, AppFileTreePane
       const nextResult = await listProjectFiles(project.path)
       if (loadRequestRef.current !== requestId) return
       setResult(nextResult)
-      setExpandedPaths(new Set())
     } catch (error) {
       if (loadRequestRef.current !== requestId) return
       setResult({
@@ -79,6 +81,49 @@ export const AppFileTreePane = forwardRef<AppFileTreePaneHandle, AppFileTreePane
     if (!isVisible) return
     if (lastLoadedPathRef.current === project.path) return
     void loadProjectFiles()
+  }, [isVisible, project.path, loadProjectFiles])
+
+  useEffect(() => {
+    if (!isVisible) return
+    const watchProjectFiles = window.desktop?.watchProjectFiles
+    const unwatchProjectFiles = window.desktop?.unwatchProjectFiles
+    const onProjectFilesChanged = window.desktop?.onProjectFilesChanged
+    if (!watchProjectFiles || !unwatchProjectFiles || !onProjectFilesChanged) return
+
+    let disposed = false
+    const scheduleSilentRefresh = () => {
+      if (autoRefreshTimerRef.current) clearTimeout(autoRefreshTimerRef.current)
+      autoRefreshTimerRef.current = setTimeout(() => {
+        autoRefreshTimerRef.current = null
+        void loadProjectFiles({ showLoading: false })
+      }, 250)
+    }
+
+    const unsubscribe = onProjectFilesChanged((event) => {
+      const watchedRootPath = watchedRootPathRef.current
+      if (event.rootPath !== project.path && event.rootPath !== watchedRootPath) return
+      scheduleSilentRefresh()
+    })
+
+    void watchProjectFiles(project.path).then((watchResult) => {
+      if (disposed) {
+        if (watchResult.ok) void unwatchProjectFiles(watchResult.rootPath)
+        return
+      }
+      watchedRootPathRef.current = watchResult.ok ? watchResult.rootPath : null
+    })
+
+    return () => {
+      disposed = true
+      unsubscribe()
+      if (autoRefreshTimerRef.current) {
+        clearTimeout(autoRefreshTimerRef.current)
+        autoRefreshTimerRef.current = null
+      }
+      const watchedRootPath = watchedRootPathRef.current
+      watchedRootPathRef.current = null
+      void unwatchProjectFiles(watchedRootPath ?? project.path)
+    }
   }, [isVisible, project.path, loadProjectFiles])
 
   useImperativeHandle(

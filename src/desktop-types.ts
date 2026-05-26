@@ -21,6 +21,24 @@ export type DesktopPreferences = {
 /** 托盘菜单动作（与 IPC 载荷一致）/ Tray menu action matching IPC payloads */
 export type TrayMenuAction = 'new-thread' | 'open-project'
 
+/** Project file watcher notification; renderer decides whether to reload visible file trees. */
+export type ProjectFilesChangedEvent = {
+  rootPath: string
+  relativePath?: string
+}
+
+/** Result returned when the renderer subscribes to project file changes. */
+export type ProjectFileWatchResult =
+  | {
+      ok: true
+      rootPath: string
+    }
+  | {
+      ok: false
+      rootPath: string
+      message: string
+    }
+
 /** Apple Speech helper lifecycle exposed to the renderer / 暴露给渲染层的 Apple 语音状态 */
 export type SpeechRecognitionStatus =
   | 'unsupported'

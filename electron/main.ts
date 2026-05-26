@@ -5,6 +5,7 @@
 
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, shell, Tray } from 'electron'
 import { fileURLToPath } from 'node:url'
+import { watch, type FSWatcher } from 'node:fs'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import zh from '../src/locales/zh.json'
@@ -84,6 +85,7 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 
 const APP_NAME = 'AgentOS'
 const TRAY_ACTION_CHANNEL = 'desktop:tray-action'
 const TASK_HOME_PLUGIN_EVENT_CHANNEL = 'desktop:task-home-plugin-event'
+const PROJECT_FILES_CHANGED_CHANNEL = 'desktop:project-files-changed'
 
 const TRAY_LOCALE_BUNDLE = { zh, en } as const
 type TrayLocale = keyof typeof TRAY_LOCALE_BUNDLE
@@ -102,6 +104,7 @@ let taskHomePluginManager: TaskHomePluginManager | null = null
 let speechRecognitionService: MacSpeechRecognitionService | null = null
 let chatWorkspaceOperationChain: Promise<void> = Promise.resolve()
 let claudeSettingsOperationChain: Promise<void> = Promise.resolve()
+const projectFileWatchers = new Map<string, ProjectFileWatcherState>()
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 
@@ -118,6 +121,14 @@ const PROJECT_FILE_PREVIEW_TEXT_SAMPLE_BYTES = 8192
 const CLIPBOARD_PNG_MAX_DATA_URL_LENGTH = 25_000_000
 const CLIPBOARD_SVG_MAX_CHARS = 4_000_000
 const CLIPBOARD_SVG_MAX_DIMENSION = 4096
+const PROJECT_FILE_WATCH_DEBOUNCE_MS = 500
+
+type ProjectFileWatcherState = {
+  rootPath: string
+  watcher: FSWatcher
+  refCount: number
+  debounceTimer: NodeJS.Timeout | null
+}
 const AGENT_PROJECT_DOCUMENT_NAMES = ['AGENTS.md', 'SOUL.md', 'GOAL.md'] as const
 const AGENT_PROJECT_DOCUMENT_MAX_CHARS = 512_000
 const PROJECT_CONTEXT_DIR_NAME = 'Context'
@@ -577,6 +588,7 @@ function ensureTray() {
 function prepareForAppQuit() {
   isQuitting = true
   speechRecognitionService?.dispose()
+  disposeProjectFileWatchers()
   tray?.destroy()
   tray = null
 }
@@ -781,6 +793,12 @@ if (gotSingleInstanceLock) {
     })
     ipcMain.handle('desktop:list-project-files', (_event, rootPath: string) => {
       return readProjectFileTree(rootPath)
+    })
+    ipcMain.handle('desktop:watch-project-files', async (_event, rootPath: string) => {
+      return watchProjectFiles(rootPath)
+    })
+    ipcMain.handle('desktop:unwatch-project-files', async (_event, rootPath: string) => {
+      return unwatchProjectFiles(rootPath)
     })
     ipcMain.handle('desktop:read-project-file', (_event, rootPath: unknown, filePath: unknown) => {
       if (typeof rootPath !== 'string' || typeof filePath !== 'string') {
@@ -1576,7 +1594,7 @@ async function readProjectFileTree(rootPath: string): Promise<FileTreeResult> {
       }
     }
 
-    const readDirectory = async (directoryPath: string, relativeBase: string): Promise<FileTreeNode[]> => {
+    const readDirectory = async (directoryPath: string, relativeBase: string, visitedRealPaths: Set<string>): Promise<FileTreeNode[]> => {
       let entries = await fs.readdir(directoryPath, { withFileTypes: true })
       entries = entries
         .filter((entry) => !shouldIgnoreFileTreeEntry(entry))
@@ -1589,19 +1607,22 @@ async function readProjectFileTree(rootPath: string): Promise<FileTreeResult> {
       for (const entry of entries) {
         const entryPath = path.join(directoryPath, entry.name)
         const relativePath = normalizeRelativePath(path.join(relativeBase, entry.name))
+        const entryStat = await statFileTreeEntry(entryPath)
+        const isDirectory = entry.isDirectory() || Boolean(entry.isSymbolicLink() && entryStat?.isDirectory())
+        const isFile = entry.isFile() || Boolean(entry.isSymbolicLink() && entryStat?.isFile())
 
-        if (entry.isDirectory()) {
+        if (isDirectory) {
           nodes.push({
             name: entry.name,
             path: entryPath,
             relativePath,
             type: 'directory',
-            children: await readChildDirectory(entryPath, relativePath),
+            children: await readChildDirectory(entryPath, relativePath, visitedRealPaths),
           })
           continue
         }
 
-        if (entry.isFile() || entry.isSymbolicLink()) {
+        if (isFile || entry.isSymbolicLink()) {
           nodes.push({
             name: entry.name,
             path: entryPath,
@@ -1614,19 +1635,26 @@ async function readProjectFileTree(rootPath: string): Promise<FileTreeResult> {
       return nodes
     }
 
-    const readChildDirectory = async (directoryPath: string, relativePath: string) => {
+    const readChildDirectory = async (directoryPath: string, relativePath: string, parentVisitedRealPaths: Set<string>) => {
       try {
-        return await readDirectory(directoryPath, relativePath)
+        const realPath = await fs.realpath(directoryPath)
+        if (parentVisitedRealPaths.has(realPath)) return []
+        const nextVisitedRealPaths = new Set(parentVisitedRealPaths)
+        nextVisitedRealPaths.add(realPath)
+        return await readDirectory(directoryPath, relativePath, nextVisitedRealPaths)
       } catch {
         return []
       }
     }
 
+    const rootRealPath = await fs.realpath(resolvedRootPath)
+    const visitedRealPaths = new Set([rootRealPath])
+
     return {
       ok: true,
       rootPath: resolvedRootPath,
       rootName: path.basename(resolvedRootPath) || resolvedRootPath,
-      nodes: await readDirectory(resolvedRootPath, ''),
+      nodes: await readDirectory(resolvedRootPath, '', visitedRealPaths),
       truncated: false,
     }
   } catch (error) {
@@ -1636,6 +1664,106 @@ async function readProjectFileTree(rootPath: string): Promise<FileTreeResult> {
       message: formatProjectPathError(error),
     }
   }
+}
+
+async function statFileTreeEntry(entryPath: string): Promise<import('node:fs').Stats | null> {
+  try {
+    return await fs.stat(entryPath)
+  } catch {
+    return null
+  }
+}
+
+async function watchProjectFiles(rootPath: string): Promise<{ ok: true; rootPath: string } | { ok: false; rootPath: string; message: string }> {
+  const resolvedRootPath = resolveProjectPath(rootPath)
+  try {
+    const stat = await fs.stat(resolvedRootPath)
+    if (!stat.isDirectory()) {
+      return { ok: false, rootPath: resolvedRootPath, message: '当前项目路径不是文件夹' }
+    }
+
+    const existing = projectFileWatchers.get(resolvedRootPath)
+    if (existing) {
+      existing.refCount += 1
+      return { ok: true, rootPath: resolvedRootPath }
+    }
+
+    const watcher = createProjectFileWatcher(resolvedRootPath)
+    projectFileWatchers.set(resolvedRootPath, {
+      rootPath: resolvedRootPath,
+      watcher,
+      refCount: 1,
+      debounceTimer: null,
+    })
+    return { ok: true, rootPath: resolvedRootPath }
+  } catch (error) {
+    return {
+      ok: false,
+      rootPath: resolvedRootPath,
+      message: formatProjectPathError(error),
+    }
+  }
+}
+
+async function unwatchProjectFiles(rootPath: string): Promise<void> {
+  const resolvedRootPath = resolveProjectPath(rootPath)
+  const state = projectFileWatchers.get(resolvedRootPath)
+  if (!state) return
+  state.refCount -= 1
+  if (state.refCount > 0) return
+  disposeProjectFileWatcher(resolvedRootPath, state)
+}
+
+function createProjectFileWatcher(rootPath: string): FSWatcher {
+  try {
+    return watch(rootPath, { recursive: true }, (_eventType, filename) => {
+      scheduleProjectFilesChanged(rootPath, filename)
+    })
+  } catch {
+    return watch(rootPath, (_eventType, filename) => {
+      scheduleProjectFilesChanged(rootPath, filename)
+    })
+  }
+}
+
+function scheduleProjectFilesChanged(rootPath: string, filename: string | Buffer | null) {
+  const relativePath = normalizeWatchRelativePath(filename)
+  if (relativePath && shouldIgnoreWatchedPath(relativePath)) return
+  const state = projectFileWatchers.get(rootPath)
+  if (!state) return
+  if (state.debounceTimer) clearTimeout(state.debounceTimer)
+  state.debounceTimer = setTimeout(() => {
+    state.debounceTimer = null
+    const windows = BrowserWindow.getAllWindows().filter((item) => !item.isDestroyed())
+    for (const targetWindow of windows) {
+      targetWindow.webContents.send(PROJECT_FILES_CHANGED_CHANNEL, {
+        rootPath,
+        relativePath,
+      })
+    }
+  }, PROJECT_FILE_WATCH_DEBOUNCE_MS)
+}
+
+function normalizeWatchRelativePath(filename: string | Buffer | null): string {
+  if (!filename) return ''
+  const raw = Buffer.isBuffer(filename) ? filename.toString('utf8') : filename
+  return normalizeRelativePath(raw)
+}
+
+function shouldIgnoreWatchedPath(relativePath: string): boolean {
+  return relativePath.split('/').some((segment) => FILE_TREE_IGNORED_DIRECTORIES.has(segment))
+}
+
+function disposeProjectFileWatchers() {
+  for (const [rootPath, state] of Array.from(projectFileWatchers)) {
+    disposeProjectFileWatcher(rootPath, state)
+  }
+}
+
+function disposeProjectFileWatcher(rootPath: string, state: ProjectFileWatcherState) {
+  if (state.debounceTimer) clearTimeout(state.debounceTimer)
+  state.watcher.close()
+  projectFileWatchers.delete(rootPath)
 }
 
 async function readProjectFilePreview(rootPath: string, filePath: string): Promise<ProjectFilePreviewResult> {
@@ -1660,19 +1788,16 @@ async function readProjectFilePreview(rootPath: string, filePath: string): Promi
     const rootStat = await fs.stat(resolvedRootPath)
     if (!rootStat.isDirectory()) return fail('当前项目路径不是文件夹')
 
-    const rootRealPath = await fs.realpath(resolvedRootPath)
-    const targetRealPath = await fs.realpath(requestedPath)
-    const realRelativePath = path.relative(rootRealPath, targetRealPath)
-    if (realRelativePath === '..' || realRelativePath.startsWith(`..${path.sep}`) || path.isAbsolute(realRelativePath)) {
+    if (!isSameOrInsidePath(resolvedRootPath, requestedPath)) {
       return fail('只能预览当前项目内的文件')
     }
 
-    const stat = await fs.stat(targetRealPath)
+    const stat = await fs.stat(requestedPath)
     if (!stat.isFile()) return fail('只能预览文件')
 
     const extension = path.extname(name).toLowerCase()
     const imageMimeType = CHAT_IMAGE_MEDIA_TYPES.get(extension)
-    const textKind = await getProjectFilePreviewTextKind(targetRealPath, name, stat.size)
+    const textKind = await getProjectFilePreviewTextKind(requestedPath, name, stat.size)
 
     if (!textKind && !imageMimeType) {
       return fail('仅支持预览纯文本文件或 PNG、JPG、GIF、WEBP 图片')
@@ -1682,7 +1807,7 @@ async function readProjectFilePreview(rootPath: string, filePath: string): Promi
       if (stat.size > PROJECT_FILE_PREVIEW_TEXT_MAX_BYTES) {
         return fail('文本文件超过 5MB，暂不在应用内预览')
       }
-      const content = await fs.readFile(targetRealPath, 'utf8')
+      const content = await fs.readFile(requestedPath, 'utf8')
       return {
         ok: true,
         rootPath: resolvedRootPath,
@@ -1700,7 +1825,7 @@ async function readProjectFilePreview(rootPath: string, filePath: string): Promi
     if (stat.size > CHAT_IMAGE_ATTACHMENT_MAX_BYTES) {
       return fail('图片超过 10MB，暂不在应用内预览')
     }
-    const data = await fs.readFile(targetRealPath)
+    const data = await fs.readFile(requestedPath)
     return {
       ok: true,
       rootPath: resolvedRootPath,

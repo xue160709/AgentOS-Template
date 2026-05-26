@@ -16,6 +16,8 @@ import type {
   ProjectContextAddMode,
   ProjectContextAddResult,
   ProjectContextResult,
+  ProjectFilesChangedEvent,
+  ProjectFileWatchResult,
   SpeechRecognitionCommandResult,
   SpeechRecognitionEvent,
   SpeechRecognitionSnapshot,
@@ -41,6 +43,7 @@ const TRAY_MENU_ACTION_CHANNEL = 'desktop:tray-action'
 const TASK_HOME_PLUGIN_EVENT_CHANNEL = 'desktop:task-home-plugin-event'
 const APP_UPDATER_EVENT_CHANNEL = 'app-updater:event'
 const SPEECH_RECOGNITION_EVENT_CHANNEL = 'desktop:speech-recognition-event'
+const PROJECT_FILES_CHANGED_CHANNEL = 'desktop:project-files-changed'
 
 // --- Desktop bridge / 桌面通用 API ---
 
@@ -59,6 +62,17 @@ contextBridge.exposeInMainWorld('desktop', {
   },
   listProjectFiles(rootPath: string) {
     return ipcRenderer.invoke('desktop:list-project-files', rootPath)
+  },
+  watchProjectFiles(rootPath: string) {
+    return ipcRenderer.invoke('desktop:watch-project-files', rootPath) as Promise<ProjectFileWatchResult>
+  },
+  unwatchProjectFiles(rootPath: string) {
+    return ipcRenderer.invoke('desktop:unwatch-project-files', rootPath) as Promise<void>
+  },
+  onProjectFilesChanged(handler: (event: ProjectFilesChangedEvent) => void) {
+    const listener = (_event: IpcRendererEvent, event: ProjectFilesChangedEvent) => handler(event)
+    ipcRenderer.on(PROJECT_FILES_CHANGED_CHANNEL, listener)
+    return () => ipcRenderer.off(PROJECT_FILES_CHANGED_CHANNEL, listener)
   },
   readProjectFile(rootPath: string, filePath: string) {
     return ipcRenderer.invoke('desktop:read-project-file', rootPath, filePath)

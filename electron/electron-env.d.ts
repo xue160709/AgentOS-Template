@@ -39,6 +39,8 @@ import type {
   ProjectContextAddMode,
   ProjectContextAddResult,
   ProjectContextResult,
+  ProjectFilesChangedEvent,
+  ProjectFileWatchResult,
   SpeechRecognitionCommandResult,
   SpeechRecognitionEvent,
   SpeechRecognitionSnapshot,
@@ -85,6 +87,9 @@ declare global {
       pickProjectDirectory?: () => Promise<string | null>
       pickChatAttachments?: (options?: { allowImages?: boolean }) => Promise<ClaudeChatAttachmentPickerResult>
       listProjectFiles?: (rootPath: string) => Promise<FileTreeResult>
+      watchProjectFiles?: (rootPath: string) => Promise<ProjectFileWatchResult>
+      unwatchProjectFiles?: (rootPath: string) => Promise<void>
+      onProjectFilesChanged?: (handler: (event: ProjectFilesChangedEvent) => void) => () => void
       readProjectFile?: (rootPath: string, filePath: string) => Promise<ProjectFilePreviewResult>
       searchProjectFiles?: (rootPath: string, query: string) => Promise<ProjectFileSearchResult>
       searchChatHistory?: (projectId: string, query: string, options?: ChatHistorySearchOptions) => Promise<ChatHistorySearchResult>
