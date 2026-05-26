@@ -1016,6 +1016,26 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
   color: var(--orange-500);
 }
 
+.app-thread-ask-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 20px;
+  padding: 0 calc(var(--spacing) * 1);
+  margin-inline: calc(var(--spacing) * 0.25);
+  border: 1px solid color-mix(in oklab, var(--green-500) 34%, transparent);
+  border-radius: var(--radius-full);
+  background: color-mix(in oklab, var(--green-500) 14%, transparent);
+  color: var(--green-500);
+  font-size: 11px;
+  line-height: 18px;
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  user-select: none;
+  transition: opacity var(--transition-duration-basic) var(--transition-ease-basic);
+}
+
 .app-thread-archive {
   position: absolute;
   right: 0;
@@ -1057,8 +1077,10 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
 
 .app-thread-row:hover .app-thread-time,
 .app-thread-row:hover .app-thread-running,
+.app-thread-row:hover .app-thread-ask-tag,
 .app-thread-row.is-confirming-archive .app-thread-time,
-.app-thread-row.is-confirming-archive .app-thread-running {
+.app-thread-row.is-confirming-archive .app-thread-running,
+.app-thread-row.is-confirming-archive .app-thread-ask-tag {
   opacity: 0;
   pointer-events: none;
 }
@@ -5063,7 +5085,7 @@ button.app-file-tree-row {
   overflow-y: auto;
   overflow-x: hidden;
   padding: calc(var(--spacing) * 8) calc(var(--spacing) * 6) calc(var(--spacing) * 5);
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
 }
 
 .chat-transcript {

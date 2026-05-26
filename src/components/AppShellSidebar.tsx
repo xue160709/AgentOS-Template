@@ -67,6 +67,7 @@ type AppShellSidebarProps = {
   canForward: boolean
   onCreateProject: (mode: 'scratch' | 'existing') => void | Promise<void>
   onOpenSearch: () => void
+  onOpenSettingsCategory: (category: SettingsCategoryId) => void
   onSelectProject: (projectId: string) => void
   onSelectThread: (threadId: string) => void
   onSelectProjectSkill: (projectId: string, skill: Omit<SelectedProjectSkill, 'projectId'>) => void
@@ -105,6 +106,7 @@ export function AppShellSidebar({
   canForward,
   onCreateProject,
   onOpenSearch,
+  onOpenSettingsCategory,
   onSelectProject,
   onSelectThread,
   onSelectProjectSkill,
@@ -532,7 +534,7 @@ export function AppShellSidebar({
                       if (item.disabled) {
                         return
                       }
-                      window.location.hash = `settings/${item.id}`
+                      onOpenSettingsCategory(item.id)
                     }}
                   >
                     <IconInline name={item.icon} />
@@ -825,7 +827,15 @@ export function AppShellSidebar({
                                       ) : null}
                                     </button>
                                     <div className="app-thread-trailing">
-                                      {runState ? (
+                                      {runState?.status === 'asking' ? (
+                                        <span
+                                          className="app-thread-ask-tag"
+                                          title={t('sidebar.threadAsking')}
+                                          aria-label={t('sidebar.threadAsking')}
+                                        >
+                                          {t('sidebar.threadAskingTag')}
+                                        </span>
+                                      ) : runState ? (
                                         <span
                                           className={`app-thread-running${runState.status === 'waiting' ? ' is-waiting' : ''}`}
                                           title={
@@ -910,7 +920,7 @@ export function AppShellSidebar({
               title={t('sidebar.settings')}
               aria-label={t('sidebar.settings')}
               onClick={() => {
-                window.location.hash = 'settings/general'
+                onOpenSettingsCategory('general')
               }}
             >
               <IconInline name="settings" />

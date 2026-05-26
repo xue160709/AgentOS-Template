@@ -283,6 +283,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   const permissionModePopoverAnchorRef = useRef<HTMLButtonElement>(null)
   const permissionModePopoverSurfaceRef = useRef<HTMLDivElement>(null)
   const activeThreadIdRef = useRef(activeThread?.id ?? '')
+  const threadScrollTopRef = useRef(new Map<string, number>())
   const threadRunStatesRef = useRef<Record<string, ThreadRunState>>(threadRunStates)
   const requestThreadIdsRef = useRef(new Map<string, string>())
   const requestAssistantMessageIdsRef = useRef(new Map<string, string>())
@@ -471,7 +472,13 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
 
   useEffect(() => {
     if (!activeRunState) return
-    onStatusChange(activeRunState.status === 'waiting' ? t('chat.waitingForPermission') : t('chat.statusProcessing'))
+    onStatusChange(
+      activeRunState.status === 'asking'
+        ? t('chat.waitingForAnswer')
+        : activeRunState.status === 'waiting'
+          ? t('chat.waitingForPermission')
+          : t('chat.statusProcessing'),
+    )
   }, [activeRunState, onStatusChange, t])
 
   useEffect(() => {
@@ -561,19 +568,6 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     },
     [onStatusChange, t],
   )
-
-  useEffect(() => {
-    activeThreadIdRef.current = activeThread?.id ?? ''
-    isFirstTranscriptLayoutRef.current = true
-    scrollIntentRef.current = 'force-bottom'
-    setShowScrollButton(false)
-    setModelPickerOpen(false)
-    setPendingAttachments([])
-
-    window.claudeChat?.getSettings().then(applyGlobalModelFromSettings).catch(() => {
-      /* 浏览器独立预览可能没有 Electron 桥接 / Browser preview may run without the Electron bridge */
-    })
-  }, [activeThread?.id, activeProject.id, applyGlobalModelFromSettings])
 
   useEffect(() => {
     setHomeComposerMode('normal')
@@ -817,6 +811,58 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     setShowScrollButton((prev) => shouldShowScrollToBottom(sr, prev))
   }, [])
 
+  const saveActiveThreadScrollTop = useCallback(() => {
+    const threadId = activeThreadIdRef.current
+    const sr = scrollRegionRef.current
+    if (!threadId || !sr) return
+    threadScrollTopRef.current.set(threadId, sr.scrollTop)
+  }, [])
+
+  const restoreThreadScrollTop = useCallback(
+    (threadId: string) => {
+      const sr = scrollRegionRef.current
+      const savedTop = threadScrollTopRef.current.get(threadId)
+      if (!sr || savedTop === undefined) return false
+      const maxTop = Math.max(0, sr.scrollHeight - sr.clientHeight)
+      const previousScrollBehavior = sr.style.scrollBehavior
+      sr.style.scrollBehavior = 'auto'
+      sr.scrollTop = Math.min(savedTop, maxTop)
+      sr.style.scrollBehavior = previousScrollBehavior
+      syncScrollButtonVisibility()
+      return true
+    },
+    [syncScrollButtonVisibility],
+  )
+
+  useLayoutEffect(() => {
+    return () => saveActiveThreadScrollTop()
+  }, [activeThread?.id, saveActiveThreadScrollTop])
+
+  useEffect(() => {
+    const nextThreadId = activeThread?.id ?? ''
+    const hasSavedScrollTop = nextThreadId ? threadScrollTopRef.current.has(nextThreadId) : false
+    activeThreadIdRef.current = nextThreadId
+    isFirstTranscriptLayoutRef.current = true
+    scrollIntentRef.current = hasSavedScrollTop ? 'none' : 'force-bottom'
+    setShowScrollButton(false)
+    setModelPickerOpen(false)
+    setPendingAttachments([])
+
+    let frame = 0
+    if (hasSavedScrollTop) {
+      frame = window.requestAnimationFrame(() => {
+        restoreThreadScrollTop(nextThreadId)
+      })
+    }
+
+    window.claudeChat?.getSettings().then(applyGlobalModelFromSettings).catch(() => {
+      /* 浏览器独立预览可能没有 Electron 桥接 / Browser preview may run without the Electron bridge */
+    })
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame)
+    }
+  }, [activeThread?.id, activeProject.id, applyGlobalModelFromSettings, restoreThreadScrollTop])
+
   const suppressTranscriptResizeStick = useCallback((durationMs = 320) => {
     suppressTranscriptResizeStickRef.current = true
     if (suppressTranscriptResizeStickTimerRef.current !== null) {
@@ -867,30 +913,39 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       syncScrollButtonVisibility()
       return
     }
+    const activeThreadId = activeThread?.id ?? ''
+    const hasSavedScrollTop = activeThreadId ? threadScrollTopRef.current.has(activeThreadId) : false
     let stick = scrollIntentRef.current === 'force-bottom' || isNearBottom(sr)
     if (isFirstTranscriptLayoutRef.current) {
+      if (hasSavedScrollTop && restoreThreadScrollTop(activeThreadId)) {
+        scrollIntentRef.current = 'none'
+        isFirstTranscriptLayoutRef.current = false
+        return
+      }
       stick = true
       isFirstTranscriptLayoutRef.current = false
     }
     scrollIntentRef.current = 'none'
     if (stick) {
       sr.scrollTo({ top: sr.scrollHeight, behavior: 'auto' })
+      saveActiveThreadScrollTop()
       setShowScrollButton(false)
     } else {
       syncScrollButtonVisibility()
     }
-  }, [activeThread?.chatState, hasMessages, syncScrollButtonVisibility])
+  }, [activeThread?.chatState, activeThread?.id, hasMessages, restoreThreadScrollTop, saveActiveThreadScrollTop, syncScrollButtonVisibility])
 
   useEffect(() => {
     const sr = scrollRegionRef.current
     if (!sr) return
     const onScroll = () => {
       if (!chatItems.length) return
+      saveActiveThreadScrollTop()
       syncScrollButtonVisibility()
     }
     sr.addEventListener('scroll', onScroll, { passive: true })
     return () => sr.removeEventListener('scroll', onScroll)
-  }, [chatItems.length, syncScrollButtonVisibility])
+  }, [chatItems.length, saveActiveThreadScrollTop, syncScrollButtonVisibility])
 
   useEffect(() => {
     const sr = scrollRegionRef.current
@@ -933,7 +988,10 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   const scrollToBottom = useCallback((behavior: ScrollBehavior) => {
     const sr = scrollRegionRef.current
     if (!sr) return
+    const threadId = activeThreadIdRef.current
+    const targetTop = Math.max(0, sr.scrollHeight - sr.clientHeight)
     sr.scrollTo({ top: sr.scrollHeight, behavior })
+    if (threadId) threadScrollTopRef.current.set(threadId, targetTop)
     setShowScrollButton(false)
   }, [])
 
@@ -1187,7 +1245,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       }
 
       if (event.type === 'ask_user_question' || event.type === 'permission_request') {
-        markRequestRunning(eventThreadId, event.requestId, 'waiting')
+        markRequestRunning(eventThreadId, event.requestId, event.type === 'ask_user_question' ? 'asking' : 'waiting')
         setPendingUserInputPrompts((prev) =>
           prev.some((item) => item.permissionRequestId === event.permissionRequestId) ? prev : [...prev, event],
         )
@@ -1752,6 +1810,15 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     if (!prompt) return
 
     setPendingUserInputPrompts((prev) => prev.filter((item) => item.permissionRequestId !== prompt.permissionRequestId))
+    const promptThreadId = prompt.threadId ?? requestThreadIdsRef.current.get(prompt.requestId) ?? activeThreadIdRef.current
+    const promptRunState = threadRunStatesRef.current[promptThreadId]
+    if (promptRunState?.requestId === prompt.requestId && promptRunState.status === 'asking') {
+      setThreadRunState(promptThreadId, {
+        ...promptRunState,
+        status: 'running',
+        updatedAt: Date.now(),
+      })
+    }
     if (!window.claudeChat) return
     await window.claudeChat.answerPermissionRequest({
       permissionRequestId: prompt.permissionRequestId,
