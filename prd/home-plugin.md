@@ -58,6 +58,8 @@ interface HomePluginCardLayoutItem {
   slug: string
   preferredSize: 'small' | 'medium' | 'large'
 }
+
+type AgentSettingsPanelId = 'card-order' | 'general'
 ```
 
 ## 业务逻辑
