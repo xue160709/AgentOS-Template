@@ -315,7 +315,7 @@ function createWindow() {
   claudeAgentRunner = new ClaudeAgentRunner(
     win.webContents,
     process.env.APP_ROOT,
-    () => getClaudeAgentSettingsStore().resolve(),
+    (modelPick) => getClaudeAgentSettingsStore().resolve(modelPick),
     (rootPath) => getAgentModeSettingsStore().resolve(rootPath),
     () => normalizeUiLocale(getDesktopPreferencesStore().read().locale),
     (event) => taskHomePluginManager?.handleClaudeEvent(event),
@@ -878,8 +878,8 @@ if (gotSingleInstanceLock) {
     ipcMain.handle('desktop:get-agent-mode-settings', (_event, rootPath: string) => {
       return getAgentModeSettingsStore().getResult(rootPath)
     })
-    ipcMain.handle('desktop:save-agent-mode-settings', (_event, rootPath: string, payload: { user: string; identity: string }) => {
-      return getAgentModeSettingsStore().saveText(rootPath, payload)
+    ipcMain.handle('desktop:save-agent-mode-settings', (_event, rootPath: string, payload: Partial<AgentModeProjectSettings>) => {
+      return getAgentModeSettingsStore().saveSettings(rootPath, payload)
     })
     ipcMain.handle('desktop:quit', () => {
       app.quit()

@@ -4964,6 +4964,95 @@ button.app-file-tree-row {
   margin-top: calc(var(--spacing) * 4);
 }
 
+.agent-skill-model-list {
+  display: flex;
+  max-height: min(460px, calc(100vh - 330px));
+  flex-direction: column;
+  gap: calc(var(--spacing) * 1);
+  overflow: auto;
+}
+
+.agent-skill-model-row {
+  display: grid;
+  min-height: 64px;
+  grid-template-columns: 34px minmax(16rem, 1fr) minmax(12rem, 15rem);
+  align-items: center;
+  gap: calc(var(--spacing) * 2);
+  padding: calc(var(--spacing) * 2) calc(var(--spacing) * 2.5);
+  border: 1px solid var(--color-token-border-light);
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--color-token-main-surface-primary) 96%, var(--color-token-foreground));
+  transition:
+    border-color var(--transition-duration-basic) var(--transition-ease-basic),
+    background var(--transition-duration-basic) var(--transition-ease-basic);
+}
+
+.agent-skill-model-row:hover {
+  border-color: var(--color-token-border);
+  background: color-mix(in oklab, var(--color-token-main-surface-primary) 98%, var(--color-token-foreground));
+}
+
+.agent-skill-model-row__icon {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-token-border-light);
+  border-radius: var(--radius-md);
+  color: var(--color-token-text-tertiary);
+  background: var(--color-token-main-surface-primary);
+}
+
+.agent-skill-model-row__copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.agent-skill-model-row__copy > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-skill-model-row__copy > span:first-child {
+  color: var(--color-token-text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.35;
+}
+
+.agent-skill-model-row__copy > span:last-child {
+  color: var(--color-token-text-tertiary);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+}
+
+.agent-skill-model-row__selector {
+  min-width: 0;
+  justify-self: end;
+  width: 100%;
+}
+
+.agent-skill-model-row__selector .settings-select {
+  width: 100%;
+  min-height: 36px;
+  padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 6) calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5);
+  font-size: var(--text-xs);
+}
+
+@media (max-width: 760px) {
+  .agent-skill-model-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .agent-skill-model-row__selector {
+    grid-column: 1 / -1;
+  }
+}
+
 .agent-settings-confirm {
   position: absolute;
   inset: 0;
@@ -5197,17 +5286,34 @@ button.app-file-tree-row {
 
 .project-home-sort-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto auto auto auto;
+  min-height: 64px;
+  grid-template-columns: 34px minmax(16rem, 1fr) auto auto auto auto auto;
   align-items: center;
-  gap: calc(var(--spacing) * 1.5);
-  padding: calc(var(--spacing) * 1.5);
+  gap: calc(var(--spacing) * 1.25);
+  padding: calc(var(--spacing) * 2) calc(var(--spacing) * 2.5);
   border: 1px solid var(--color-token-border-light);
   border-radius: var(--radius-md);
   background: color-mix(in oklab, var(--color-token-main-surface-primary) 96%, var(--color-token-foreground));
+  transition:
+    border-color var(--transition-duration-basic) var(--transition-ease-basic),
+    background var(--transition-duration-basic) var(--transition-ease-basic);
+}
+
+.project-home-sort-row:hover {
+  border-color: var(--color-token-border);
+  background: color-mix(in oklab, var(--color-token-main-surface-primary) 98%, var(--color-token-foreground));
 }
 
 .project-home-sort-row__grab {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-token-border-light);
+  border-radius: var(--radius-md);
   color: var(--color-token-text-tertiary);
+  background: var(--color-token-main-surface-primary);
   cursor: grab;
 }
 
@@ -5215,6 +5321,7 @@ button.app-file-tree-row {
   display: flex;
   min-width: 0;
   flex-direction: column;
+  gap: 2px;
 }
 
 .project-home-sort-row__copy > span {
@@ -5225,12 +5332,15 @@ button.app-file-tree-row {
 
 .project-home-sort-row__copy > span:first-child {
   color: var(--color-token-text-primary);
+  font-size: var(--text-sm);
   font-weight: var(--font-weight-medium);
+  line-height: 1.35;
 }
 
 .project-home-sort-row__copy > span:last-child {
   color: var(--color-token-text-tertiary);
   font-size: var(--text-xs);
+  line-height: 1.35;
 }
 
 .project-home-size-badge,

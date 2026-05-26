@@ -10,6 +10,10 @@ export type ClaudeChatSubmitPayload = {
   text: string
   attachments?: ClaudeChatAttachment[]
   threadId?: string
+  /** 本次请求使用的线程级模型选择 / Per-thread model pick for this request */
+  modelPick?: ChatModelPick
+  /** 切换模型或重建 session 时注入的精简历史上下文 / Condensed history when handing context to a fresh session */
+  handoffContext?: string
   /** 特殊提示词通道；普通聊天省略 / Special prompt channel; omitted for normal chat */
   promptMode?: 'home-plugin-customization' | 'home-plugin-card-customization' | 'home-plugin-task-run'
   /**
@@ -334,6 +338,12 @@ export type ActiveChatPickPayload = {
   anthropicModel?: string | null
 }
 
+/** 线程或 Skill 绑定的实际模型选择 / Concrete provider + model pick for a thread or Skill */
+export type ChatModelPick = {
+  providerId: string
+  anthropicModel: string
+}
+
 /** 环境变量侧 Agent 配置快照（脱敏标志）/ Env-side agent snapshot with presence flags */
 export type ClaudeAgentEnvSnapshot = {
   hasApiKey: boolean
@@ -423,6 +433,7 @@ export type ClaudeFileChangeSetStatus = 'captured' | 'reviewed' | 'reverted' | '
 export type ClaudeFileRewindPayload = {
   requestId?: string
   threadId?: string
+  modelPick?: ChatModelPick
   changeSetId?: string
   checkpointId: string
   cwd?: string

@@ -36,13 +36,14 @@ import { CHAT_WORKSPACE_CLEARED_EVENT, CLAUDE_AGENT_SETTINGS_CHANGED_EVENT } fro
 import { defaultThreadTitleSet, getInitialLocale, translate, useI18n } from '../i18n/i18n'
 import { IconInline } from '../icon-inline'
 import type { DesktopPreferences, HomePluginRunItem, HomePluginTaskEvent } from '../desktop-types'
-import type { ClaudeAgentModelProvider, ClaudeAgentProviderAuthMode, ClaudeAgentSettingsSnapshot } from '../claude-chat-types'
+import type { ChatModelPick, ClaudeAgentModelProvider, ClaudeAgentProviderAuthMode, ClaudeAgentSettingsSnapshot } from '../claude-chat-types'
 import {
   LOCAL_PROVIDER_PRESET_CATALOG,
   localizeProviderPresetName,
   normalizePresetCatalog,
   type ProviderPreset,
 } from '../model-provider-presets'
+import { resolveEffectiveModelPick, validateModelPick } from '../model-pick'
 import type {
   AppViewId,
   ChatState,
@@ -687,50 +688,72 @@ export function AppShell() {
     [goHome, t, updateChatWorkspace],
   )
 
+  const resolveSkillRunModelPick = useCallback(
+    async (projectId: string, skill: ProjectSkillRunRequest): Promise<ChatModelPick | undefined> => {
+      const snapshot = await window.claudeChat?.getSettings?.().catch(() => undefined)
+      if (!snapshot) return skill.modelPick
+      const settings = snapshot.settings
+      const project = chatWorkspace?.projects.find((item) => item.id === projectId)
+      const activeThreadPick = chatWorkspace?.threads.find((thread) => thread.id === chatWorkspace.activeThreadId)?.chatState.modelPick
+      const result = project
+        ? await window.desktop?.getAgentModeSettings?.(project.path).catch(() => undefined)
+        : undefined
+      const override = result?.ok ? result.settings.skillModelOverrides[skill.path] : undefined
+      const preferred = override
+        ? validateModelPick(settings, override) ?? activeThreadPick
+        : skill.modelPick ?? activeThreadPick
+      return resolveEffectiveModelPick(settings, preferred)
+    },
+    [chatWorkspace],
+  )
+
   const runProjectSkill = useCallback(
     (projectId: string, skill: ProjectSkillRunRequest) => {
-      setSelectedProjectSkill(null)
-      if (!chatWorkspace?.projects.some((project) => project.id === projectId)) {
-        createThreadInProject(projectId)
-        return
-      }
-      const threadId = createId('thread')
-      const now = Date.now()
-      const prompt = skill.title
-
-      updateChatWorkspace((prev) => {
-        if (!prev.projects.some((project) => project.id === projectId)) return prev
-        const nextThread: WorkspaceThread = {
-          id: threadId,
-          projectId,
-          title: t('thread.newThreadTitle'),
-          purpose: 'skill-run',
-          skillPath: skill.path,
-          skillCommand: skill.command,
-          skillTitle: skill.title,
-          createdAt: now,
-          updatedAt: now,
-          chatState: createEmptyChatState(),
+      void (async () => {
+        setSelectedProjectSkill(null)
+        const modelPick = await resolveSkillRunModelPick(projectId, skill)
+        if (!chatWorkspace?.projects.some((project) => project.id === projectId)) {
+          createThreadInProject(projectId)
+          return
         }
-        return {
-          ...prev,
-          activeProjectId: projectId,
-          activeThreadId: threadId,
-          projects: touchProject(prev.projects, projectId, now),
-          threads: [nextThread, ...prev.threads],
-        }
-      })
-      goHome()
+        const threadId = createId('thread')
+        const now = Date.now()
+        const prompt = skill.title
 
-      requestAnimationFrame(() => {
-        void (async () => {
-          await window.claudeChat?.newThread(threadId)
-          const submitted = await chatRef.current?.submitPromptInThread(projectId, threadId, prompt)
-          if (!submitted) setHeaderStatus(t('shell.headerProcessingThread'))
-        })()
-      })
+        updateChatWorkspace((prev) => {
+          if (!prev.projects.some((project) => project.id === projectId)) return prev
+          const nextThread: WorkspaceThread = {
+            id: threadId,
+            projectId,
+            title: t('thread.newThreadTitle'),
+            purpose: 'skill-run',
+            skillPath: skill.path,
+            skillCommand: skill.command,
+            skillTitle: skill.title,
+            createdAt: now,
+            updatedAt: now,
+            chatState: createEmptyChatState(modelPick),
+          }
+          return {
+            ...prev,
+            activeProjectId: projectId,
+            activeThreadId: threadId,
+            projects: touchProject(prev.projects, projectId, now),
+            threads: [nextThread, ...prev.threads],
+          }
+        })
+        goHome()
+
+        requestAnimationFrame(() => {
+          void (async () => {
+            await window.claudeChat?.newThread(threadId)
+            const submitted = await chatRef.current?.submitPromptInThread(projectId, threadId, prompt, { modelPick })
+            if (!submitted) setHeaderStatus(t('shell.headerProcessingThread'))
+          })()
+        })
+      })()
     },
-    [chatWorkspace?.projects, createThreadInProject, goHome, t, updateChatWorkspace],
+    [chatWorkspace?.projects, createThreadInProject, goHome, resolveSkillRunModelPick, t, updateChatWorkspace],
   )
 
   const stopProjectSkillRun = useCallback(

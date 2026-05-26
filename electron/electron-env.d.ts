@@ -118,7 +118,7 @@ declare global {
       getAgentModeSettings?: (rootPath: string) => Promise<AgentModeSettingsResult>
       saveAgentModeSettings?: (
         rootPath: string,
-        payload: Pick<AgentModeProjectSettings, 'user' | 'identity'>,
+        payload: Partial<Pick<AgentModeProjectSettings, 'user' | 'identity' | 'skillModelOverrides'>>,
       ) => Promise<AgentModeSettingsResult>
       getChatWorkspace?: () => Promise<ChatWorkspaceState | null>
       saveChatWorkspace?: (state: ChatWorkspaceState) => Promise<ChatWorkspaceState>

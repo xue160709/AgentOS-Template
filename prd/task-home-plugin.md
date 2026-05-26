@@ -124,6 +124,7 @@ flowchart TD
 - 任务 title 最大 64 字符；新任务 slug 由 title 归一化后追加 8 位 UUID 片段。
 - Agent 模式 prompt 包含任务标题、当前运行序号、TODO 模式说明，并要求按项目 `AGENT.md` 执行。
 - Skills 模式每一步 prompt 以 `/<step.command> <task.title>` 开头，并附带运行序号、步骤序号、步骤名称和说明。
+- Agent 设置 Skills 面板中的 `skillModelOverrides` 当前只覆盖项目首页/侧栏触发的单个 Project Skill `skill-run`；Task Home Plugin 的 Skills 编排仍使用任务运行时提交时的当前可用模型配置。
 - 任务启动会先发 `threadSeed` 事件给渲染层，确保侧栏中出现 `purpose: "task-run"` 的线程。
 - 任务删除前会清理 timer、取消活动 request、解除 request 到 task 的映射，再删除卡片目录。
 - generated `extractor.js` 输出 `task_run` / `task_stop` action，渲染层根据 runtime 状态显示“执行”或“终止”。

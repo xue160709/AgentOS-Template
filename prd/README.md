@@ -2,7 +2,7 @@
 
 本目录按功能模块维护 AgentOS 的 PRD。每个功能文档都包含 `功能概述`、`核心功能列表`、`数据结构`、`业务逻辑`、`相关代码文件`、`关联PRD文档` 六个标准章节。
 
-生成依据：2026-05-21 对当前仓库的 `src/`、`electron/`、`.agents/`、构建配置、README 与发布配置进行代码阅读后整理；2026-05-22 继续补充入口、i18n、安全区、Generative UI、自动更新轮询和 macOS Apple Speech 语音输入细节。
+生成依据：2026-05-21 对当前仓库的 `src/`、`electron/`、`.agents/`、构建配置、README 与发布配置进行代码阅读后整理；2026-05-22 继续补充入口、i18n、安全区、Generative UI、自动更新轮询和 macOS Apple Speech 语音输入细节；2026-05-26 同步线程级模型选择、Project Skill 模型覆盖、Agent 设置 Skills 面板和相关持久化字段。
 
 ## 文档清单
 
@@ -18,7 +18,6 @@
 | [model-settings.md](./model-settings.md) | 模型与 Provider 设置 | Provider 预设、API 配置、模型能力、连接测试 |
 | [persistence.md](./persistence.md) | 持久化 | localStorage、JSON、SQLite、JSONL 和迁移归一化 |
 | [desktop-shell-settings-release.md](./desktop-shell-settings-release.md) | 桌面外壳、设置与发布 | Electron 窗口、托盘、设置、自动更新、macOS 原生 helper 和打包发布 |
-| [official-website.md](./official-website.md) | 官网方案 | AgentOS 官网定位、Landing Page 信息架构、视觉规格和设计资产清单 |
 
 ## 模块关系图
 
@@ -62,4 +61,3 @@ flowchart TD
 - 改动 Provider、模型、API Key、Base URL 或连接测试时，同步更新 [model-settings.md](./model-settings.md)。
 - 改动工作区存储、会话索引、rollout 或数据迁移时，同步更新 [persistence.md](./persistence.md)。
 - 改动 Electron 窗口、托盘、设置、更新、原生 helper、系统权限或发布配置时，同步更新 [desktop-shell-settings-release.md](./desktop-shell-settings-release.md)。
-- 改动官网定位、Landing Page 页面结构、视觉规范或下载转化路径时，同步更新 [official-website.md](./official-website.md)。

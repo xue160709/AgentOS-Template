@@ -4,6 +4,7 @@
  */
 
 import type {
+  ChatModelPick,
   ClaudeFileChangeSetStatus,
   ClaudeFileDiffFile,
   ClaudeFileDiffFileStatus,
@@ -31,8 +32,8 @@ import {
 export const CHAT_WORKSPACE_STORAGE_KEY = 'CodeX-UI-Template-chat-workspace-v1'
 
 /** 新建空 ChatState / Fresh chat transcript shell */
-export function createEmptyChatState(): ChatState {
-  return { model: 'Claude Agent', items: [] }
+export function createEmptyChatState(modelPick?: ChatModelPick): ChatState {
+  return { model: modelPick?.anthropicModel ?? 'Claude Agent', modelPick, items: [] }
 }
 
 /** 生成带前缀的稳定随机 id / Stable-ish random id with prefix */
@@ -279,9 +280,18 @@ function normalizeStoredChatState(value: unknown): ChatState {
   return {
     sessionId: typeof value.sessionId === 'string' ? value.sessionId : undefined,
     model: typeof value.model === 'string' ? value.model : 'Claude Agent',
+    modelPick: normalizeStoredModelPick(value.modelPick),
     cwd: typeof value.cwd === 'string' ? value.cwd : undefined,
     items: Array.isArray(value.items) ? value.items.flatMap(normalizeTranscriptItem) : [],
   }
+}
+
+function normalizeStoredModelPick(value: unknown): ChatModelPick | undefined {
+  if (!isRecord(value)) return undefined
+  const providerId = typeof value.providerId === 'string' ? value.providerId.trim() : ''
+  const anthropicModel = typeof value.anthropicModel === 'string' ? value.anthropicModel.trim() : ''
+  if (!providerId || !anthropicModel) return undefined
+  return { providerId, anthropicModel }
 }
 
 function normalizeTranscriptItem(value: unknown): ChatState['items'] {

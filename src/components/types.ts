@@ -5,6 +5,7 @@
 
 import type {
   AgentContextSlashItem,
+  ChatModelPick,
   ClaudeChatAttachmentKind,
   ClaudeFileChangeSetStatus,
   ClaudeFileDiffFile,
@@ -18,7 +19,7 @@ export type AppViewId = 'home' | 'docs' | 'settings'
 export type SettingsCategoryId = 'general' | 'skills' | 'updates' | 'agent' | 'developer'
 
 /** Agent Mode 首页模态设置页签 / Agent Mode home modal settings panel id */
-export type AgentSettingsPanelId = 'general' | 'card-order'
+export type AgentSettingsPanelId = 'general' | 'card-order' | 'skills'
 
 /** 消息气泡渲染状态 / Chat bubble render status */
 export type MessageStatus = 'done' | 'streaming' | 'error' | 'cancelled'
@@ -114,6 +115,7 @@ export type TranscriptItem = ChatMessageItem | ChatToolItem | ChatThinkingItem |
 export type ChatState = {
   sessionId?: string
   model: string
+  modelPick?: ChatModelPick
   cwd?: string
   items: TranscriptItem[]
 }
@@ -249,7 +251,9 @@ export type SelectedProjectSkill = Pick<
 export type ProjectSkillRunRequest = Pick<
   AgentContextSlashItem,
   'title' | 'command' | 'description' | 'path' | 'relativePath'
->
+> & {
+  modelPick?: ChatModelPick
+}
 
 /** 搜索结果类型 / Search result category */
 export type AppSearchResultKind =

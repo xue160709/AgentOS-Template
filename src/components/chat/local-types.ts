@@ -9,17 +9,10 @@ import type {
   ClaudePermissionMode,
   ProjectFileSearchItem,
 } from '../../claude-chat-types'
+import type { ModelPickMenuRow } from '../../model-pick'
 
 /** 模型下拉菜单一行展示数据 / One row in the model picker menu */
-export type ChatModelMenuRow = {
-  pickKey: string
-  providerId: string
-  anthropicModelId: string
-  useOverlayPick: boolean
-  supportsImages: boolean
-  headline: string
-  metaLine: string
-}
+export type ChatModelMenuRow = ModelPickMenuRow
 
 /** Composer 内触发自动完成的光标区间 / Composer autocomplete trigger span */
 export type ComposerTrigger =

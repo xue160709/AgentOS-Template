@@ -19,9 +19,8 @@ import { createPortal, flushSync } from 'react-dom'
 import type {
   AgentContextCatalog,
   AgentContextSource,
+  ChatModelPick,
   ClaudeChatAttachment,
-  ClaudeAgentModelProvider,
-  ClaudeAgentSettings,
   ClaudeAgentSettingsSnapshot,
   ClaudeChatEvent,
   ClaudeChatSubmitPayload,
@@ -31,6 +30,16 @@ import type {
 import { CLAUDE_AGENT_SETTINGS_CHANGED_EVENT } from '../../app-events'
 import type { HomePluginRunItem, SpeechRecognitionStatus } from '../../desktop-types'
 import { useI18n } from '../../i18n/i18n'
+import {
+  buildModelPickRows,
+  displayModelForPick,
+  modelPickFromRow,
+  modelPickKey,
+  modelRowForPick,
+  resolveEffectiveModelPick,
+  sameModelPick,
+  supportsImagesForPick,
+} from '../../model-pick'
 import type {
   ChatActivityItem,
   ChatFileDiffItem,
@@ -128,8 +137,13 @@ export type ChatPageHandle = {
     projectId: string,
     threadId: string,
     prompt: string,
-    promptMode?: ClaudeChatSubmitPayload['promptMode'],
+    options?: ClaudeChatSubmitPayload['promptMode'] | SubmitPromptOptions,
   ) => Promise<boolean>
+}
+
+export type SubmitPromptOptions = {
+  promptMode?: ClaudeChatSubmitPayload['promptMode']
+  modelPick?: ChatModelPick
 }
 
 type ChatPageProps = {
@@ -171,6 +185,7 @@ type SubmitPromptTarget = {
   threadId?: string
   project?: WorkspaceProject
   promptMode?: ClaudeChatSubmitPayload['promptMode']
+  modelPick?: ChatModelPick
   reuseUserMessageId?: string
   resetSession?: boolean
 }
@@ -271,6 +286,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   const [modelMenuRows, setModelMenuRows] = useState<ChatModelMenuRow[]>([])
   const [modelMenuSelectionKey, setModelMenuSelectionKey] = useState('')
   const [activeModelSupportsImages, setActiveModelSupportsImages] = useState(false)
+  const [claudeSettingsSnapshot, setClaudeSettingsSnapshot] = useState<ClaudeAgentSettingsSnapshot | null>(null)
   const [pendingAttachments, setPendingAttachments] = useState<ClaudeChatAttachment[]>([])
   const [agentContext, setAgentContext] = useState<AgentContextCatalog | null>(null)
   const [permissionMode, setPermissionMode] = useState<ClaudePermissionMode>(() => readStoredPermissionMode())
@@ -325,6 +341,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   const isFirstTranscriptLayoutRef = useRef(true)
   const isRunningRef = useRef(false)
   const globalDisplayModelRef = useRef(globalDisplayModel)
+  const currentModelPickRef = useRef<ChatModelPick | undefined>(undefined)
   const inputValueRef = useRef(inputValue)
   const composerSelectionRef = useRef(composerSelection)
   const speechDraftRangeRef = useRef<SpeechDraftRange | null>(null)
@@ -569,19 +586,27 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
         opus: t('chat.modelSlotOpus'),
       }
 
-      setModelMenuRows(buildChatModelMenuRows(settings.providers, slots, t))
-      setModelMenuSelectionKey(pickerSelectionKeyFromSettings(settings, t))
-
-      const model = resolvedChatDisplayModel(settings, t)
-      setGlobalDisplayModel(model)
-      setActiveModelSupportsImages(resolvedChatSupportsImages(snapshot))
-
-      if (!isRunningRef.current) {
-        onStatusChange(compactModelName(model, t))
-      }
+      setClaudeSettingsSnapshot(snapshot)
+      setModelMenuRows(buildModelPickRows(settings.providers, slots, t('chat.modelFallback')))
     },
-    [onStatusChange, t],
+    [t],
   )
+
+  useEffect(() => {
+    if (!claudeSettingsSnapshot) return
+    const settings = claudeSettingsSnapshot.settings
+    const effectivePick = resolveEffectiveModelPick(settings, activeThread?.chatState.modelPick)
+    const row = modelRowForPick(modelMenuRows, effectivePick)
+    const displayModel = row?.anthropicModelId ?? displayModelForPick(settings, effectivePick, t('chat.modelFallback'))
+    const supportsImages = supportsImagesForPick(settings, effectivePick, false)
+    currentModelPickRef.current = effectivePick
+    setModelMenuSelectionKey(effectivePick ? modelPickKey(effectivePick) : '')
+    setGlobalDisplayModel(displayModel)
+    setActiveModelSupportsImages(supportsImages)
+    if (!isRunningRef.current) {
+      onStatusChange(compactModelName(displayModel, t))
+    }
+  }, [activeThread?.chatState.modelPick, activeThread?.id, claudeSettingsSnapshot, modelMenuRows, onStatusChange, t])
 
   useEffect(() => {
     setHomeComposerMode('normal')
@@ -692,7 +717,27 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   // --- Model & permission pickers: floating position + click-outside / 模型与权限选择器：浮层定位与点击外部关闭 ---
 
   const pickChatMenuRow = useCallback(async (row: ChatModelMenuRow) => {
-    if (!window.claudeChat || isRunningRef.current) return
+    if (isRunningRef.current) return
+    const pick = modelPickFromRow(row)
+    if (activeThread?.id) {
+      currentModelPickRef.current = pick
+      setThreadChatState(activeThread.id, (prev) => {
+        const changed = !sameModelPick(prev.modelPick, pick)
+        return {
+          ...prev,
+          model: pick.anthropicModel,
+          modelPick: pick,
+          sessionId: changed ? undefined : prev.sessionId,
+        }
+      })
+      setModelMenuSelectionKey(row.pickKey)
+      setGlobalDisplayModel(pick.anthropicModel)
+      setActiveModelSupportsImages(row.supportsImages)
+      setModelPickerOpen(false)
+      return
+    }
+
+    if (!window.claudeChat) return
     try {
       const snapshot = await window.claudeChat.setActiveChatPick({
         providerId: row.providerId,
@@ -703,7 +748,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     } catch {
       /* 设置写入失败时静默 / Ignore settings write failures */
     }
-  }, [])
+  }, [activeThread?.id, setThreadChatState])
 
   useLayoutEffect(() => {
     if (!modelPickerOpen || !modelPopoverAnchorRef.current) {
@@ -1534,9 +1579,21 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     if (threadRunStatesRef.current[submittingThreadId]) return
 
     const requestStartedAt = Date.now()
-    const resumeSessionId = target?.resetSession
+    const submittingThread = threads.find((thread) => thread.id === submittingThreadId)
+    const settings = claudeSettingsSnapshot?.settings
+    const modelPickForSubmit =
+      target?.modelPick ??
+      (settings
+        ? resolveEffectiveModelPick(settings, submittingThread?.chatState.modelPick ?? currentModelPickRef.current)
+        : currentModelPickRef.current)
+    const modelPickChanged = !sameModelPick(submittingThread?.chatState.modelPick, modelPickForSubmit)
+    const resumeSessionId = target?.resetSession || modelPickChanged
       ? undefined
-      : threads.find((th) => th.id === submittingThreadId)?.chatState.sessionId
+      : submittingThread?.chatState.sessionId
+    const handoffContext =
+      !resumeSessionId && submittingThread?.chatState.items.length
+        ? buildHandoffContext(submittingThread.chatState.items)
+        : undefined
 
     const userMessage: ChatMessageItem = {
       type: 'message',
@@ -1554,7 +1611,17 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     if (!target?.reuseUserMessageId) {
       setThreadChatState(submittingThreadId, (prev) => ({
         ...prev,
+        model: modelPickForSubmit?.anthropicModel ?? prev.model,
+        modelPick: modelPickForSubmit ?? prev.modelPick,
+        sessionId: modelPickChanged ? undefined : prev.sessionId,
         items: [...prev.items, userMessage],
+      }))
+    } else if (modelPickForSubmit) {
+      setThreadChatState(submittingThreadId, (prev) => ({
+        ...prev,
+        model: modelPickForSubmit.anthropicModel,
+        modelPick: modelPickForSubmit,
+        sessionId: modelPickChanged ? undefined : prev.sessionId,
       }))
     }
     setInputValue('')
@@ -1594,12 +1661,13 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     }
 
     try {
-      const submittingThread = threads.find((thread) => thread.id === submittingThreadId)
       const promptMode = target?.promptMode ?? promptModeForThreadPurpose(submittingThread?.purpose)
       const { requestId } = await window.claudeChat.submit({
         text,
         attachments: attachmentsForSubmit,
         threadId: submittingThreadId,
+        modelPick: modelPickForSubmit,
+        handoffContext,
         promptMode,
         sessionId: resumeSessionId,
         cwd: projectForSubmit.path,
@@ -1759,6 +1827,13 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       startNewThread: async () => {
         const threadId = onNewThread()
         if (threadId) activeThreadIdRef.current = threadId
+        if (threadId && currentModelPickRef.current) {
+          setThreadChatState(threadId, (prev) => ({
+            ...prev,
+            model: currentModelPickRef.current?.anthropicModel ?? prev.model,
+            modelPick: currentModelPickRef.current,
+          }))
+        }
         scrollIntentRef.current = 'force-bottom'
         isFirstTranscriptLayoutRef.current = true
         onStatusChange(compactModelName(globalDisplayModelRef.current, t))
@@ -1787,7 +1862,11 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
         activeThreadIdRef.current = threadId
         isFirstTranscriptLayoutRef.current = true
         scrollIntentRef.current = 'force-bottom'
-        await submitPrompt(prompt, { threadId, project: projectForSubmit })
+        const modelPick = currentModelPickRef.current
+        if (modelPick) {
+          setThreadChatState(threadId, (prev) => ({ ...prev, model: modelPick.anthropicModel, modelPick }))
+        }
+        await submitPrompt(prompt, { threadId, project: projectForSubmit, modelPick })
         requestAnimationFrame(() => chatInputRef.current?.focus())
         return true
       },
@@ -1795,20 +1874,30 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
         projectId: string,
         threadId: string,
         prompt: string,
-        promptMode?: ClaudeChatSubmitPayload['promptMode'],
+        options?: ClaudeChatSubmitPayload['promptMode'] | SubmitPromptOptions,
       ) => {
         const projectForSubmit = projects.find((project) => project.id === projectId)
         if (!projectForSubmit) return false
 
+        const resolvedOptions: SubmitPromptOptions =
+          typeof options === 'string' ? { promptMode: options } : options ?? {}
         activeThreadIdRef.current = threadId
         isFirstTranscriptLayoutRef.current = true
         scrollIntentRef.current = 'force-bottom'
-        await submitPrompt(prompt, { threadId, project: projectForSubmit, promptMode })
+        if (resolvedOptions.modelPick) {
+          setThreadChatState(threadId, (prev) => ({
+            ...prev,
+            model: resolvedOptions.modelPick?.anthropicModel ?? prev.model,
+            modelPick: resolvedOptions.modelPick,
+            sessionId: sameModelPick(prev.modelPick, resolvedOptions.modelPick) ? prev.sessionId : undefined,
+          }))
+        }
+        await submitPrompt(prompt, { threadId, project: projectForSubmit, ...resolvedOptions })
         requestAnimationFrame(() => chatInputRef.current?.focus())
         return true
       },
     }),
-    [onNewThread, onStatusChange, projects, revealMessage, setThreadRunState, t],
+    [onNewThread, onStatusChange, projects, revealMessage, setThreadChatState, t],
   )
 
   // --- Cancel streaming + answer permission / tool questions from modal / 停止生成；在弹窗中应答权限或工具提问 ---
@@ -2091,6 +2180,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       const result = await window.claudeChat.rewindFiles({
         threadId,
         requestId: item.requestId,
+        modelPick: activeThread?.chatState.modelPick ?? currentModelPickRef.current,
         changeSetId: item.changeSetId,
         checkpointId: item.checkpointId,
         cwd: activeProject.path,
@@ -2099,7 +2189,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
         setThreadChatState(threadId, (prev) => updateFileDiffStatus(prev, item.changeSetId, 'error', result.message || t('chat.fileDiffUnavailable')))
       }
     },
-    [activeProject.path, setThreadChatState, t],
+    [activeProject.path, activeThread?.chatState.modelPick, setThreadChatState, t],
   )
 
   // --- Composer subtree (props-only; layout lives in `Composer.tsx`) / Composer 子树（仅传参；布局在 Composer 组件内）---
@@ -2399,6 +2489,30 @@ function updateFileDiffStatus(
   return { ...state, items: next }
 }
 
+const HANDOFF_MAX_MESSAGES = 18
+const HANDOFF_MAX_CHARS = 12_000
+
+function buildHandoffContext(items: TranscriptItem[]): string | undefined {
+  const messages = items
+    .filter((item): item is ChatMessageItem => item.type === 'message' && Boolean(item.content.trim()))
+    .slice(-HANDOFF_MAX_MESSAGES)
+  if (!messages.length) return undefined
+
+  const lines = messages.map((message) => {
+    const attachments = message.attachments?.length
+      ? `\n附件：${message.attachments.map((item) => `${item.name} (${item.kind})`).join(', ')}`
+      : ''
+    return `${message.role === 'user' ? '用户' : '助手'}：${message.content.trim()}${attachments}`
+  })
+  const omitted = messages.length < items.filter((item) => item.type === 'message').length
+    ? ['较早的对话内容已省略。', '']
+    : []
+  const text = ['以下是当前 thread 的精简历史上下文，用于在新模型 session 中延续对话。', '', ...omitted, ...lines].join('\n')
+  return text.length > HANDOFF_MAX_CHARS
+    ? `${text.slice(-HANDOFF_MAX_CHARS)}\n\n（历史上下文已按长度截断。）`
+    : text
+}
+
 function formatContextScope(scope: 'user' | 'project', t: (path: string, vars?: Record<string, string | number>) => string): string {
   return scope === 'user' ? t('chat.scopeUser') : t('chat.scopeProject')
 }
@@ -2448,116 +2562,6 @@ function getPermissionModeRows(t: (path: string, vars?: Record<string, string | 
       description: t('chat.permissionModeFullDesc'),
     },
   ]
-}
-
-function providerAcceptsAnthropicId(provider: ClaudeAgentModelProvider, modelId: string): boolean {
-  const m = modelId.trim()
-  if (!m) return false
-  return [
-    provider.model,
-    provider.defaultHaikuModel,
-    provider.defaultSonnetModel,
-    provider.defaultOpusModel,
-  ]
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .includes(m)
-}
-
-function resolvedChatDisplayModel(
-  settings: ClaudeAgentSettings,
-  t: (path: string, vars?: Record<string, string | number>) => string,
-): string {
-  const provider =
-    settings.providers.find((item) => item.id === settings.activeProviderId) ?? settings.providers[0]
-  if (!provider) return t('chat.modelFallback')
-  const overlay = settings.activeAnthropicModel?.trim() ?? ''
-  if (overlay && providerAcceptsAnthropicId(provider, overlay)) return overlay
-  return provider.model.trim() || provider.name.trim() || t('chat.modelFallback')
-}
-
-function resolvedChatSupportsImages(snapshot: ClaudeAgentSettingsSnapshot): boolean {
-  const settings = snapshot.settings
-  if (settings.configSource === 'env') return snapshot.env.supportsImages
-  const provider =
-    settings.providers.find((item) => item.id === settings.activeProviderId) ?? settings.providers[0]
-  if (!provider) return false
-  const overlay = settings.activeAnthropicModel?.trim() ?? ''
-  const primary = provider.model.trim()
-  const model = overlay && providerAcceptsAnthropicId(provider, overlay) ? overlay : primary
-  return providerSupportsImagesForModel(provider, model, false)
-}
-
-function pickerSelectionKeyFromSettings(
-  settings: ClaudeAgentSettings,
-  t: (path: string, vars?: Record<string, string | number>) => string,
-): string {
-  const provider =
-    settings.providers.find((item) => item.id === settings.activeProviderId) ?? settings.providers[0]
-  const idModel = resolvedChatDisplayModel(settings, t)
-  if (!provider) return `:${idModel}`
-  return `${provider.id}:${idModel}`
-}
-
-function buildChatModelMenuRows(
-  providers: ClaudeAgentModelProvider[],
-  slots: { primary: string; haiku: string; sonnet: string; opus: string },
-  t: (path: string, vars?: Record<string, string | number>) => string,
-): ChatModelMenuRow[] {
-  const rows: ChatModelMenuRow[] = []
-  for (const p of providers) {
-    const seen = new Set<string>()
-    const base = providerMenuSubtitle(p)
-
-    const add = (raw: string, slotLabel: string, useOverlayPick: boolean, supportsImages: boolean) => {
-      const mid = raw.trim()
-      if (!mid || seen.has(mid)) return
-      seen.add(mid)
-      rows.push({
-        pickKey: `${p.id}:${mid}`,
-        providerId: p.id,
-        anthropicModelId: mid,
-        useOverlayPick,
-        supportsImages,
-        headline: compactModelName(mid, t),
-        metaLine: [base || null, slotLabel].filter(Boolean).join(' · '),
-      })
-    }
-
-    add(p.model, slots.primary, false, providerSupportsImagesForModel(p, p.model, false))
-    add(p.defaultHaikuModel, slots.haiku, true, providerSupportsImagesForModel(p, p.defaultHaikuModel, false))
-    add(p.defaultSonnetModel, slots.sonnet, true, providerSupportsImagesForModel(p, p.defaultSonnetModel, false))
-    add(p.defaultOpusModel, slots.opus, true, providerSupportsImagesForModel(p, p.defaultOpusModel, false))
-  }
-
-  return rows
-}
-
-function providerSupportsImagesForModel(
-  provider: ClaudeAgentModelProvider,
-  modelId: string,
-  fallback: boolean,
-): boolean {
-  const m = modelId.trim()
-  if (!m) return fallback
-  const matches = [
-    { model: provider.model, supportsImages: provider.modelSupportsImages },
-    { model: provider.defaultHaikuModel, supportsImages: provider.defaultHaikuSupportsImages },
-    { model: provider.defaultSonnetModel, supportsImages: provider.defaultSonnetSupportsImages },
-    { model: provider.defaultOpusModel, supportsImages: provider.defaultOpusSupportsImages },
-  ].filter((row) => row.model.trim() === m)
-  if (!matches.length) return fallback
-  return matches.some((row) => row.supportsImages)
-}
-
-function providerMenuSubtitle(entry: ClaudeAgentModelProvider): string {
-  const parts = [
-    entry.name?.trim() && entry.model?.trim() && entry.name.trim() !== entry.model.trim()
-      ? entry.name.trim()
-      : '',
-    entry.baseUrl?.trim() || '',
-  ].filter(Boolean)
-  return parts.join(' · ')
 }
 
 function compactModelName(model: string, t: (path: string, vars?: Record<string, string | number>) => string): string {

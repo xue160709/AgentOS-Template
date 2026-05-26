@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import type { ChatModelPick } from '../src/claude-chat-types'
 import type { AgentModeProjectSettings, AgentModeSettingsResult } from '../src/desktop-types'
 
 type StoredAgentModeSettings = {
@@ -14,6 +15,7 @@ type StoredAgentModeSettings = {
   todoEnabled?: boolean
   user?: string
   identity?: string
+  skillModelOverrides?: Record<string, ChatModelPick>
 }
 
 type AgentModeSettingsFile = {
@@ -56,13 +58,15 @@ export class AgentModeSettingsStore {
       user: typeof stored.user === 'string' ? stored.user : await readOptionalText(path.join(root, 'USER.md')),
       identity:
         typeof stored.identity === 'string' ? stored.identity : await readOptionalText(path.join(root, 'IDENTITY.md')),
+      skillModelOverrides: stored.skillModelOverrides ?? {},
     }
   }
 
-  async saveText(rootPath: string, payload: { user: string; identity: string }): Promise<AgentModeSettingsResult> {
+  async saveSettings(rootPath: string, payload: Partial<Pick<AgentModeProjectSettings, 'user' | 'identity' | 'skillModelOverrides'>>): Promise<AgentModeSettingsResult> {
     return this.save(rootPath, {
-      user: payload.user,
-      identity: payload.identity,
+      ...(typeof payload.user === 'string' ? { user: payload.user } : {}),
+      ...(typeof payload.identity === 'string' ? { identity: payload.identity } : {}),
+      ...(payload.skillModelOverrides ? { skillModelOverrides: normalizeSkillModelOverrides(payload.skillModelOverrides) } : {}),
     })
   }
 
@@ -115,6 +119,7 @@ export class AgentModeSettingsStore {
           todoEnabled: entry.todoEnabled === true,
           user: typeof entry.user === 'string' ? entry.user : undefined,
           identity: typeof entry.identity === 'string' ? entry.identity : undefined,
+          skillModelOverrides: normalizeSkillModelOverrides(entry.skillModelOverrides),
         }
       }
       return { projects }
@@ -137,6 +142,20 @@ function resolveWorkspacePath(rawPath: string): string {
   const trimmed = rawPath.trim()
   if (trimmed.startsWith('~/')) return path.resolve(path.join(os.homedir(), trimmed.slice(2)))
   return path.resolve(trimmed)
+}
+
+function normalizeSkillModelOverrides(value: unknown): Record<string, ChatModelPick> {
+  if (!value || typeof value !== 'object') return {}
+  const out: Record<string, ChatModelPick> = {}
+  for (const [pathKey, rawPick] of Object.entries(value as Record<string, unknown>)) {
+    if (!pathKey.trim() || !rawPick || typeof rawPick !== 'object') continue
+    const pick = rawPick as Record<string, unknown>
+    const providerId = typeof pick.providerId === 'string' ? pick.providerId.trim() : ''
+    const anthropicModel = typeof pick.anthropicModel === 'string' ? pick.anthropicModel.trim() : ''
+    if (!providerId || !anthropicModel) continue
+    out[pathKey] = { providerId, anthropicModel }
+  }
+  return out
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {

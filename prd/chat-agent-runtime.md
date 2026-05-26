@@ -16,6 +16,8 @@
 | P0 | 文件 diff | 从 SDK checkpoint 和工具结果生成文件变更卡片 |
 | P1 | 文件回滚 | 支持 active query 或 resume session 执行 rewind |
 | P1 | Session 续接 | 使用 thread `sessionId` 续接，失效时自动重试一次 |
+| P1 | 线程级模型选择 | 每个 thread 独立保存 provider/model，composer 随活动 thread 显示 |
+| P1 | 模型切换交接 | thread 切换模型时清空旧 SDK session，并把精简历史注入新 session |
 | P1 | Slash command 展开 | 显式命令和 Home Plugin 强制命令进入运行上下文 |
 | P1 | Composer 联想 | 支持行首 slash 命令、`@` 文件、`@agent-*` 子 Agent 联想 |
 | P1 | macOS Composer 语音输入 | macOS 客户端通过 Apple Speech helper 把听写 partial/final 写入 composer 输入框 |
@@ -30,11 +32,18 @@ interface ClaudeChatSubmitPayload {
   text: string
   attachments?: ClaudeChatAttachment[]
   threadId?: string
+  modelPick?: ChatModelPick
+  handoffContext?: string
   promptMode?: 'home-plugin-customization' | 'home-plugin-card-customization' | 'home-plugin-task-run'
   agentModeSettingsOverride?: AgentModeProjectSettings
   sessionId?: string
   cwd?: string
   permissionMode?: ClaudePermissionMode
+}
+
+interface ChatModelPick {
+  providerId: string
+  anthropicModel: string
 }
 
 type ClaudePermissionMode =
@@ -46,7 +55,7 @@ type ClaudePermissionMode =
 
 interface ThreadRunState {
   requestId: string
-  status: 'running' | 'waiting'
+  status: 'running' | 'waiting' | 'asking'
   startedAt?: number
   updatedAt: number
 }
@@ -141,6 +150,7 @@ interface ClaudeChatSessionStartEvent {
 interface ClaudeFileRewindPayload {
   requestId?: string
   threadId?: string
+  modelPick?: ChatModelPick
   changeSetId?: string
   checkpointId: string
   cwd?: string
@@ -157,11 +167,11 @@ sequenceDiagram
   participant RUN as ClaudeAgentRunner
   participant SDK as Claude Agent SDK
 
-  U->>CP: 输入文本、附件、模型和权限模式
-  CP->>CP: 创建/复用线程并写入用户消息
+  U->>CP: 输入文本、附件、线程模型和权限模式
+  CP->>CP: 创建/复用线程并写入用户消息、modelPick
   CP->>IPC: claudeChat.submit(payload)
   IPC->>RUN: 主进程提交请求
-  RUN->>RUN: 构建 Agent 上下文和 SDK options
+  RUN->>RUN: 按 modelPick resolve Provider 并构建 Agent 上下文
   RUN->>SDK: query(options)
   SDK-->>RUN: stream messages
   RUN-->>CP: ClaudeChatEvent
@@ -195,13 +205,18 @@ sequenceDiagram
 
 - 同一线程已有请求时，新请求会取消旧请求。
 - `text` 为空且没有附件时不应提交。
-- 图片附件必须由当前模型显式支持。
+- 图片附件必须由当前线程的有效模型显式支持；主进程还会基于最终 resolve 的模型能力再次校验。
 - SDK resume 失败且未输出内容时，清空 `sessionId` 后重试一次。
+- 每个 `ChatState` 可保存 `modelPick`；composer 模型按钮根据活动 thread 的 `modelPick` 解析显示，不再把所有选择都写成全局 active chat pick。
+- 无活动 thread 时，composer 模型选择仍可写入全局 `activeProviderId/activeAnthropicModel`，作为新 thread 和失效配置的 fallback。
+- 提交时会把有效 `modelPick` 写入 thread，并通过 `ClaudeChatSubmitPayload.modelPick` 传给主进程；文件回滚同样携带 thread 模型。
+- 同一 thread 从一个模型切到另一个模型时，渲染层清空该 thread 的 `sessionId`，并在已有 transcript 时生成 `handoffContext`，让新模型 session 能接住精简历史。
+- 主进程 `ClaudeAgentRunner` 使用 `resolveConfig(modelPick)` 为单次请求构造 SDK env；无效 provider/model 会回退到全局 settings/env resolve 结果。
 - 运行完成后清理 pending permission 和 active request。
 - 文件回滚结果必须作为事件回传给当前线程展示。
 - `allowedTools` 默认只放行 `Read`、`Glob`、`Grep`、`ListMcpResources`、`ReadMcpResource` 这类只读工具；其它工具通过 `canUseTool` 进入权限请求。
 - `bypassPermissions` 会映射为 SDK 的 `allowDangerouslySkipPermissions`。
-- 每次运行会生成配置指纹；Provider、模型或图片能力变化时，旧线程的 SDK session 会失效并重新开始。
+- 每次运行会生成配置指纹；Provider、模型、图片能力或层级模型映射变化时，旧线程的 SDK session 会失效并重新开始。
 - `AskUserQuestion` 必须至少包含 2 个选项，否则直接允许原输入继续；有效问题会转成用户输入弹窗。
 - Slash 展开支持 `$ARGUMENTS` 和 `$1`、`$2` 等参数替换。
 - Home Plugin 定制线程会强制注入 `/a2ui-project-home-panel` Skill，并追加对应系统提示词。
@@ -242,6 +257,7 @@ Composer 语音输入规则：
 - `src/components/types.ts`
 - `src/components/chat/local-types.ts`
 - `src/desktop-types.ts`
+- `src/model-pick.ts`
 
 ### 业务逻辑工具/工具类
 

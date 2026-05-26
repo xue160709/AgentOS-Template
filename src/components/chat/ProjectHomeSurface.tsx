@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type RefObject } from 'react'
 import { A2uiSurface, basicCatalog, MarkdownContext, type ReactComponentImplementation } from '@a2ui/react/v0_9'
 import { MessageProcessor, type A2uiClientAction, type A2uiMessage, type SurfaceModel } from '@a2ui/web_core/v0_9'
-import type { AgentContextSlashItem } from '../../claude-chat-types'
+import type { AgentContextSlashItem, ChatModelPick, ClaudeAgentSettingsSnapshot } from '../../claude-chat-types'
 import type {
   HomePluginCardSize,
   HomePluginRunItem,
@@ -14,7 +14,15 @@ import type {
   HomePluginTaskSkillStep,
 } from '../../desktop-types'
 import { IconInline } from '../../icon-inline'
+import { CLAUDE_AGENT_SETTINGS_CHANGED_EVENT } from '../../app-events'
 import { useI18n } from '../../i18n/i18n'
+import {
+  buildModelPickRows,
+  modelPickFromRow,
+  modelRowForPick,
+  validateModelPick,
+  type ModelPickMenuRow,
+} from '../../model-pick'
 import type { AgentSettingsPanelId, ProjectSkillRunRequest, ThreadRunState, WorkspaceProject, WorkspaceThread } from '../types'
 import type { WorkspaceAgentModeState } from '../useWorkspaceAgentMode'
 import { sortProjectsForSidebar } from '../project-order'
@@ -208,6 +216,11 @@ export function ProjectHomeSurface({
   const [editingTaskSlug, setEditingTaskSlug] = useState<string | undefined>()
   const [draftOrder, setDraftOrder] = useState<string[]>([])
   const [draftSizes, setDraftSizes] = useState<Record<string, HomePluginCardSize>>({})
+  const [skillModelOverrides, setSkillModelOverrides] = useState<Record<string, ChatModelPick>>({})
+  const [draftSkillModelOverrides, setDraftSkillModelOverrides] = useState<Record<string, ChatModelPick>>({})
+  const [skillSettingsStatus, setSkillSettingsStatus] = useState('')
+  const [modelRows, setModelRows] = useState<ModelPickMenuRow[]>([])
+  const [modelSettingsSnapshot, setModelSettingsSnapshot] = useState<ClaudeAgentSettingsSnapshot | null>(null)
   const [deletingSlug, setDeletingSlug] = useState('')
   const addMenuRef = useRef<HTMLDivElement>(null)
 
@@ -267,6 +280,60 @@ export function ProjectHomeSurface({
     void loadHomePlugins()
     void loadProjectSkills()
   }, [cacheKey, loadHomePlugins, loadProjectSkills])
+
+  const applyModelSettings = useCallback(
+    (snapshot: ClaudeAgentSettingsSnapshot) => {
+      const slots = {
+        primary: t('chat.modelSlotPrimary'),
+        haiku: t('chat.modelSlotHaiku'),
+        sonnet: t('chat.modelSlotSonnet'),
+        opus: t('chat.modelSlotOpus'),
+      }
+      setModelSettingsSnapshot(snapshot)
+      setModelRows(buildModelPickRows(snapshot.settings.providers, slots, t('chat.modelFallback')))
+    },
+    [t],
+  )
+
+  useEffect(() => {
+    window.claudeChat?.getSettings().then(applyModelSettings).catch(() => {
+      setModelSettingsSnapshot(null)
+      setModelRows([])
+    })
+    const onSettingsChanged = (event: Event) => {
+      applyModelSettings((event as CustomEvent<ClaudeAgentSettingsSnapshot>).detail)
+    }
+    window.addEventListener(CLAUDE_AGENT_SETTINGS_CHANGED_EVENT, onSettingsChanged)
+    return () => window.removeEventListener(CLAUDE_AGENT_SETTINGS_CHANGED_EVENT, onSettingsChanged)
+  }, [applyModelSettings])
+
+  const loadAgentSkillModelSettings = useCallback(async () => {
+    const getAgentModeSettings = window.desktop?.getAgentModeSettings
+    if (!getAgentModeSettings) {
+      setSkillModelOverrides({})
+      setDraftSkillModelOverrides({})
+      setSkillSettingsStatus(t('settings.agentMode.bridgeUnavailable'))
+      return
+    }
+    try {
+      const result = await getAgentModeSettings(project.path)
+      if (!result.ok) {
+        setSkillSettingsStatus(result.message)
+        return
+      }
+      const overrides = result.settings.skillModelOverrides ?? {}
+      setSkillModelOverrides(overrides)
+      setDraftSkillModelOverrides(overrides)
+      setSkillSettingsStatus(t('settings.agentMode.loaded'))
+    } catch (error) {
+      setSkillSettingsStatus(error instanceof Error ? error.message : String(error))
+    }
+  }, [project.path, t])
+
+  useEffect(() => {
+    if (!agentSettingsOpen) return
+    void loadAgentSkillModelSettings()
+  }, [agentSettingsOpen, loadAgentSkillModelSettings])
 
   useEffect(() => {
     const onRefresh = () => {
@@ -355,6 +422,35 @@ export function ProjectHomeSurface({
     setDraftOrder(homeCards.map((card) => card.cardId))
     setDraftSizes(Object.fromEntries(homeCards.map((card) => [card.cardId, card.size])))
   }, [agentSettingsOpen, agentSettingsPanel, homeCards])
+
+  const saveSkillModelSettings = async () => {
+    const saveAgentModeSettings = window.desktop?.saveAgentModeSettings
+    if (!saveAgentModeSettings) {
+      setSkillSettingsStatus(t('settings.agentMode.bridgeUnavailable'))
+      return
+    }
+    const skillPaths = new Set(skills.map((skill) => skill.path))
+    const next = Object.fromEntries(
+      Object.entries(draftSkillModelOverrides).filter(([skillPath, pick]) => {
+        if (!skillPaths.has(skillPath)) return false
+        return modelSettingsSnapshot ? Boolean(validateModelPick(modelSettingsSnapshot.settings, pick)) : true
+      }),
+    )
+    setSkillSettingsStatus(t('settings.agentMode.saving'))
+    try {
+      const result = await saveAgentModeSettings(project.path, { skillModelOverrides: next })
+      if (!result.ok) {
+        setSkillSettingsStatus(result.message)
+        return
+      }
+      const overrides = result.settings.skillModelOverrides ?? {}
+      setSkillModelOverrides(overrides)
+      setDraftSkillModelOverrides(overrides)
+      setSkillSettingsStatus(t('settings.agentMode.saved'))
+    } catch (error) {
+      setSkillSettingsStatus(error instanceof Error ? error.message : String(error))
+    }
+  }
 
   const saveSortOrder = async () => {
     const cardsById = new Map(homeCards.map((card) => [card.cardId, card]))
@@ -561,6 +657,14 @@ export function ProjectHomeSurface({
           draftSizes={draftSizes}
           onDraftOrderChange={setDraftOrder}
           onDraftSizeChange={(cardId, preferredSize) => setDraftSizes((prev) => ({ ...prev, [cardId]: preferredSize }))}
+          skills={skills}
+          modelRows={modelRows}
+          modelSettingsSnapshot={modelSettingsSnapshot}
+          skillModelOverrides={skillModelOverrides}
+          draftSkillModelOverrides={draftSkillModelOverrides}
+          skillSettingsStatus={skillSettingsStatus}
+          onDraftSkillModelOverridesChange={setDraftSkillModelOverrides}
+          onSaveSkillModelOverrides={() => void saveSkillModelSettings()}
           deletingSlug={deletingSlug}
           onDelete={(item) => void deleteCard(item)}
           onClose={onCloseAgentSettings}
@@ -1366,6 +1470,14 @@ function AgentSettingsModal({
   draftSizes,
   onDraftOrderChange,
   onDraftSizeChange,
+  skills,
+  modelRows,
+  modelSettingsSnapshot,
+  skillModelOverrides,
+  draftSkillModelOverrides,
+  skillSettingsStatus,
+  onDraftSkillModelOverridesChange,
+  onSaveSkillModelOverrides,
   deletingSlug,
   onDelete,
   onClose,
@@ -1379,6 +1491,14 @@ function AgentSettingsModal({
   draftSizes: Record<string, HomePluginCardSize>
   onDraftOrderChange: (order: string[]) => void
   onDraftSizeChange: (cardId: string, preferredSize: HomePluginCardSize) => void
+  skills: AgentContextSlashItem[]
+  modelRows: ModelPickMenuRow[]
+  modelSettingsSnapshot: ClaudeAgentSettingsSnapshot | null
+  skillModelOverrides: Record<string, ChatModelPick>
+  draftSkillModelOverrides: Record<string, ChatModelPick>
+  skillSettingsStatus: string
+  onDraftSkillModelOverridesChange: (overrides: Record<string, ChatModelPick>) => void
+  onSaveSkillModelOverrides: () => void
   deletingSlug: string
   onDelete: (item: HomePluginRunItem) => void
   onClose: () => void
@@ -1398,10 +1518,17 @@ function AgentSettingsModal({
     onClose()
   }
 
-  const navItems: { id: AgentSettingsPanelId; label: string; icon: 'settings' | 'sort' }[] = [
+  const navItems: { id: AgentSettingsPanelId; label: string; icon: 'settings' | 'sort' | 'chip' }[] = [
     { id: 'card-order', label: t('workspace.agentSettingsCardOrder'), icon: 'sort' },
+    { id: 'skills', label: t('workspace.agentSettingsSkills'), icon: 'chip' },
     { id: 'general', label: t('workspace.agentSettingsGeneral'), icon: 'settings' },
   ]
+  const caption =
+    activePanel === 'card-order'
+      ? t('workspace.agentSettingsCardOrder')
+      : activePanel === 'skills'
+        ? t('workspace.agentSettingsSkills')
+        : t('workspace.agentModeReady')
 
   return (
     <div className="project-home-modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -1409,7 +1536,7 @@ function AgentSettingsModal({
         <div className="project-home-modal__header">
           <div>
             <h2 id="agent-settings-title">{t('workspace.agentSettings')}</h2>
-            <p className="project-home-modal__caption">{activePanel === 'card-order' ? t('workspace.agentSettingsCardOrder') : t('workspace.agentModeReady')}</p>
+            <p className="project-home-modal__caption">{caption}</p>
           </div>
           <button type="button" className="project-home-icon-button" aria-label={t('filePanel.closeAria')} onClick={onClose}>
             <IconInline name="x" />
@@ -1436,6 +1563,18 @@ function AgentSettingsModal({
                 agent={agent}
                 status={status}
                 onDisable={() => setConfirmDisableOpen(true)}
+              />
+            ) : activePanel === 'skills' ? (
+              <SkillsModelSettingsPanel
+                skills={skills}
+                modelRows={modelRows}
+                modelSettingsSnapshot={modelSettingsSnapshot}
+                savedOverrides={skillModelOverrides}
+                draftOverrides={draftSkillModelOverrides}
+                status={skillSettingsStatus}
+                onDraftOverridesChange={onDraftSkillModelOverridesChange}
+                onClose={onClose}
+                onSave={onSaveSkillModelOverrides}
               />
             ) : (
               <CardOrderSettingsPanel
@@ -1496,9 +1635,9 @@ function AgentSettingsGeneralPanel({
             <div className="settings-field-row__meta">
               <div className="settings-field-row__label">
                 <IconInline name="agent" />
-                {t('workspace.disableAgentMode')}
+                {t('workspace.agentModeEnabledLabel')}
               </div>
-              <p className="settings-field-row__hint">{t('workspace.agentModeDisabled')}</p>
+              <p className="settings-field-row__hint">{t('workspace.disableAgentModeHint')}</p>
             </div>
             <div className="settings-field-row__controls">
               <button type="button" className="agent-card-secondary-button" disabled={agent.loading} onClick={onDisable}>
@@ -1510,6 +1649,106 @@ function AgentSettingsGeneralPanel({
         <p className="settings-switch-status" role="status" aria-live="polite">
           {status || agent.message}
         </p>
+      </section>
+    </section>
+  )
+}
+
+function SkillsModelSettingsPanel({
+  skills,
+  modelRows,
+  modelSettingsSnapshot,
+  savedOverrides,
+  draftOverrides,
+  status,
+  onDraftOverridesChange,
+  onClose,
+  onSave,
+}: {
+  skills: AgentContextSlashItem[]
+  modelRows: ModelPickMenuRow[]
+  modelSettingsSnapshot: ClaudeAgentSettingsSnapshot | null
+  savedOverrides: Record<string, ChatModelPick>
+  draftOverrides: Record<string, ChatModelPick>
+  status: string
+  onDraftOverridesChange: (overrides: Record<string, ChatModelPick>) => void
+  onClose: () => void
+  onSave: () => void
+}) {
+  const { t } = useI18n()
+  const hasModels = modelRows.length > 0
+  const defaultLabel = t('workspace.agentSettingsSkillDefaultModel')
+  const setSkillPick = (skillPath: string, pickKey: string) => {
+    const next = { ...draftOverrides }
+    if (!pickKey) {
+      delete next[skillPath]
+    } else {
+      const row = modelRows.find((item) => item.pickKey === pickKey)
+      if (row) next[skillPath] = modelPickFromRow(row)
+    }
+    onDraftOverridesChange(next)
+  }
+  const reset = () => onDraftOverridesChange(savedOverrides)
+
+  return (
+    <section className="settings-stack agent-settings-panel" aria-labelledby="agent-settings-skills-heading">
+      <section className="settings-section">
+        <h3 id="agent-settings-skills-heading" className="settings-section-heading">
+          {t('workspace.agentSettingsSkills')}
+        </h3>
+        <p className="settings-section-caption">{t('workspace.agentSettingsSkillsHint')}</p>
+        <div className="agent-skill-model-list" role="list">
+          {skills.length === 0 ? (
+            <div className="project-home-skill-empty">{t('workspace.taskNoSkills')}</div>
+          ) : null}
+          {skills.map((skill) => {
+            const rawPick = draftOverrides[skill.path]
+            const validPick = modelSettingsSnapshot ? validateModelPick(modelSettingsSnapshot.settings, rawPick) : rawPick
+            const row = modelRowForPick(modelRows, validPick)
+            const currentValue = row?.pickKey ?? ''
+            return (
+              <div key={skill.path} className="agent-skill-model-row" role="listitem">
+                <span className="agent-skill-model-row__icon" aria-hidden="true">
+                  <IconInline name="chip" />
+                </span>
+                <span className="agent-skill-model-row__copy">
+                  <span>{skill.title || skill.name}</span>
+                  <span>{skill.command ? `/${skill.command}` : skill.relativePath}</span>
+                </span>
+                <label className="agent-skill-model-row__selector">
+                  <span className="sr-only">{t('workspace.agentSettingsSkillModelFor', { name: skill.title || skill.name })}</span>
+                  <select
+                    className="settings-input settings-select"
+                    value={currentValue}
+                    disabled={!hasModels}
+                    onChange={(event) => setSkillPick(skill.path, event.target.value)}
+                  >
+                    <option value="">{defaultLabel}</option>
+                    {modelRows.map((item) => (
+                      <option key={item.pickKey} value={item.pickKey}>
+                        {item.headline}{item.metaLine ? ` · ${item.metaLine}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            )
+          })}
+        </div>
+        <p className="settings-switch-status" role="status" aria-live="polite">
+          {status}
+        </p>
+        <div className="agent-settings-panel-actions">
+          <button type="button" className="agent-card-secondary-button" onClick={() => {
+            reset()
+            onClose()
+          }}>
+            {t('settings.agentMode.cancel')}
+          </button>
+          <button type="button" className="agent-card-primary-button" disabled={!hasModels && skills.length > 0} onClick={onSave}>
+            {t('settings.agentMode.confirm')}
+          </button>
+        </div>
       </section>
     </section>
   )

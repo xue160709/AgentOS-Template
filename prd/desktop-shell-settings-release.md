@@ -11,7 +11,7 @@
 | P0 | Electron 窗口 | 创建 BrowserWindow，配置尺寸、标题栏、外部链接处理 |
 | P0 | Preload API | 暴露安全的 `window.desktop` 和 `window.claudeChat` |
 | P0 | 设置页路由 | 管理模型、偏好、更新、Agent Mode、开发者设置入口 |
-| P0 | 桌面偏好 | close-to-tray、open-at-login、locale |
+| P0 | 桌面偏好 | close-to-tray、open-at-login、eye comfort、locale |
 | P1 | 托盘 | 隐藏到托盘、显示窗口、新建会话、打开项目、退出 |
 | P1 | 自动更新 | 检查、下载、安装并推送更新状态 |
 | P1 | 国际化 | 中文、英文文案切换，语言变更后提示重启 |
@@ -29,6 +29,7 @@ type AppUiLocale = 'zh' | 'en'
 interface DesktopPreferences {
   closeToTray: boolean
   openAtLogin: boolean
+  eyeComfortMode: boolean
   locale?: AppUiLocale
 }
 
@@ -124,6 +125,7 @@ flowchart TD
 - 外部 HTTP/HTTPS 链接统一通过系统浏览器打开，非应用导航会被拦截。
 - 应用使用 single instance lock；第二次启动会聚焦已有窗口。
 - close-to-tray 开启时关闭窗口只隐藏；退出需要托盘菜单或显式 quit。
+- 护眼模式 `eyeComfortMode` 保存在桌面偏好中，渲染层在根节点切换 `eye-comfort-mode` class，为界面叠加暖色调。
 - macOS 原生语音只在 `process.platform === 'darwin'` 支持；主进程通过 `/usr/bin/open -n -W` 以 LaunchServices 启动 helper `.app`，避免裸二进制缺少稳定 bundle 身份导致 TCC 权限异常。
 - Electron 与 helper 使用 `/private/tmp/agentos-speech-<pid>-<uuid>.sock` Unix domain socket 传 NDJSON；主进程将 helper 的 `status/partial/final/error` 转发到 `desktop:speech-recognition-event`。
 - helper 权限请求顺序为 Speech Recognition 后 Microphone；如果用户拒绝任一权限，主进程推送 `error` 事件并把状态置为 `error`。

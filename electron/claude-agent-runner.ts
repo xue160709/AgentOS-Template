@@ -15,6 +15,7 @@ import {
   type SDKMessage,
 } from '@anthropic-ai/claude-agent-sdk'
 import type {
+  ChatModelPick,
   ClaudeAskUserQuestion,
   ClaudeAgentResolvedConfig,
   ClaudeChatAttachment,
@@ -62,6 +63,8 @@ type ActiveRequest = {
   didEmitThinking: boolean
   checkpointId?: string
   promptMode?: ClaudeChatSubmitPayload['promptMode']
+  modelPick?: ChatModelPick
+  handoffContext?: string
   agentModeSettingsOverride?: ClaudeChatSubmitPayload['agentModeSettingsOverride']
   permissionMode: ClaudePermissionMode
   seenToolUseIds: Set<string>
@@ -110,7 +113,7 @@ export class ClaudeAgentRunner {
   constructor(
     private readonly webContents: WebContents,
     private readonly cwd: string,
-    private readonly resolveConfig: () => ClaudeAgentResolvedConfig,
+    private readonly resolveConfig: (modelPick?: ChatModelPick) => ClaudeAgentResolvedConfig,
     private readonly resolveAgentModeSettings: (rootPath: string) => Promise<AgentModeProjectSettings>,
     private readonly resolveUiLocale: () => AppUiLocale,
     private readonly observeEvent?: (event: ClaudeChatEvent) => void,
@@ -168,6 +171,8 @@ export class ClaudeAgentRunner {
         payload.promptMode === 'home-plugin-task-run'
           ? payload.promptMode
           : undefined,
+      modelPick: normalizeModelPick(payload.modelPick),
+      handoffContext: typeof payload.handoffContext === 'string' ? payload.handoffContext.trim() : '',
       agentModeSettingsOverride: normalizeAgentModeSettingsOverride(payload.agentModeSettingsOverride),
       permissionMode: normalizeChatPermissionMode(payload.permissionMode),
       seenToolUseIds: new Set(),
@@ -284,7 +289,7 @@ export class ClaudeAgentRunner {
       }
     }
 
-    const config = this.resolveConfig()
+    const config = this.resolveConfig(payload.modelPick)
     if (!config.apiKey && !config.authToken) {
       const result: ClaudeFileRewindResult = {
         ok: false,
@@ -355,7 +360,7 @@ export class ClaudeAgentRunner {
   // --- SDK query lifecycle / SDK 查询生命周期 ---
 
   private async run(prompt: string, attachments: ClaudeChatAttachment[], activeRequest: ActiveRequest): Promise<void> {
-    const config = this.resolveConfig()
+    const config = this.resolveConfig(activeRequest.modelPick)
     const threadState = this.getThreadRuntimeState(activeRequest.threadId)
     const nextConfigSignature = getConfigSignature(config)
     if (threadState.configSignature && threadState.configSignature !== nextConfigSignature) {
@@ -403,7 +408,7 @@ export class ClaudeAgentRunner {
             ? HOME_PLUGIN_CUSTOMIZATION_SKILL
             : undefined,
       })
-      const promptInput = buildSdkPromptInput(resolvedPrompt, attachments)
+      const promptInput = buildSdkPromptInput(withHandoffContext(resolvedPrompt, activeRequest.handoffContext), attachments)
       const sdkEnv = buildSdkEnv(config)
       const pathToClaudeCodeExecutable = resolveClaudeCodeExecutablePath({ appRoot: this.cwd })
       if (attachments.length > 0) {
@@ -766,6 +771,27 @@ function buildRequestAppendSystemPrompt(activeRequest: ActiveRequest, basePrompt
     sections.push(HOME_PLUGIN_TASK_RUN_SYSTEM_PROMPT)
   }
   return sections.length > 0 ? sections.join('\n\n') : undefined
+}
+
+function withHandoffContext(prompt: string, handoffContext?: string): string {
+  const context = handoffContext?.trim()
+  if (!context) return prompt
+  return [
+    context,
+    '',
+    '---',
+    '',
+    '继续处理当前用户消息：',
+    prompt,
+  ].join('\n')
+}
+
+function normalizeModelPick(value: unknown): ChatModelPick | undefined {
+  if (!isRecord(value)) return undefined
+  const providerId = typeof value.providerId === 'string' ? value.providerId.trim() : ''
+  const anthropicModel = typeof value.anthropicModel === 'string' ? value.anthropicModel.trim() : ''
+  if (!providerId || !anthropicModel) return undefined
+  return { providerId, anthropicModel }
 }
 
 function previewValue(value: unknown): string {

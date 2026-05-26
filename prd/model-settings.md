@@ -2,7 +2,7 @@
 
 ## 功能概述
 
-模型与 Provider 设置模块负责管理 Claude Agent 运行所需的 API Key、Auth Token、Base URL、模型名称、层级模型和图片能力。用户可以选择内置 Provider 预设，也可以添加兼容 Anthropic API 的自定义 Provider。
+模型与 Provider 设置模块负责管理 Claude Agent 运行所需的 API Key、Auth Token、Base URL、模型名称、层级模型、图片能力和 thread/Skill 使用的实际模型选择。用户可以选择内置 Provider 预设，也可以添加兼容 Anthropic API 的自定义 Provider。
 
 ## 核心功能列表
 
@@ -15,7 +15,8 @@
 | P0 | 图片能力 | Provider 和模型可声明是否支持图片 |
 | P1 | Provider 预设 | 从远程预设加载，失败时回退本地预设 |
 | P1 | 连接测试 | 发送测试请求验证配置 |
-| P1 | 聊天模型选择 | 聊天页可设置当前 active chat pick |
+| P1 | 聊天模型选择 | 聊天页可为当前 thread 设置 provider/model |
+| P1 | Skill 模型选项 | Agent 设置 Skills 面板复用同一聚合模型列表 |
 | P1 | 首次启动配置 | 空工作区引导中可直接写入当前 active Provider |
 | P1 | 环境变量模式 | 开发环境可选择 env 来源，打包环境强制 settings |
 
@@ -61,6 +62,21 @@ interface ClaudeAgentSettingsSnapshot {
     defaultSonnetModel: string
   }
 }
+
+interface ChatModelPick {
+  providerId: string
+  anthropicModel: string
+}
+
+interface ModelPickMenuRow {
+  pickKey: string
+  providerId: string
+  anthropicModelId: string
+  useOverlayPick: boolean
+  supportsImages: boolean
+  headline: string
+  metaLine: string
+}
 ```
 
 ## 业务逻辑
@@ -75,8 +91,8 @@ flowchart TD
   E --> G[编辑 Provider]
   F --> G
   G --> H[保存设置]
-  H --> I[聊天运行时 resolve 配置]
-  I --> J[构建 SDK 环境变量]
+  H --> I[聊天/Skill 运行时 resolve 配置]
+  I --> J[按 modelPick 构建 SDK 环境变量]
   G --> K[测试连接]
   K --> L[请求 /v1/messages]
 ```
@@ -89,6 +105,11 @@ flowchart TD
 - 模型图片能力影响聊天附件提交。
 - 第三方 Anthropic 兼容服务通过环境变量传递模型名。
 - `activeAnthropicModel` 只允许匹配当前 Provider 的主模型或 Haiku/Sonnet/Opus 映射；等于主模型时归并为空字符串。
+- composer 和 Agent 设置 Skills 面板使用 `buildModelPickRows` 聚合模型选项；每个 Provider 的主模型、Haiku、Sonnet、Opus 映射都会生成可选项，重复模型名在同一 Provider 内去重。
+- `ChatModelPick` 是实际运行模型的最小闭包，只保存 `providerId` 和 `anthropicModel`；它可被 thread、Project Skill 覆盖和文件回滚请求复用。
+- 活动 thread 存在时，聊天模型选择只更新该 thread 的 `chatState.modelPick` 并清空不匹配的 `sessionId`；没有活动 thread 时才更新全局 `activeProviderId/activeAnthropicModel`。
+- 全局 `activeProviderId/activeAnthropicModel` 是新 thread、无效模型覆盖和无活动 thread 场景的 fallback；如果当前全局模型被删除，则自动选择当前 Provider 的第一个有效模型，仍无有效模型时遍历其它 Provider。
+- `ClaudeAgentSettingsStore.resolve(modelPick)` 会优先校验并使用请求携带的 provider/model，构造本次 SDK 的 `ANTHROPIC_*` env；校验失败时回退原有 settings/env resolve 逻辑。
 - Provider id 会去重；重复 id 会追加序号后缀。
 - `authToken` 模式在测试请求中使用 `Authorization: Bearer`，`apiKey` 模式使用 `x-api-key`。
 - env 来源读取 `ANTHROPIC_API_KEY`、`ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_BASE_URL`、`ANTHROPIC_MODEL`/`CLAUDE_MODEL`、`ANTHROPIC_DEFAULT_*_MODEL` 和 `ANTHROPIC_SUPPORTS_IMAGES`。
@@ -112,10 +133,12 @@ flowchart TD
 - `src/model-provider-presets.ts`
 - `src/model-provider-presets.json`
 - `src/desktop-types.ts`
+- `src/model-pick.ts`
 
 ### 业务逻辑工具/工具类
 
 - `electron/claude-agent-settings.ts`
+- `electron/claude-agent-runner.ts`
 - `electron/claude-agent-runner/config.ts`
 - `electron/main.ts`
 
@@ -128,6 +151,7 @@ flowchart TD
 ### 直接关联
 
 - `prd/chat-agent-runtime.md`：聊天运行依赖模型配置。
+- `prd/agent-mode.md`：Project Skill 模型覆盖引用 Provider/model 选项并做有效性校验。
 - `prd/file-context.md`：图片附件依赖模型图片能力。
 
 ### 间接关联

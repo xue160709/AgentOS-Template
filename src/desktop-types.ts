@@ -3,6 +3,8 @@
  * Desktop preference and Agent Mode shared types aligned across renderer and main.
  */
 
+import type { ChatModelPick } from './claude-chat-types'
+
 /** UI 文本语言；与会话偏好一致并由主进程写入模板 / UI text locale; matches session prefs and main-process templates */
 export type AppUiLocale = 'zh' | 'en'
 
@@ -86,6 +88,7 @@ export type AgentModeProjectSettings = {
   todoEnabled: boolean
   user: string
   identity: string
+  skillModelOverrides: Record<string, ChatModelPick>
 }
 
 /** Agent Mode 状态查询结果 / Agent Mode status query result */

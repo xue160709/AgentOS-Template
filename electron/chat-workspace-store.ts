@@ -51,6 +51,7 @@ type ThreadRow = {
   archivedAt: number | null
   sessionId: string | null
   model: string | null
+  modelPickJson: string | null
   cwd: string | null
 }
 
@@ -200,7 +201,7 @@ export class ChatWorkspaceStore {
           'skill_path AS skillPath, skill_command AS skillCommand, skill_title AS skillTitle,',
           'created_at AS createdAt, updated_at AS updatedAt,',
           'pinned_at AS pinnedAt, archived_at AS archivedAt,',
-          'session_id AS sessionId, model, cwd',
+          'session_id AS sessionId, model, model_pick_json AS modelPickJson, cwd',
           'FROM threads',
           'ORDER BY pinned_at DESC NULLS LAST, updated_at DESC, created_at DESC',
         ].join(' '),
@@ -287,6 +288,7 @@ export class ChatWorkspaceStore {
           archived_at INTEGER,
           session_id TEXT,
           model TEXT NOT NULL DEFAULT 'Claude Agent',
+          model_pick_json TEXT,
           cwd TEXT,
           message_count INTEGER NOT NULL DEFAULT 0,
           first_user_message TEXT NOT NULL DEFAULT '',
@@ -342,13 +344,13 @@ export class ChatWorkspaceStore {
         statements.push(
           `INSERT INTO threads (
              id, project_id, rollout_path, created_at, updated_at, title, pinned_at, archived_at,
-             purpose, home_plugin_slug, skill_path, skill_command, skill_title, session_id, model, cwd, message_count, first_user_message, preview, response_duration_ms
+             purpose, home_plugin_slug, skill_path, skill_command, skill_title, session_id, model, model_pick_json, cwd, message_count, first_user_message, preview, response_duration_ms
            )
            VALUES (
              ${sqlValue(thread.id)}, ${sqlValue(thread.projectId)}, ${sqlValue(rolloutPath)}, ${sqlValue(thread.createdAt)},
              ${sqlValue(thread.updatedAt)}, ${sqlValue(thread.title)}, ${sqlValue(thread.pinnedAt)}, ${sqlValue(thread.archivedAt)},
              ${sqlValue(thread.purpose)}, ${sqlValue(thread.homePluginSlug)}, ${sqlValue(thread.skillPath)}, ${sqlValue(thread.skillCommand)}, ${sqlValue(thread.skillTitle)},
-             ${sqlValue(thread.chatState.sessionId)}, ${sqlValue(thread.chatState.model)}, ${sqlValue(thread.chatState.cwd)},
+             ${sqlValue(thread.chatState.sessionId)}, ${sqlValue(thread.chatState.model)}, ${sqlValue(thread.chatState.modelPick ? JSON.stringify(thread.chatState.modelPick) : undefined)}, ${sqlValue(thread.chatState.cwd)},
              ${sqlValue(messageCount(thread.chatState.items))}, ${sqlValue(firstUser)}, ${sqlValue(preview)},
              ${sqlValue(responseDurationMs)}
            )
@@ -367,6 +369,7 @@ export class ChatWorkspaceStore {
              archived_at = excluded.archived_at,
              session_id = excluded.session_id,
              model = excluded.model,
+             model_pick_json = excluded.model_pick_json,
              cwd = excluded.cwd,
              message_count = excluded.message_count,
              first_user_message = excluded.first_user_message,
@@ -505,6 +508,7 @@ export class ChatWorkspaceStore {
     const state: ChatState = {
       sessionId: thread.sessionId ?? undefined,
       model: thread.model || 'Claude Agent',
+      modelPick: safeModelPick(safeJsonParse(thread.modelPickJson ?? undefined, undefined)),
       cwd: thread.cwd ?? undefined,
       items: [],
     }
@@ -521,6 +525,7 @@ export class ChatWorkspaceStore {
         if (event.type === 'session_meta' || event.type === 'thread_state') {
           state.sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : state.sessionId
           state.model = typeof payload.model === 'string' ? payload.model : state.model
+          state.modelPick = safeModelPick(payload.modelPick) ?? state.modelPick
           state.cwd = typeof payload.cwd === 'string' ? payload.cwd : state.cwd
           continue
         }
@@ -572,6 +577,9 @@ export class ChatWorkspaceStore {
       }
       if (columns.length > 0 && !columns.some((column) => column.name === 'skill_title')) {
         this.runSql('ALTER TABLE threads ADD COLUMN skill_title TEXT;')
+      }
+      if (columns.length > 0 && !columns.some((column) => column.name === 'model_pick_json')) {
+        this.runSql('ALTER TABLE threads ADD COLUMN model_pick_json TEXT;')
       }
     } catch {
       /* Fresh databases create the column through CREATE TABLE. */
@@ -981,6 +989,7 @@ function serializeRollout(thread: WorkspaceThread): string {
         updatedAt: thread.updatedAt,
         archivedAt: thread.archivedAt,
         model: thread.chatState.model,
+        modelPick: thread.chatState.modelPick,
         cwd: thread.chatState.cwd,
         sessionId: thread.chatState.sessionId,
         source: 'agentos',
@@ -992,6 +1001,7 @@ function serializeRollout(thread: WorkspaceThread): string {
       payload: {
         sessionId: thread.chatState.sessionId,
         model: thread.chatState.model,
+        modelPick: thread.chatState.modelPick,
         cwd: thread.chatState.cwd,
       },
     },
@@ -1018,6 +1028,14 @@ function safeJsonParse(value: string | undefined, fallback: unknown): unknown {
   } catch {
     return fallback
   }
+}
+
+function safeModelPick(value: unknown): ChatState['modelPick'] {
+  if (!isRecord(value)) return undefined
+  const providerId = typeof value.providerId === 'string' ? value.providerId.trim() : ''
+  const anthropicModel = typeof value.anthropicModel === 'string' ? value.anthropicModel.trim() : ''
+  if (!providerId || !anthropicModel) return undefined
+  return { providerId, anthropicModel }
 }
 
 function itemTimestamp(item: TranscriptItem, fallback: number): number {

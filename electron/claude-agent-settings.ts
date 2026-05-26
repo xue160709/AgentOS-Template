@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import type {
   ActiveChatPickPayload,
+  ChatModelPick,
   ClaudeAgentConfigSource,
   ClaudeAgentEnvSnapshot,
   ClaudeAgentModelProvider,
@@ -141,9 +142,22 @@ export class ClaudeAgentSettingsStore {
     return this.save({ ...settings, activeProviderId: id, activeAnthropicModel })
   }
 
-  resolve(): ClaudeAgentResolvedConfig {
+  resolve(modelPick?: ChatModelPick): ClaudeAgentResolvedConfig {
     const settings = this.read()
     const env = this.getEnvSnapshot()
+
+    const pickedProvider = modelPick ? selectProviderForPick(settings, modelPick) : undefined
+    if (pickedProvider) {
+      const resolved = resolveProviderConfig(pickedProvider.provider, pickedProvider.model)
+      safeConsoleInfo('[ClaudeAgentSettingsStore] resolved model-pick config', {
+        settingsFilePath: this.settingsFilePath,
+        requestedProviderId: modelPick?.providerId ?? '',
+        requestedModel: modelPick?.anthropicModel ?? '',
+        providerName: pickedProvider.provider.name,
+        resolved: summarizeResolvedConfigForLog(resolved),
+      })
+      return resolved
+    }
 
     if (this.allowEnvConfigSource && settings.configSource === 'env') {
       const resolved: ClaudeAgentResolvedConfig = {
@@ -162,34 +176,22 @@ export class ClaudeAgentSettingsStore {
     }
 
     const provider = selectActiveProvider(settings)
-    const providerApiKey = provider?.apiKey ?? ''
-
     const overlay = normalizeString(settings.activeAnthropicModel)
     const primaryModel = normalizeString(provider?.model ?? '')
     const effectiveOverlay =
       overlay && provider && providerAcceptsModel(provider, overlay) ? overlay : ''
     const resolvedModel = effectiveOverlay || primaryModel
 
-    const resolved: ClaudeAgentResolvedConfig = {
-      configSource: 'settings',
-      apiKey: providerApiKey
-        ? provider?.authMode === 'authToken'
-          ? ''
-          : providerApiKey
-        : '',
-      authToken: providerApiKey
-        ? provider?.authMode === 'authToken'
-          ? providerApiKey
-          : ''
-        : '',
-      baseUrl: provider?.baseUrl || '',
-      model: resolvedModel,
-      supportsImages: provider
-        ? providerSupportsImagesForModel(provider, resolvedModel, false)
-        : false,
-      defaultHaikuModel: provider?.defaultHaikuModel || '',
-      defaultOpusModel: provider?.defaultOpusModel || '',
-      defaultSonnetModel: provider?.defaultSonnetModel || '',
+    const resolved = provider ? resolveProviderConfig(provider, resolvedModel) : {
+      configSource: 'settings' as ClaudeAgentConfigSource,
+      apiKey: '',
+      authToken: '',
+      baseUrl: '',
+      model: '',
+      supportsImages: false,
+      defaultHaikuModel: '',
+      defaultOpusModel: '',
+      defaultSonnetModel: '',
     }
     safeConsoleInfo('[ClaudeAgentSettingsStore] resolved settings config', {
       settingsFilePath: this.settingsFilePath,
@@ -219,6 +221,39 @@ export class ClaudeAgentSettingsStore {
       defaultSonnetModel: readEnv('ANTHROPIC_DEFAULT_SONNET_MODEL'),
     }
   }
+}
+
+function resolveProviderConfig(provider: ClaudeAgentModelProvider, model: string): ClaudeAgentResolvedConfig {
+  const providerApiKey = provider.apiKey ?? ''
+  return {
+    configSource: 'settings',
+    apiKey: providerApiKey
+      ? provider.authMode === 'authToken'
+        ? ''
+        : providerApiKey
+      : '',
+    authToken: providerApiKey
+      ? provider.authMode === 'authToken'
+        ? providerApiKey
+        : ''
+      : '',
+    baseUrl: provider.baseUrl || '',
+    model: model || provider.model || '',
+    supportsImages: providerSupportsImagesForModel(provider, model || provider.model || '', false),
+    defaultHaikuModel: provider.defaultHaikuModel || '',
+    defaultOpusModel: provider.defaultOpusModel || '',
+    defaultSonnetModel: provider.defaultSonnetModel || '',
+  }
+}
+
+function selectProviderForPick(
+  settings: ClaudeAgentSettings,
+  pick: ChatModelPick,
+): { provider: ClaudeAgentModelProvider; model: string } | undefined {
+  const provider = settings.providers.find((item) => item.id === normalizeString(pick.providerId))
+  const model = normalizeString(pick.anthropicModel)
+  if (!provider || !model || !providerAcceptsModel(provider, model)) return undefined
+  return { provider, model }
 }
 
 function normalizeSettings(raw: unknown, allowEnvConfigSource: boolean): ClaudeAgentSettings {
