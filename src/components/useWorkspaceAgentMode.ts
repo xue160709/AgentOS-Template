@@ -80,7 +80,7 @@ export function useWorkspaceAgentMode(project: WorkspaceProject) {
       const setAgentModeState = window.desktop?.setAgentModeState
       if (!setAgentModeState) {
         setMessage(t('workspace.agentModeUnavailable'))
-        return
+        return false
       }
 
       setLoading(true)
@@ -91,8 +91,10 @@ export function useWorkspaceAgentMode(project: WorkspaceProject) {
         if (result.ok && partial.enabled === false) {
           setMessage(t('workspace.agentModeDisabled'))
         }
+        return result.ok
       } catch (error) {
         setMessage(error instanceof Error ? error.message : t('workspace.agentModeFailed'))
+        return false
       } finally {
         setLoading(false)
       }

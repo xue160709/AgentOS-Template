@@ -74,6 +74,9 @@ flowchart TD
 - 应用以本地项目路径为主组织单位。
 - 会话、Home Plugin、任务卡片和 Agent Mode 都必须归属某个项目。
 - React 入口只负责挂载 `AppShell`、注入初始 i18n Context、写入窗口 chrome dataset 和安装安全区/外链拦截等全局副作用。
+- 侧边栏底部全局设置入口使用与搜索入口一致的图标加文字按钮；项目首页右上角 Agent Mode 未开启时显示 Switch，开启后显示设置按钮并打开 Agent 模式设置模态。
+- Agent 模式设置模态只承载项目首页运行态设置（常规、卡片顺序）；全局设置页仍承载模型 Provider、项目 Skills、Agent Mode USER/IDENTITY、更新和开发者设置。
+- 全局设置页和 Agent 模式设置模态共用设置界面视觉规范：设置项导航与内容区分离，内容复用分区、分组行、说明文案、焦点态和确认弹窗样式。
 - About 面板、设置页和发布元数据统一读取 `APP_METADATA`，避免产品名、作者、仓库、License 等信息在多处漂移。
 - Agent 运行必须通过主进程统一处理，渲染层只通过 preload 暴露的安全 API 访问。
 - 文件读取、预览和插件运行都必须限制在项目根目录内。

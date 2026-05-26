@@ -15,7 +15,8 @@ import type {
 } from '../../desktop-types'
 import { IconInline } from '../../icon-inline'
 import { useI18n } from '../../i18n/i18n'
-import type { ProjectSkillRunRequest, ThreadRunState, WorkspaceProject, WorkspaceThread } from '../types'
+import type { AgentSettingsPanelId, ProjectSkillRunRequest, ThreadRunState, WorkspaceProject, WorkspaceThread } from '../types'
+import type { WorkspaceAgentModeState } from '../useWorkspaceAgentMode'
 import { sortProjectsForSidebar } from '../project-order'
 import { renderMarkdown } from './markdown'
 
@@ -23,8 +24,14 @@ type ProjectHomeSurfaceProps = {
   project: WorkspaceProject
   projects: WorkspaceProject[]
   projectOrderIds: readonly string[]
+  agent: WorkspaceAgentModeState
   todoEnabled: boolean
   loading: boolean
+  agentSettingsOpen: boolean
+  agentSettingsPanel: AgentSettingsPanelId
+  onOpenAgentSettings: (panel: AgentSettingsPanelId) => void
+  onAgentSettingsPanelChange: (panel: AgentSettingsPanelId) => void
+  onCloseAgentSettings: () => void
   threads: WorkspaceThread[]
   threadRunStates: Record<string, ThreadRunState>
   hiddenSkillPaths: string[]
@@ -171,8 +178,14 @@ export function ProjectHomeSurface({
   project,
   projects,
   projectOrderIds,
+  agent,
   todoEnabled,
   loading,
+  agentSettingsOpen,
+  agentSettingsPanel,
+  onOpenAgentSettings,
+  onAgentSettingsPanelChange,
+  onCloseAgentSettings,
   threads,
   threadRunStates,
   hiddenSkillPaths,
@@ -193,7 +206,6 @@ export function ProjectHomeSurface({
   const [addMenuOpen, setAddMenuOpen] = useState(false)
   const [taskDialogOpen, setTaskDialogOpen] = useState(false)
   const [editingTaskSlug, setEditingTaskSlug] = useState<string | undefined>()
-  const [sortDialogOpen, setSortDialogOpen] = useState(false)
   const [draftOrder, setDraftOrder] = useState<string[]>([])
   const [draftSizes, setDraftSizes] = useState<Record<string, HomePluginCardSize>>({})
   const [deletingSlug, setDeletingSlug] = useState('')
@@ -339,10 +351,10 @@ export function ProjectHomeSurface({
   const gridItems = useMemo(() => buildHomeGridItems(homeCards), [homeCards])
 
   useEffect(() => {
-    if (!sortDialogOpen) return
+    if (!agentSettingsOpen || agentSettingsPanel !== 'card-order') return
     setDraftOrder(homeCards.map((card) => card.cardId))
     setDraftSizes(Object.fromEntries(homeCards.map((card) => [card.cardId, card.size])))
-  }, [homeCards, sortDialogOpen])
+  }, [agentSettingsOpen, agentSettingsPanel, homeCards])
 
   const saveSortOrder = async () => {
     const cardsById = new Map(homeCards.map((card) => [card.cardId, card]))
@@ -370,7 +382,7 @@ export function ProjectHomeSurface({
     const nextLayout = normalizeHomeCardLayout({ order: draftOrder, sizes: draftSizes })
     writeHomeCardLayout(project.path, nextLayout)
     setCardLayout(nextLayout)
-    setSortDialogOpen(false)
+    onCloseAgentSettings()
     outputHashesRef.current = {}
     window.dispatchEvent(new CustomEvent('project-home:refresh'))
   }
@@ -433,7 +445,7 @@ export function ProjectHomeSurface({
             title={t('workspace.sortAgentCards')}
             aria-label={t('workspace.sortAgentCards')}
             disabled={loading || homeCards.length === 0}
-            onClick={() => setSortDialogOpen(true)}
+            onClick={() => onOpenAgentSettings('card-order')}
           >
             <IconInline name="sort" />
           </button>
@@ -539,8 +551,11 @@ export function ProjectHomeSurface({
           }}
         />
       ) : null}
-      {sortDialogOpen ? (
-        <SortCardsDialog
+      {agentSettingsOpen ? (
+        <AgentSettingsModal
+          agent={agent}
+          activePanel={agentSettingsPanel}
+          onActivePanelChange={onAgentSettingsPanelChange}
           cards={homeCards}
           draftOrder={draftOrder}
           draftSizes={draftSizes}
@@ -548,7 +563,7 @@ export function ProjectHomeSurface({
           onDraftSizeChange={(cardId, preferredSize) => setDraftSizes((prev) => ({ ...prev, [cardId]: preferredSize }))}
           deletingSlug={deletingSlug}
           onDelete={(item) => void deleteCard(item)}
-          onClose={() => setSortDialogOpen(false)}
+          onClose={onCloseAgentSettings}
           onSave={() => void saveSortOrder()}
         />
       ) : null}
@@ -1342,7 +1357,165 @@ function TaskCardDialog({
   )
 }
 
-function SortCardsDialog({
+function AgentSettingsModal({
+  agent,
+  activePanel,
+  onActivePanelChange,
+  cards,
+  draftOrder,
+  draftSizes,
+  onDraftOrderChange,
+  onDraftSizeChange,
+  deletingSlug,
+  onDelete,
+  onClose,
+  onSave,
+}: {
+  agent: WorkspaceAgentModeState
+  activePanel: AgentSettingsPanelId
+  onActivePanelChange: (panel: AgentSettingsPanelId) => void
+  cards: HomeCardItem[]
+  draftOrder: string[]
+  draftSizes: Record<string, HomePluginCardSize>
+  onDraftOrderChange: (order: string[]) => void
+  onDraftSizeChange: (cardId: string, preferredSize: HomePluginCardSize) => void
+  deletingSlug: string
+  onDelete: (item: HomePluginRunItem) => void
+  onClose: () => void
+  onSave: () => void
+}) {
+  const { t } = useI18n()
+  const [confirmDisableOpen, setConfirmDisableOpen] = useState(false)
+  const [status, setStatus] = useState('')
+  const disableAgentMode = async () => {
+    setStatus('')
+    const ok = await agent.updateAgentModeState({ enabled: false })
+    if (!ok) {
+      setStatus(t('workspace.agentModeFailed'))
+      return
+    }
+    setConfirmDisableOpen(false)
+    onClose()
+  }
+
+  const navItems: { id: AgentSettingsPanelId; label: string; icon: 'settings' | 'sort' }[] = [
+    { id: 'card-order', label: t('workspace.agentSettingsCardOrder'), icon: 'sort' },
+    { id: 'general', label: t('workspace.agentSettingsGeneral'), icon: 'settings' },
+  ]
+
+  return (
+    <div className="project-home-modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <div className="project-home-modal project-home-modal--agent-settings" role="dialog" aria-modal="true" aria-labelledby="agent-settings-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="project-home-modal__header">
+          <div>
+            <h2 id="agent-settings-title">{t('workspace.agentSettings')}</h2>
+            <p className="project-home-modal__caption">{activePanel === 'card-order' ? t('workspace.agentSettingsCardOrder') : t('workspace.agentModeReady')}</p>
+          </div>
+          <button type="button" className="project-home-icon-button" aria-label={t('filePanel.closeAria')} onClick={onClose}>
+            <IconInline name="x" />
+          </button>
+        </div>
+        <div className="agent-settings-layout">
+          <nav className="agent-settings-nav" aria-label={t('workspace.agentSettings')}>
+            {navItems.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`agent-settings-nav__item${activePanel === item.id ? ' is-active' : ''}`}
+                aria-current={activePanel === item.id ? 'page' : undefined}
+                onClick={() => onActivePanelChange(item.id)}
+              >
+                <IconInline name={item.icon} />
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </nav>
+          <div className="agent-settings-content settings-page">
+            {activePanel === 'general' ? (
+              <AgentSettingsGeneralPanel
+                agent={agent}
+                status={status}
+                onDisable={() => setConfirmDisableOpen(true)}
+              />
+            ) : (
+              <CardOrderSettingsPanel
+                cards={cards}
+                draftOrder={draftOrder}
+                draftSizes={draftSizes}
+                onDraftOrderChange={onDraftOrderChange}
+                onDraftSizeChange={onDraftSizeChange}
+                deletingSlug={deletingSlug}
+                onDelete={onDelete}
+                onClose={onClose}
+                onSave={onSave}
+              />
+            )}
+          </div>
+        </div>
+        {confirmDisableOpen ? (
+          <div className="agent-settings-confirm" role="presentation" onMouseDown={() => setConfirmDisableOpen(false)}>
+            <section className="agent-settings-confirm__panel" role="alertdialog" aria-modal="true" aria-labelledby="agent-disable-confirm-title" onMouseDown={(event) => event.stopPropagation()}>
+              <h3 id="agent-disable-confirm-title">{t('workspace.disableAgentModeConfirmTitle')}</h3>
+              <p>{t('workspace.disableAgentModeConfirmBody')}</p>
+              <div className="agent-settings-confirm__actions">
+                <button type="button" className="btn btn-ghost" disabled={agent.loading} onClick={() => setConfirmDisableOpen(false)}>
+                  {t('settings.agentMode.cancel')}
+                </button>
+                <button type="button" className="btn btn-primary" disabled={agent.loading} onClick={() => void disableAgentMode()}>
+                  {t('workspace.disableAgentModeConfirmAction')}
+                </button>
+              </div>
+            </section>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+function AgentSettingsGeneralPanel({
+  agent,
+  status,
+  onDisable,
+}: {
+  agent: WorkspaceAgentModeState
+  status: string
+  onDisable: () => void
+}) {
+  const { t } = useI18n()
+
+  return (
+    <section className="settings-stack agent-settings-panel" aria-labelledby="agent-settings-general-heading">
+      <section className="settings-section">
+        <h3 id="agent-settings-general-heading" className="settings-section-heading">
+          {t('workspace.agentSettingsGeneral')}
+        </h3>
+        <p className="settings-section-caption">{agent.message || t('workspace.agentModeReady')}</p>
+        <div className="settings-group">
+          <div className="settings-field-row settings-field-row--action">
+            <div className="settings-field-row__meta">
+              <div className="settings-field-row__label">
+                <IconInline name="agent" />
+                {t('workspace.disableAgentMode')}
+              </div>
+              <p className="settings-field-row__hint">{t('workspace.agentModeDisabled')}</p>
+            </div>
+            <div className="settings-field-row__controls">
+              <button type="button" className="agent-card-secondary-button" disabled={agent.loading} onClick={onDisable}>
+                {t('workspace.disableAgentMode')}
+              </button>
+            </div>
+          </div>
+        </div>
+        <p className="settings-switch-status" role="status" aria-live="polite">
+          {status || agent.message}
+        </p>
+      </section>
+    </section>
+  )
+}
+
+function CardOrderSettingsPanel({
   cards,
   draftOrder,
   draftSizes,
@@ -1394,15 +1567,13 @@ function SortCardsDialog({
   }
 
   return (
-    <div className="project-home-modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <div className="project-home-modal project-home-modal--sort" role="dialog" aria-modal="true" aria-label={t('workspace.sortAgentCards')} onMouseDown={(event) => event.stopPropagation()}>
-        <div className="project-home-modal__header">
-          <h2>{t('workspace.sortAgentCards')}</h2>
-          <button type="button" className="project-home-icon-button" aria-label={t('filePanel.closeAria')} onClick={onClose}>
-            <IconInline name="x" />
-          </button>
-        </div>
-        <div className="project-home-sort-list" role="list">
+    <section className="settings-stack agent-settings-panel" aria-labelledby="agent-settings-card-order-heading">
+      <section className="settings-section">
+        <h3 id="agent-settings-card-order-heading" className="settings-section-heading">
+          {t('workspace.agentSettingsCardOrder')}
+        </h3>
+        <p className="settings-section-caption">{t('workspace.agentSettingsCardOrderHint')}</p>
+        <div className="project-home-sort-list project-home-sort-list--settings" role="list">
           {ordered.map((card, index) => {
             const displaySize = draftSizes[card.cardId] ?? card.size
             const title = card.kind === 'plugin' ? card.item.manifest.name : card.skill.title
@@ -1468,7 +1639,7 @@ function SortCardsDialog({
             )
           })}
         </div>
-        <div className="project-home-modal__footer">
+        <div className="agent-settings-panel-actions">
           <button type="button" className="agent-card-secondary-button" onClick={onClose}>
             {t('settings.agentMode.cancel')}
           </button>
@@ -1476,8 +1647,8 @@ function SortCardsDialog({
             {t('settings.agentMode.confirm')}
           </button>
         </div>
-      </div>
-    </div>
+      </section>
+    </section>
   )
 }
 

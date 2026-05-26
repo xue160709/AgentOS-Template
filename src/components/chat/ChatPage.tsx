@@ -39,6 +39,7 @@ import type {
   ChatState,
   ChatThinkingItem,
   ChatToolItem,
+  AgentSettingsPanelId,
   ProjectSkillRunRequest,
   ThreadRunState,
   TranscriptItem,
@@ -51,6 +52,7 @@ import { ChatThreadView } from './ChatThreadView'
 import { writeClipboardText } from './clipboard'
 import { Composer } from './Composer'
 import type { BuiltInSlashCommand, ChatModelMenuRow, ComposerSuggestion, ComposerTrigger, PermissionModeRow } from './local-types'
+import type { WorkspaceAgentModeState } from '../useWorkspaceAgentMode'
 
 const PROCESS_TRACE_TOGGLE_EVENT = 'chat-process-trace:toggle'
 const MAX_COMPOSER_SUGGESTIONS = 64
@@ -146,9 +148,15 @@ type ChatPageProps = {
   onThreadChatStateChange: (threadId: string, update: ChatState | ((prev: ChatState) => ChatState)) => void
   onThreadPromptSubmit: (threadId: string, prompt: string) => void
   onThreadRunStateChange: (threadId: string, state: ThreadRunState | null) => void
+  agentMode: WorkspaceAgentModeState
   agentModeEnabled: boolean
   todoEnabled: boolean
   agentModeLoading: boolean
+  agentSettingsOpen: boolean
+  agentSettingsPanel: AgentSettingsPanelId
+  onOpenAgentSettings: (panel: AgentSettingsPanelId) => void
+  onAgentSettingsPanelChange: (panel: AgentSettingsPanelId) => void
+  onCloseAgentSettings: () => void
   homeModeResetKey: number
   hiddenSkillPaths: string[]
   onCreateHomePluginCardThread: (projectId: string, initialPrompt: string) => string | void
@@ -232,9 +240,15 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     onThreadChatStateChange,
     onThreadPromptSubmit,
     onThreadRunStateChange,
+    agentMode,
     agentModeEnabled,
     todoEnabled,
     agentModeLoading,
+    agentSettingsOpen,
+    agentSettingsPanel,
+    onOpenAgentSettings,
+    onAgentSettingsPanelChange,
+    onCloseAgentSettings,
     homeModeResetKey,
     hiddenSkillPaths,
     onCreateHomePluginCardThread,
@@ -2188,9 +2202,15 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
           projects={projects}
           projectOrderIds={projectOrderIds}
           composer={composer}
+          agentMode={agentMode}
           agentModeEnabled={agentModeEnabled}
           todoEnabled={todoEnabled}
           agentModeLoading={agentModeLoading}
+          agentSettingsOpen={agentSettingsOpen}
+          agentSettingsPanel={agentSettingsPanel}
+          onOpenAgentSettings={onOpenAgentSettings}
+          onAgentSettingsPanelChange={onAgentSettingsPanelChange}
+          onCloseAgentSettings={onCloseAgentSettings}
           threads={threads.filter((thread) => thread.projectId === activeProject.id)}
           threadRunStates={threadRunStates}
           hiddenSkillPaths={hiddenSkillPaths}

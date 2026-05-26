@@ -8,6 +8,7 @@ import { IconInline } from '../icon-inline'
 import { useI18n } from '../i18n/i18n'
 import type { AgentContextSlashItem, AgentKnowledgeSearchItem, ProjectFileSearchItem } from '../claude-chat-types'
 import type {
+  AgentSettingsPanelId,
   AppSearchScope,
   AppViewId,
   ChatState,
@@ -106,6 +107,8 @@ export function AppShellWorkspace({
   const [filePreview, setFilePreview] = useState<ProjectFilePreviewOverlayState | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchScope, setSearchScope] = useState<AppSearchScope>('all')
+  const [agentSettingsOpen, setAgentSettingsOpen] = useState(false)
+  const [agentSettingsPanel, setAgentSettingsPanel] = useState<AgentSettingsPanelId>('general')
   const filePaneRef = useRef<AppFileTreePaneHandle>(null)
   const filePreviewRequestRef = useRef(0)
   const agentMode = useWorkspaceAgentMode(activeProject)
@@ -153,6 +156,11 @@ export function AppShellWorkspace({
   const openSearch = useCallback((scope: AppSearchScope) => {
     setSearchScope(scope)
     setSearchOpen(true)
+  }, [])
+
+  const openAgentSettings = useCallback((panel: AgentSettingsPanelId) => {
+    setAgentSettingsPanel(panel)
+    setAgentSettingsOpen(true)
   }, [])
 
   useEffect(() => {
@@ -304,7 +312,7 @@ export function AppShellWorkspace({
           </span>
           <div className="app-workspace-drag-gap draggable" aria-hidden="true" />
           <div className="app-workspace-actions no-drag">
-            {showAgentModeToolbar ? <AgentModeMenu agent={agentMode} /> : null}
+            {showAgentModeToolbar ? <AgentModeMenu agent={agentMode} onOpenSettings={() => openAgentSettings('general')} /> : null}
             <button
               type="button"
               className={`btn btn-toolbar${folderToolbarActive ? ' is-active' : ''}`}
@@ -339,9 +347,15 @@ export function AppShellWorkspace({
             onThreadChatStateChange={onThreadChatStateChange}
             onThreadPromptSubmit={onThreadPromptSubmit}
             onThreadRunStateChange={onThreadRunStateChange}
+            agentMode={agentMode}
             agentModeEnabled={agentMode.enabled}
             todoEnabled={agentMode.todoEnabled}
             agentModeLoading={agentMode.loading}
+            agentSettingsOpen={agentSettingsOpen}
+            agentSettingsPanel={agentSettingsPanel}
+            onOpenAgentSettings={openAgentSettings}
+            onAgentSettingsPanelChange={setAgentSettingsPanel}
+            onCloseAgentSettings={() => setAgentSettingsOpen(false)}
             homeModeResetKey={homeModeResetKey}
             hiddenSkillPaths={hiddenSkillPaths}
             onCreateHomePluginCardThread={onCreateHomePluginCardThread}

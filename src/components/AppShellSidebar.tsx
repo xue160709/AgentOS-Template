@@ -915,15 +915,16 @@ export function AppShellSidebar({
           <footer className="app-sidebar-footer">
             <button
               type="button"
-              className="btn btn-toolbar"
+              className="app-sidebar-footer-settings"
               id="btn-footer-settings"
-              title={t('sidebar.settings')}
-              aria-label={t('sidebar.settings')}
+              title={t('sidebar.globalSettings')}
+              aria-label={t('sidebar.globalSettings')}
               onClick={() => {
                 onOpenSettingsCategory('general')
               }}
             >
               <IconInline name="settings" />
+              <span>{t('sidebar.globalSettings')}</span>
             </button>
             {hasSidebarUpdate ? (
               <button

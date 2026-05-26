@@ -92,6 +92,7 @@ flowchart TD
 - 支持 action：`customize_home`、`edit_home_card`、`refresh_home`、`task_run`、`task_stop`、`open_file`。
 - `open_file` action 会把 `context.path` 归一化为 `filePath`，渲染层再次过滤 `..` 后才调用桌面打开文件。
 - 卡片布局同时写入项目内 `order.json`、各卡片 `manifest.json` 的 `preferredSize/order/updatedAt`，并在渲染层 localStorage 保存 Skill 卡片混排顺序。
+- 项目首页卡片排序入口打开 Agent 模式设置模态的“卡片顺序”项；排序、尺寸切换、删除和保存行为与原排序弹窗一致。
 - 项目首页卡片自定义依赖 `/a2ui-project-home-panel` Skill 名称和定制提示词；仓库当前构建配置引用该内置 Skill 目录，但目录本身未随当前代码树出现，`test:home-plugin` 通过 `--allow-missing` 容忍缺失。
 
 模态蒙层设计规范：
@@ -101,6 +102,7 @@ flowchart TD
 - 蒙层背景使用主表面色与透明混合，不叠加黑色半透明遮罩。
 - 支持 `backdrop-filter` 时启用 10px 高斯模糊；不支持时仅保留透明主表面色兜底。
 - 蒙层只负责弱化后景，内容面板自身仍使用明确边框、主表面背景和阴影来建立层级。
+- Agent 模式设置模态采用设置页同源规范：左侧设置项导航、右侧内容区，并复用 `settings-page`、`settings-section`、`settings-group`、`settings-field-row` 的间距、边框、焦点和说明文案规则。
 
 ## 相关代码文件
 

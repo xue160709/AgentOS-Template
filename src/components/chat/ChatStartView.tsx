@@ -6,7 +6,8 @@
 import type { ReactNode } from 'react'
 import { useI18n } from '../../i18n/i18n'
 import type { HomePluginRunItem } from '../../desktop-types'
-import type { ProjectSkillRunRequest, ThreadRunState, WorkspaceProject, WorkspaceThread } from '../types'
+import type { AgentSettingsPanelId, ProjectSkillRunRequest, ThreadRunState, WorkspaceProject, WorkspaceThread } from '../types'
+import type { WorkspaceAgentModeState } from '../useWorkspaceAgentMode'
 import { ProjectHomeProjectSelector, ProjectHomeSurface } from './ProjectHomeSurface'
 
 type ChatStartViewProps = {
@@ -14,9 +15,15 @@ type ChatStartViewProps = {
   projects: WorkspaceProject[]
   projectOrderIds: readonly string[]
   composer: ReactNode
+  agentMode: WorkspaceAgentModeState
   agentModeEnabled: boolean
   todoEnabled: boolean
   agentModeLoading: boolean
+  agentSettingsOpen: boolean
+  agentSettingsPanel: AgentSettingsPanelId
+  onOpenAgentSettings: (panel: AgentSettingsPanelId) => void
+  onAgentSettingsPanelChange: (panel: AgentSettingsPanelId) => void
+  onCloseAgentSettings: () => void
   threads: WorkspaceThread[]
   threadRunStates: Record<string, ThreadRunState>
   hiddenSkillPaths: string[]
@@ -35,9 +42,15 @@ export function ChatStartView({
   projects,
   projectOrderIds,
   composer,
+  agentMode,
   agentModeEnabled,
   todoEnabled,
   agentModeLoading,
+  agentSettingsOpen,
+  agentSettingsPanel,
+  onOpenAgentSettings,
+  onAgentSettingsPanelChange,
+  onCloseAgentSettings,
   threads,
   threadRunStates,
   hiddenSkillPaths,
@@ -69,8 +82,14 @@ export function ChatStartView({
             project={project}
             projects={projects}
             projectOrderIds={projectOrderIds}
+            agent={agentMode}
             todoEnabled={todoEnabled}
             loading={agentModeLoading}
+            agentSettingsOpen={agentSettingsOpen}
+            agentSettingsPanel={agentSettingsPanel}
+            onOpenAgentSettings={onOpenAgentSettings}
+            onAgentSettingsPanelChange={onAgentSettingsPanelChange}
+            onCloseAgentSettings={onCloseAgentSettings}
             threads={threads}
             threadRunStates={threadRunStates}
             hiddenSkillPaths={hiddenSkillPaths}

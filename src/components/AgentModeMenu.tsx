@@ -8,18 +8,35 @@ import type { WorkspaceAgentModeState } from './useWorkspaceAgentMode'
 
 type AgentModeMenuProps = {
   agent: WorkspaceAgentModeState
+  onOpenSettings: () => void
 }
 
 /** 右上角 Agent Mode 开关 / Toolbar switch that only toggles Agent Mode readiness */
-export function AgentModeMenu({ agent }: AgentModeMenuProps) {
+export function AgentModeMenu({ agent, onOpenSettings }: AgentModeMenuProps) {
   const { t } = useI18n()
 
   const toggle = (checked: boolean) => {
     if (checked) {
-      void agent.enableAgentMode()
+      void agent.enableAgentMode({ onSuccess: onOpenSettings })
     } else {
       void agent.updateAgentModeState({ enabled: false })
     }
+  }
+
+  if (agent.enabled) {
+    return (
+      <button
+        type="button"
+        className="btn btn-toolbar"
+        id="btn-agent-mode-settings"
+        title={t('workspace.agentSettings')}
+        aria-label={t('workspace.agentSettings')}
+        disabled={agent.loading}
+        onClick={onOpenSettings}
+      >
+        <IconInline name="settings" />
+      </button>
+    )
   }
 
   return (
