@@ -309,6 +309,8 @@
     "agentSettingsSkillsHint": "Assign a fixed model for manually run Project Skills. It only applies when starting a new chat from sidebar Skills or project-home Skill cards; it does not apply when the model chooses Skills inside a normal chat. Leave unset to use the current Composer model.",
     "agentSettingsSkillDefaultModel": "No fixed model (use current Composer model)",
     "agentSettingsSkillModelFor": "Choose the run model for {{name}}",
+    "agentSettingsUnsavedChanges": "Unsaved changes",
+    "agentSettingsNoChanges": "Up to date",
     "disableAgentMode": "Turn off Agent Mode",
     "disableAgentModeHint": "Turning this off exits Agent Mode for this project. Existing memory files are preserved.",
     "disableAgentModeConfirmTitle": "Turn off Agent Mode?",

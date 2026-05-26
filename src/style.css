@@ -75,6 +75,24 @@ html[data-window-effects='mac-vibrancy'] body {
   background-color: transparent;
 }
 
+:root {
+  --z-layer-main: 0;
+  --z-layer-side-panel: 1;
+  --z-layer-modal-host: 2;
+  --z-layer-sidebar: 2;
+  --z-layer-splitter: 4;
+  --z-layer-chrome: 10;
+  --z-layer-local-overlay: 20;
+  --z-layer-menu: 80;
+  --z-layer-project-menu: 90;
+  --z-layer-popover: 10030;
+  --z-layer-context-menu: 10040;
+  --z-layer-floating: 10060;
+  --z-layer-modal: 10200;
+  --z-layer-modal-top: 10300;
+  --z-layer-system-overlay: 2147483647;
+}
+
 #app {
   height: 100%;
   min-height: 0;
@@ -232,7 +250,7 @@ html.is-eye-comfort body::after {
   content: "";
   position: fixed;
   inset: 0;
-  z-index: 2147483647;
+  z-index: var(--z-layer-system-overlay);
   pointer-events: none;
   background: rgb(255 196 96 / 0.055);
   mix-blend-mode: multiply;
@@ -279,7 +297,7 @@ html.is-eye-comfort body::after {
   min-height: 0;
   align-self: stretch;
   position: relative;
-  z-index: 4;
+  z-index: var(--z-layer-splitter);
   margin-left: -3px;
   margin-right: -3px;
   cursor: col-resize;
@@ -299,7 +317,7 @@ html.is-eye-comfort body::after {
   position: fixed;
   top: 0;
   left: calc(max(var(--padding-panel), var(--spacing-token-safe-header-left)) + var(--padding-panel));
-  z-index: 10;
+  z-index: var(--z-layer-chrome);
   display: flex;
   align-items: center;
   gap: 4px;
@@ -319,7 +337,7 @@ html[data-windows-titlebar-overlay='true'] .app-chrome-toolbar {
 
 .app-sidebar {
   position: relative;
-  z-index: 2;
+  z-index: var(--z-layer-sidebar);
   display: flex;
   flex-direction: column;
   flex: 0 0 var(--sidebar-current-width);
@@ -1175,7 +1193,7 @@ html[data-window-effects='mac-vibrancy'] .app-sidebar {
 
 .app-sidebar-context-menu {
   position: fixed;
-  z-index: 10040;
+  z-index: var(--z-layer-context-menu);
   min-width: 180px;
   max-width: min(280px, calc(100vw - 16px));
   padding: calc(var(--spacing) * 1);
@@ -1504,7 +1522,7 @@ html[data-windows-titlebar-overlay='true'] .app-workspace-header {
 
 .agent-mode-popover {
   position: absolute;
-  z-index: 10030;
+  z-index: var(--z-layer-popover);
   top: calc(100% + var(--spacing));
   right: 0;
   width: min(360px, calc(100vw - var(--spacing) * 6));
@@ -1703,7 +1721,7 @@ html[data-windows-titlebar-overlay='true'] .app-workspace-header {
 
 .app-main {
   position: relative;
-  z-index: 0;
+  z-index: var(--z-layer-main);
   flex: 1;
   min-width: 0;
   min-height: 0;
@@ -1714,7 +1732,7 @@ html[data-windows-titlebar-overlay='true'] .app-workspace-header {
 .app-file-panel {
   --file-panel-width: clamp(280px, 28vw, 420px);
   position: relative;
-  z-index: 1;
+  z-index: var(--z-layer-side-panel);
   display: flex;
   flex-direction: column;
   flex: 0 0 var(--file-panel-width);
@@ -1736,6 +1754,10 @@ html[data-windows-titlebar-overlay='true'] .app-workspace-header {
     border-color var(--transition-duration-basic) var(--transition-ease-basic),
     opacity var(--transition-duration-basic) var(--transition-ease-basic),
     box-shadow var(--transition-duration-basic) var(--transition-ease-basic);
+}
+
+.app-workspace-content:has(.project-home-modal-backdrop) .app-main {
+  z-index: var(--z-layer-modal-host);
 }
 
 .app-file-panel.is-open {
@@ -1948,7 +1970,7 @@ button.app-file-tree-row {
 .project-file-preview-overlay {
   position: absolute;
   inset: 0;
-  z-index: 20;
+  z-index: var(--z-layer-local-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2282,7 +2304,7 @@ button.app-file-tree-row {
 .app-search-overlay {
   position: absolute;
   inset: 0;
-  z-index: 10060;
+  z-index: var(--z-layer-floating);
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -3985,7 +4007,7 @@ button.app-file-tree-row {
   position: absolute;
   top: calc(100% + var(--spacing));
   left: 0;
-  z-index: 90;
+  z-index: var(--z-layer-project-menu);
   display: flex;
   width: min(380px, calc(100vw - var(--spacing) * 4));
   max-height: min(420px, calc(100vh - 180px));
@@ -4181,7 +4203,7 @@ button.app-file-tree-row {
 .project-home-add-menu,
 .project-home-card__menu-popover {
   position: absolute;
-  z-index: 80;
+  z-index: var(--z-layer-menu);
   min-width: 150px;
   padding: calc(var(--spacing) * 1);
   border: 1px solid var(--color-token-border);
@@ -4857,7 +4879,7 @@ button.app-file-tree-row {
 
 .project-home-modal-backdrop {
   position: fixed;
-  z-index: 10050;
+  z-index: var(--z-layer-modal);
   top: 0;
   right: 0;
   bottom: 0;
@@ -5003,9 +5025,58 @@ button.app-file-tree-row {
 
 .agent-settings-panel-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: calc(var(--spacing) * 2);
   margin-top: calc(var(--spacing) * 4);
+}
+
+.agent-settings-save-feedback {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 28px;
+  align-items: center;
+  gap: calc(var(--spacing) * 1);
+  margin: 0 auto 0 0;
+  padding: 0 calc(var(--spacing) * 2);
+  border: 1px solid var(--color-token-border-light);
+  border-radius: var(--radius-full);
+  color: var(--color-token-text-tertiary);
+  background: color-mix(in oklab, var(--color-token-main-surface-primary) 96%, var(--color-token-foreground));
+  font-size: var(--text-xs);
+  line-height: 1.35;
+}
+
+.agent-settings-save-feedback span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-settings-save-feedback.is-dirty {
+  border-color: color-mix(in oklab, var(--color-token-text-secondary) 24%, var(--color-token-border));
+  color: var(--color-token-text-secondary);
+}
+
+.agent-settings-save-feedback.is-saving {
+  color: var(--color-token-text-secondary);
+}
+
+.agent-settings-save-feedback.is-saving .icon-xs {
+  animation: agent-settings-spin 0.9s linear infinite;
+}
+
+.agent-settings-save-feedback.is-success {
+  border-color: color-mix(in oklab, var(--settings-focus-border) 36%, var(--color-token-border));
+  color: var(--settings-focus-border);
+  background: color-mix(in oklab, var(--settings-focus-ring) 42%, var(--color-token-main-surface-primary));
+}
+
+@keyframes agent-settings-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .agent-project-docs {
@@ -5570,6 +5641,10 @@ button.app-file-tree-row {
 
 .agent-card-primary-button,
 .agent-card-secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--spacing) * 1.25);
   min-height: 34px;
   padding: 0 calc(var(--spacing) * 3);
   border-radius: var(--radius-md);
@@ -5863,7 +5938,7 @@ button.app-file-tree-row {
 }
 
 .composer-model-popover {
-  z-index: 10050;
+  z-index: var(--z-layer-context-menu);
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: calc(var(--spacing) * 1);
@@ -5938,7 +6013,7 @@ button.app-file-tree-row {
 }
 
 .composer-mode-popover {
-  z-index: 10055;
+  z-index: var(--z-layer-floating);
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: calc(var(--spacing) * 1);
@@ -5989,7 +6064,7 @@ button.app-file-tree-row {
 }
 
 .composer-autocomplete-popover {
-  z-index: 10060;
+  z-index: var(--z-layer-floating);
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: calc(var(--spacing) * 1);
@@ -7437,7 +7512,7 @@ button.app-file-tree-row {
 .agent-input-backdrop {
   position: absolute;
   inset: 0;
-  z-index: 10100;
+  z-index: var(--z-layer-modal-top);
   display: grid;
   place-items: end center;
   padding: calc(var(--spacing) * 8);

@@ -225,7 +225,9 @@ export function ProjectHomeSurface({
   const [projectModelPick, setProjectModelPick] = useState<ChatModelPick | undefined>(undefined)
   const [draftProjectModelPick, setDraftProjectModelPick] = useState<ChatModelPick | undefined>(undefined)
   const [projectDocumentDrafts, setProjectDocumentDrafts] = useState<Record<AgentProjectDocumentName, string>>(() => emptyAgentProjectDocuments())
+  const [savedProjectDocumentDrafts, setSavedProjectDocumentDrafts] = useState<Record<AgentProjectDocumentName, string>>(() => emptyAgentProjectDocuments())
   const [projectSettingsStatus, setProjectSettingsStatus] = useState('')
+  const [projectSettingsSaving, setProjectSettingsSaving] = useState(false)
   const [projectContextEntries, setProjectContextEntries] = useState<ProjectContextEntry[]>([])
   const [projectContextInstructions, setProjectContextInstructions] = useState('')
   const [savedProjectContextInstructions, setSavedProjectContextInstructions] = useState('')
@@ -236,6 +238,9 @@ export function ProjectHomeSurface({
   const [skillModelOverrides, setSkillModelOverrides] = useState<Record<string, ChatModelPick>>({})
   const [draftSkillModelOverrides, setDraftSkillModelOverrides] = useState<Record<string, ChatModelPick>>({})
   const [skillSettingsStatus, setSkillSettingsStatus] = useState('')
+  const [skillSettingsSaving, setSkillSettingsSaving] = useState(false)
+  const [cardOrderSaving, setCardOrderSaving] = useState(false)
+  const [cardOrderStatus, setCardOrderStatus] = useState('')
   const [modelRows, setModelRows] = useState<ModelPickMenuRow[]>([])
   const [modelSettingsSnapshot, setModelSettingsSnapshot] = useState<ClaudeAgentSettingsSnapshot | null>(null)
   const [deletingSlug, setDeletingSlug] = useState('')
@@ -367,11 +372,12 @@ export function ProjectHomeSurface({
 
   const loadAgentProjectDocuments = useCallback(async () => {
     const readAgentProjectDocuments = window.desktop?.readAgentProjectDocuments
-    if (!readAgentProjectDocuments) {
-      setProjectDocumentDrafts(emptyAgentProjectDocuments())
-      setProjectSettingsStatus(t('settings.agentMode.bridgeUnavailable'))
-      return
-    }
+      if (!readAgentProjectDocuments) {
+        setProjectDocumentDrafts(emptyAgentProjectDocuments())
+        setSavedProjectDocumentDrafts(emptyAgentProjectDocuments())
+        setProjectSettingsStatus(t('settings.agentMode.bridgeUnavailable'))
+        return
+      }
     try {
       const result = await readAgentProjectDocuments(project.path)
       if (!result.ok) {
@@ -379,6 +385,7 @@ export function ProjectHomeSurface({
         return
       }
       setProjectDocumentDrafts(result.files)
+      setSavedProjectDocumentDrafts(result.files)
       setProjectSettingsStatus(t('settings.agentMode.loaded'))
     } catch (error) {
       setProjectSettingsStatus(error instanceof Error ? error.message : String(error))
@@ -614,6 +621,7 @@ export function ProjectHomeSurface({
     const nextProjectPick = modelSettingsSnapshot
       ? validateModelPick(modelSettingsSnapshot.settings, draftProjectModelPick)
       : draftProjectModelPick
+    setProjectSettingsSaving(true)
     setProjectSettingsStatus(t('settings.agentMode.saving'))
     try {
       const settingsResult = await saveAgentModeSettings(project.path, { projectModelPick: nextProjectPick })
@@ -631,10 +639,13 @@ export function ProjectHomeSurface({
       setProjectModelPick(savedPick)
       setDraftProjectModelPick(savedPick)
       setProjectDocumentDrafts(docsResult.files)
+      setSavedProjectDocumentDrafts(docsResult.files)
       setProjectSettingsStatus(t('settings.agentMode.saved'))
       window.dispatchEvent(new CustomEvent('agentos:project-agent-settings-changed', { detail: { projectPath: project.path, projectModelPickChanged } }))
     } catch (error) {
       setProjectSettingsStatus(error instanceof Error ? error.message : String(error))
+    } finally {
+      setProjectSettingsSaving(false)
     }
   }
 
@@ -651,6 +662,7 @@ export function ProjectHomeSurface({
         return modelSettingsSnapshot ? Boolean(validateModelPick(modelSettingsSnapshot.settings, pick)) : true
       }),
     )
+    setSkillSettingsSaving(true)
     setSkillSettingsStatus(t('settings.agentMode.saving'))
     try {
       const result = await saveAgentModeSettings(project.path, { skillModelOverrides: next })
@@ -664,10 +676,14 @@ export function ProjectHomeSurface({
       setSkillSettingsStatus(t('settings.agentMode.saved'))
     } catch (error) {
       setSkillSettingsStatus(error instanceof Error ? error.message : String(error))
+    } finally {
+      setSkillSettingsSaving(false)
     }
   }
 
   const saveSortOrder = async () => {
+    setCardOrderSaving(true)
+    setCardOrderStatus(t('settings.agentMode.saving'))
     const cardsById = new Map(homeCards.map((card) => [card.cardId, card]))
     const pluginOrder = draftOrder
       .map((cardId) => cardsById.get(cardId))
@@ -687,15 +703,25 @@ export function ProjectHomeSurface({
           : null
       if (result && !result.ok) {
         setError(result.message)
+        setCardOrderStatus(result.message)
         return
       }
     }
     const nextLayout = normalizeHomeCardLayout({ order: draftOrder, sizes: draftSizes })
     writeHomeCardLayout(project.path, nextLayout)
     setCardLayout(nextLayout)
-    onCloseAgentSettings()
+    setCardOrderStatus(t('settings.agentMode.saved'))
     outputHashesRef.current = {}
     window.dispatchEvent(new CustomEvent('project-home:refresh'))
+    setCardOrderSaving(false)
+  }
+
+  const saveSortOrderWithGuard = async () => {
+    try {
+      await saveSortOrder()
+    } finally {
+      setCardOrderSaving(false)
+    }
   }
 
   const deleteCard = async (item: HomePluginRunItem) => {
@@ -880,7 +906,9 @@ export function ProjectHomeSurface({
           projectModelPick={projectModelPick}
           draftProjectModelPick={draftProjectModelPick}
           projectDocumentDrafts={projectDocumentDrafts}
+          savedProjectDocumentDrafts={savedProjectDocumentDrafts}
           projectSettingsStatus={projectSettingsStatus}
+          projectSettingsSaving={projectSettingsSaving}
           projectContextEntries={projectContextEntries}
           projectContextInstructions={projectContextInstructions}
           savedProjectContextInstructions={savedProjectContextInstructions}
@@ -902,12 +930,15 @@ export function ProjectHomeSurface({
           skillModelOverrides={skillModelOverrides}
           draftSkillModelOverrides={draftSkillModelOverrides}
           skillSettingsStatus={skillSettingsStatus}
+          skillSettingsSaving={skillSettingsSaving}
           onDraftSkillModelOverridesChange={setDraftSkillModelOverrides}
           onSaveSkillModelOverrides={() => void saveSkillModelSettings()}
           deletingSlug={deletingSlug}
+          cardOrderStatus={cardOrderStatus}
+          cardOrderSaving={cardOrderSaving}
           onDelete={(item) => void deleteCard(item)}
           onClose={onCloseAgentSettings}
-          onSave={() => void saveSortOrder()}
+          onSave={() => void saveSortOrderWithGuard()}
         />
       ) : null}
     </div>
@@ -1730,7 +1761,9 @@ function AgentSettingsModal({
   projectModelPick,
   draftProjectModelPick,
   projectDocumentDrafts,
+  savedProjectDocumentDrafts,
   projectSettingsStatus,
+  projectSettingsSaving,
   projectContextEntries,
   projectContextInstructions,
   savedProjectContextInstructions,
@@ -1752,9 +1785,12 @@ function AgentSettingsModal({
   skillModelOverrides,
   draftSkillModelOverrides,
   skillSettingsStatus,
+  skillSettingsSaving,
   onDraftSkillModelOverridesChange,
   onSaveSkillModelOverrides,
   deletingSlug,
+  cardOrderStatus,
+  cardOrderSaving,
   onDelete,
   onClose,
   onSave,
@@ -1770,7 +1806,9 @@ function AgentSettingsModal({
   projectModelPick?: ChatModelPick
   draftProjectModelPick?: ChatModelPick
   projectDocumentDrafts: Record<AgentProjectDocumentName, string>
+  savedProjectDocumentDrafts: Record<AgentProjectDocumentName, string>
   projectSettingsStatus: string
+  projectSettingsSaving: boolean
   projectContextEntries: ProjectContextEntry[]
   projectContextInstructions: string
   savedProjectContextInstructions: string
@@ -1792,9 +1830,12 @@ function AgentSettingsModal({
   skillModelOverrides: Record<string, ChatModelPick>
   draftSkillModelOverrides: Record<string, ChatModelPick>
   skillSettingsStatus: string
+  skillSettingsSaving: boolean
   onDraftSkillModelOverridesChange: (overrides: Record<string, ChatModelPick>) => void
   onSaveSkillModelOverrides: () => void
   deletingSlug: string
+  cardOrderStatus: string
+  cardOrderSaving: boolean
   onDelete: (item: HomePluginRunItem) => void
   onClose: () => void
   onSave: () => void
@@ -1872,7 +1913,9 @@ function AgentSettingsModal({
                 savedProjectModelPick={projectModelPick}
                 draftProjectModelPick={draftProjectModelPick}
                 documents={projectDocumentDrafts}
+                savedDocuments={savedProjectDocumentDrafts}
                 status={projectSettingsStatus}
+                saving={projectSettingsSaving}
                 onDraftProjectModelPickChange={onDraftProjectModelPickChange}
                 onDocumentsChange={onProjectDocumentDraftsChange}
                 onClose={onClose}
@@ -1901,6 +1944,7 @@ function AgentSettingsModal({
                 savedOverrides={skillModelOverrides}
                 draftOverrides={draftSkillModelOverrides}
                 status={skillSettingsStatus}
+                saving={skillSettingsSaving}
                 onDraftOverridesChange={onDraftSkillModelOverridesChange}
                 onClose={onClose}
                 onSave={onSaveSkillModelOverrides}
@@ -1913,6 +1957,8 @@ function AgentSettingsModal({
                 onDraftOrderChange={onDraftOrderChange}
                 onDraftSizeChange={onDraftSizeChange}
                 deletingSlug={deletingSlug}
+                status={cardOrderStatus}
+                saving={cardOrderSaving}
                 onDelete={onDelete}
                 onClose={onClose}
                 onSave={onSave}
@@ -1983,13 +2029,37 @@ function AgentSettingsGeneralPanel({
   )
 }
 
+function SaveFeedback({ status, dirty, saving }: { status: string; dirty: boolean; saving: boolean }) {
+  const { t } = useI18n()
+  const passiveStatus = !status || status === t('settings.agentMode.loaded') || status === t('settings.agentMode.saved')
+  const message = dirty && !saving && passiveStatus
+    ? t('workspace.agentSettingsUnsavedChanges')
+    : status || t('workspace.agentSettingsNoChanges')
+  const tone = saving
+    ? ' is-saving'
+    : dirty && passiveStatus
+      ? ' is-dirty'
+      : status === t('settings.agentMode.saved')
+      ? ' is-success'
+      : ''
+
+  return (
+    <p className={`agent-settings-save-feedback${tone}`} role="status" aria-live="polite">
+      <IconInline name={saving ? 'refresh' : dirty && passiveStatus ? 'save' : status === t('settings.agentMode.saved') ? 'check' : 'check'} />
+      <span>{message}</span>
+    </p>
+  )
+}
+
 function ProjectSettingsPanel({
   modelRows,
   modelSettingsSnapshot,
   savedProjectModelPick,
   draftProjectModelPick,
   documents,
+  savedDocuments,
   status,
+  saving,
   onDraftProjectModelPickChange,
   onDocumentsChange,
   onClose,
@@ -2000,7 +2070,9 @@ function ProjectSettingsPanel({
   savedProjectModelPick?: ChatModelPick
   draftProjectModelPick?: ChatModelPick
   documents: Record<AgentProjectDocumentName, string>
+  savedDocuments: Record<AgentProjectDocumentName, string>
   status: string
+  saving: boolean
   onDraftProjectModelPickChange: (pick: ChatModelPick | undefined) => void
   onDocumentsChange: (drafts: Record<AgentProjectDocumentName, string>) => void
   onClose: () => void
@@ -2025,7 +2097,9 @@ function ProjectSettingsPanel({
   }
   const reset = () => {
     onDraftProjectModelPickChange(savedProjectModelPick)
+    onDocumentsChange(savedDocuments)
   }
+  const isDirty = !sameModelPick(savedProjectModelPick, draftProjectModelPick) || !sameProjectDocuments(savedDocuments, documents)
 
   return (
     <section className="settings-stack agent-settings-panel" aria-labelledby="agent-settings-project-heading">
@@ -2075,18 +2149,17 @@ function ProjectSettingsPanel({
             </label>
           ))}
         </div>
-        <p className="settings-switch-status" role="status" aria-live="polite">
-          {status}
-        </p>
         <div className="agent-settings-panel-actions">
-          <button type="button" className="agent-card-secondary-button" onClick={() => {
+          <SaveFeedback status={status} dirty={isDirty} saving={saving} />
+          <button type="button" className="agent-card-secondary-button" disabled={saving || !isDirty} onClick={() => {
             reset()
             onClose()
           }}>
             {t('settings.agentMode.cancel')}
           </button>
-          <button type="button" className="agent-card-primary-button" onClick={onSave}>
-            {t('settings.agentMode.confirm')}
+          <button type="button" className="agent-card-primary-button" disabled={saving || !isDirty} onClick={onSave}>
+            <IconInline name={saving ? 'refresh' : 'save'} />
+            <span>{saving ? t('settings.agentMode.saving') : t('settings.agentMode.confirm')}</span>
           </button>
         </div>
       </section>
@@ -2224,12 +2297,11 @@ function ProjectContextSettingsPanel({
           )}
         </div>
 
-        <p className="settings-switch-status" role="status" aria-live="polite">
-          {status}
-        </p>
         <div className="agent-settings-panel-actions">
+          <SaveFeedback status={status} dirty={instructionsDirty} saving={busy} />
           <button type="button" className="agent-card-primary-button" disabled={busy || readOnly || !instructionsDirty} onClick={onSaveInstructions}>
-            {t('workspace.agentSettingsContextSaveInstructions')}
+            <IconInline name={busy ? 'refresh' : 'save'} />
+            <span>{busy ? t('settings.agentMode.saving') : t('workspace.agentSettingsContextSaveInstructions')}</span>
           </button>
         </div>
       </section>
@@ -2244,6 +2316,7 @@ function SkillsModelSettingsPanel({
   savedOverrides,
   draftOverrides,
   status,
+  saving,
   onDraftOverridesChange,
   onClose,
   onSave,
@@ -2254,6 +2327,7 @@ function SkillsModelSettingsPanel({
   savedOverrides: Record<string, ChatModelPick>
   draftOverrides: Record<string, ChatModelPick>
   status: string
+  saving: boolean
   onDraftOverridesChange: (overrides: Record<string, ChatModelPick>) => void
   onClose: () => void
   onSave: () => void
@@ -2261,6 +2335,7 @@ function SkillsModelSettingsPanel({
   const { t } = useI18n()
   const hasModels = modelRows.length > 0
   const defaultLabel = t('workspace.agentSettingsSkillDefaultModel')
+  const isDirty = JSON.stringify(savedOverrides) !== JSON.stringify(draftOverrides)
   const setSkillPick = (skillPath: string, pickKey: string) => {
     const next = { ...draftOverrides }
     if (!pickKey) {
@@ -2318,18 +2393,17 @@ function SkillsModelSettingsPanel({
             )
           })}
         </div>
-        <p className="settings-switch-status" role="status" aria-live="polite">
-          {status}
-        </p>
         <div className="agent-settings-panel-actions">
-          <button type="button" className="agent-card-secondary-button" onClick={() => {
+          <SaveFeedback status={status} dirty={isDirty} saving={saving} />
+          <button type="button" className="agent-card-secondary-button" disabled={saving || !isDirty} onClick={() => {
             reset()
             onClose()
           }}>
             {t('settings.agentMode.cancel')}
           </button>
-          <button type="button" className="agent-card-primary-button" disabled={!hasModels && skills.length > 0} onClick={onSave}>
-            {t('settings.agentMode.confirm')}
+          <button type="button" className="agent-card-primary-button" disabled={saving || !isDirty || (!hasModels && skills.length > 0)} onClick={onSave}>
+            <IconInline name={saving ? 'refresh' : 'save'} />
+            <span>{saving ? t('settings.agentMode.saving') : t('settings.agentMode.confirm')}</span>
           </button>
         </div>
       </section>
@@ -2344,6 +2418,8 @@ function CardOrderSettingsPanel({
   onDraftOrderChange,
   onDraftSizeChange,
   deletingSlug,
+  status,
+  saving,
   onDelete,
   onClose,
   onSave,
@@ -2354,6 +2430,8 @@ function CardOrderSettingsPanel({
   onDraftOrderChange: (order: string[]) => void
   onDraftSizeChange: (cardId: string, preferredSize: HomePluginCardSize) => void
   deletingSlug: string
+  status: string
+  saving: boolean
   onDelete: (item: HomePluginRunItem) => void
   onClose: () => void
   onSave: () => void
@@ -2361,6 +2439,7 @@ function CardOrderSettingsPanel({
   const { t } = useI18n()
   const byId = new Map(cards.map((item) => [item.cardId, item]))
   const ordered = draftOrder.map((cardId) => byId.get(cardId)).filter((item): item is HomeCardItem => Boolean(item))
+  const isDirty = !sameCardLayout(cards, draftOrder, draftSizes)
   const move = (cardId: string, offset: number) => {
     const index = draftOrder.indexOf(cardId)
     const nextIndex = index + offset
@@ -2462,11 +2541,13 @@ function CardOrderSettingsPanel({
           })}
         </div>
         <div className="agent-settings-panel-actions">
-          <button type="button" className="agent-card-secondary-button" onClick={onClose}>
+          <SaveFeedback status={status} dirty={isDirty} saving={saving} />
+          <button type="button" className="agent-card-secondary-button" disabled={saving} onClick={onClose}>
             {t('settings.agentMode.cancel')}
           </button>
-          <button type="button" className="agent-card-primary-button" onClick={onSave}>
-            {t('settings.agentMode.confirm')}
+          <button type="button" className="agent-card-primary-button" disabled={saving || !isDirty} onClick={onSave}>
+            <IconInline name={saving ? 'refresh' : 'save'} />
+            <span>{saving ? t('settings.agentMode.saving') : t('settings.agentMode.confirm')}</span>
           </button>
         </div>
       </section>
@@ -2513,6 +2594,24 @@ function buildHomeGridItems(cards: HomeCardItem[]): HomeGridItem[] {
   }
 
   return output
+}
+
+function sameProjectDocuments(
+  left: Record<AgentProjectDocumentName, string>,
+  right: Record<AgentProjectDocumentName, string>,
+): boolean {
+  return AGENT_PROJECT_DOCUMENT_NAMES.every((name) => left[name] === right[name])
+}
+
+function sameCardLayout(
+  cards: HomeCardItem[],
+  draftOrder: string[],
+  draftSizes: Record<string, HomePluginCardSize>,
+): boolean {
+  const currentOrder = cards.map((card) => card.cardId)
+  if (currentOrder.length !== draftOrder.length) return false
+  if (currentOrder.some((cardId, index) => cardId !== draftOrder[index])) return false
+  return cards.every((card) => (draftSizes[card.cardId] ?? card.size) === card.size)
 }
 
 function useMasonrySpan(ref: RefObject<HTMLElement | null>, deps: unknown[]) {
