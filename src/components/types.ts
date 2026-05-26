@@ -30,7 +30,7 @@ export type ThinkingStatus = 'running' | 'done'
 export type ActivityStatus = 'running' | 'done' | 'error' | 'info'
 
 /** 会话内 Agent 运行状态 / In-thread agent run status */
-export type ThreadRunStatus = 'running' | 'waiting'
+export type ThreadRunStatus = 'running' | 'waiting' | 'asking'
 
 /** 会话中的一条用户或助手消息 / Transcript user or assistant message */
 export type ChatMessageItem = {

@@ -206,6 +206,8 @@
     "lastChatAria": "Last active {{time}}",
     "threadRunning": "Agent running",
     "threadWaiting": "Agent waiting for input",
+    "threadAsking": "Agent asking a question",
+    "threadAskingTag": "Ask",
     "confirmArchive": "Confirm archive",
     "archive": "Archive",
     "confirmArchiveAria": "Confirm archive {{title}}",

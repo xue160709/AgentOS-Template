@@ -13,6 +13,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
+import { flushSync } from 'react-dom'
 import {
   createEmptyChatState,
   createId,
@@ -1386,6 +1387,24 @@ export function AppShell() {
     setCanForward(false)
   }, [])
 
+  const openSettingsCategory = useCallback(
+    (category: SettingsCategoryId) => {
+      flushSync(() => {
+        setActiveViewId('settings')
+        setSettingsCategory(category)
+      })
+
+      const nextHash = `settings/${category}`
+      const currentHash = window.location.hash.replace(/^#\/?/, '')
+      if (currentHash !== nextHash) {
+        window.location.hash = nextHash
+      } else {
+        syncHistoryButtons()
+      }
+    },
+    [syncHistoryButtons],
+  )
+
   // --- `hashchange` → settings view; keep back/forward mirrors in sync / hash 变化映射到设置视图；同步前进后退按钮态 ---
 
   useEffect(() => {
@@ -1786,6 +1805,7 @@ export function AppShell() {
           canForward={canForward}
           onCreateProject={createProject}
           onOpenSearch={() => window.dispatchEvent(new CustomEvent('agentos:open-search', { detail: { scope: 'all' } }))}
+          onOpenSettingsCategory={openSettingsCategory}
           onSelectProject={selectProject}
           onSelectThread={selectThread}
           onSelectProjectSkill={selectProjectSkill}
