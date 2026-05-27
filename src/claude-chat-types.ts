@@ -390,6 +390,22 @@ export type ClaudeChatSubmitResult = {
 /** Agent 活动条的状态 / Status for inline agent activity rows */
 export type ClaudeChatActivityStatus = 'running' | 'done' | 'error' | 'info'
 
+/** Claude Task 工具状态 / Status values from Claude Task tools */
+export type ClaudeTaskStatus = 'pending' | 'in_progress' | 'completed' | 'deleted'
+
+/** Task 工具返回或更新的单个任务快照 / Single task snapshot from Task tools */
+export type ClaudeTaskSnapshot = {
+  taskId: string
+  subject: string
+  description?: string
+  activeForm?: string
+  status?: ClaudeTaskStatus
+  owner?: string
+  blocks?: string[]
+  blockedBy?: string[]
+  metadata?: Record<string, unknown>
+}
+
 // --- File diffs & rewind / 文件 diff 与回滚 ---
 
 /** 单行 diff 类型 / Single rendered diff line kind */
@@ -516,6 +532,36 @@ export type ClaudeChatEventBase =
       toolUseId: string
       status: 'done' | 'error' | 'denied'
       detail?: string
+    }
+  | {
+      type: 'task_create'
+      requestId: string
+      toolUseId: string
+      taskId?: string
+      subject: string
+      description?: string
+      activeForm?: string
+      metadata?: Record<string, unknown>
+    }
+  | {
+      type: 'task_update'
+      requestId: string
+      toolUseId: string
+      taskId: string
+      status?: ClaudeTaskStatus
+      subject?: string
+      description?: string
+      activeForm?: string
+      owner?: string
+      blocks?: string[]
+      blockedBy?: string[]
+      metadata?: Record<string, unknown>
+    }
+  | {
+      type: 'task_list'
+      requestId: string
+      toolUseId: string
+      tasks: ClaudeTaskSnapshot[]
     }
   | {
       type: 'ask_user_question'

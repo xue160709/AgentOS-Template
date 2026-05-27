@@ -108,6 +108,32 @@ export type ChatFileDiffItem = {
   detail?: string
 }
 
+export type ChatTaskStatus = 'pending' | 'in_progress' | 'completed' | 'deleted'
+
+/** 当前线程内由 Claude Task 工具维护的任务项 / Task item tracked from Claude Task tools */
+export type ChatTaskItem = {
+  id: string
+  toolUseId?: string
+  subject: string
+  description?: string
+  activeForm?: string
+  status: ChatTaskStatus
+  owner?: string
+  blocks?: string[]
+  blockedBy?: string[]
+  metadata?: Record<string, unknown>
+  createdAt: number
+  updatedAt: number
+  order: number
+}
+
+/** 线程级任务清单快照 / Thread-scoped task list snapshot */
+export type ChatTaskState = {
+  requestId?: string
+  updatedAt: number
+  items: ChatTaskItem[]
+}
+
 /** 对话时间轴联合类型 / Union of rows shown in the transcript timeline */
 export type TranscriptItem = ChatMessageItem | ChatToolItem | ChatThinkingItem | ChatActivityItem | ChatFileDiffItem
 
@@ -117,6 +143,7 @@ export type ChatState = {
   model: string
   modelPick?: ChatModelPick
   cwd?: string
+  tasks?: ChatTaskState
   items: TranscriptItem[]
 }
 

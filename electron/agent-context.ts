@@ -734,14 +734,14 @@ async function readSkillItems(sourceRoot: ContextSourceRoot): Promise<AgentConte
 
   for (const entry of entries) {
     const entryPath = path.join(skillsDirectory, entry.name)
-    if (entry.isDirectory()) {
+    if (await isDirectoryLikeDirent(entry, entryPath)) {
       const skillPath = path.join(entryPath, 'SKILL.md')
       if (!(await exists(skillPath))) continue
       items.push(await createSlashItem(skillPath, sourceRoot, 'skill', entry.name))
       continue
     }
 
-    if (entry.isFile() && entry.name.toLowerCase().endsWith('.md')) {
+    if ((await isFileLikeDirent(entry, entryPath)) && entry.name.toLowerCase().endsWith('.md')) {
       items.push(await createSlashItem(entryPath, sourceRoot, 'skill', path.basename(entry.name, path.extname(entry.name))))
     }
   }
@@ -771,7 +771,8 @@ async function readSkillAgentFiles(sourceRoot: ContextSourceRoot): Promise<strin
   const entries = await safeReadDir(skillsDirectory)
   const files: string[] = []
   for (const entry of entries) {
-    if (!entry.isDirectory()) continue
+    const entryPath = path.join(skillsDirectory, entry.name)
+    if (!(await isDirectoryLikeDirent(entry, entryPath))) continue
     files.push(...(await readMarkdownFiles(path.join(skillsDirectory, entry.name, 'agents'))))
   }
   return files
@@ -1290,6 +1291,28 @@ async function safeReadDir(directoryPath: string): Promise<import('node:fs').Dir
     return await fs.readdir(directoryPath, { withFileTypes: true })
   } catch {
     return []
+  }
+}
+
+async function isDirectoryLikeDirent(entry: import('node:fs').Dirent, entryPath: string): Promise<boolean> {
+  if (entry.isDirectory()) return true
+  if (!entry.isSymbolicLink()) return false
+
+  try {
+    return (await fs.stat(entryPath)).isDirectory()
+  } catch {
+    return false
+  }
+}
+
+async function isFileLikeDirent(entry: import('node:fs').Dirent, entryPath: string): Promise<boolean> {
+  if (entry.isFile()) return true
+  if (!entry.isSymbolicLink()) return false
+
+  try {
+    return (await fs.stat(entryPath)).isFile()
+  } catch {
+    return false
   }
 }
 

@@ -102,7 +102,7 @@ flowchart TD
 - 项目首页卡片排序入口打开 Agent 模式设置模态的“卡片顺序”项；排序、尺寸切换、删除和保存行为与原排序弹窗一致。
 - Agent 模式设置模态还包含“项目”项：设置当前项目新建普通对话默认模型，并用 textarea 维护项目根 `AGENTS.md`、`SOUL.md`、`GOAL.md`。
 - Agent 模式设置模态还包含 “Skills” 项：只展示当前项目的 Project Skills，并允许为每个 Skill 选择运行模型；该设置保存在 Agent Mode 项目设置中，不写入项目目录。
-- 项目首页 Skill 卡片点击运行时，会根据 `skill.path` 查找 Skills 面板保存的模型覆盖；有效时创建对应模型的 `skill-run` thread，无效时回退 composer/default 模型。
+- 项目首页 Skill 卡片点击运行时，会根据 `skill.path` 查找 Skills 面板保存的模型覆盖；有效时创建对应模型的 `skill-run` thread。覆盖、项目首页草稿、项目默认和同项目当前模型都会按顺序校验，失效时继续回退到下一层，最后使用全局默认模型。
 - 项目首页卡片自定义依赖 `/a2ui-project-home-panel` Skill 名称和定制提示词；仓库当前构建配置引用该内置 Skill 目录，但目录本身未随当前代码树出现，`test:home-plugin` 通过 `--allow-missing` 容忍缺失。
 
 模态蒙层设计规范：

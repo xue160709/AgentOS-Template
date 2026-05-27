@@ -103,9 +103,9 @@ flowchart TD
 - “卡片顺序”项复用项目首页卡片排序能力，确认/取消按钮只出现在该设置项内容底部。
 - “Skills”项只展示当前项目扫描到的 `scope === "project" && kind === "skill"` 条目，每行展示 Skill 标题、`/command` 或相对路径，并提供模型 selector。
 - Skill 模型配置以 `skill.path` 为键保存；Skill title/command 改名不影响配置，移动路径会被视为新 Skill。
-- Skill 模型 selector 复用 composer 的聚合模型选项：所有 Provider 的主模型和 Haiku/Sonnet/Opus 映射都可选；默认项“使用 Composer 当前模型”会删除该 Skill 的覆盖配置。
+- Skill 模型 selector 复用 composer 的聚合模型选项：所有 Provider 的主模型和 Haiku/Sonnet/Opus 映射都可选；默认项“不固定模型”会删除该 Skill 的覆盖配置，运行时优先使用目标项目的草稿/默认模型，再回退同项目当前模型和全局默认模型。
 - 保存项目默认模型时只写入 `projectModelPick`；保存 Skills 面板时只写入 `skillModelOverrides`，必须保留已保存的 `enabled`、`todoEnabled`、`user` 和 `identity`。
-- Skill 删除、隐藏、移动、Provider 删除、模型删除或模型 id 不再属于对应 Provider 时，设置面板忽略或清理失效项，运行时回退 composer/default 模型。
+- Skill 删除、隐藏、移动、Provider 删除、模型删除或模型 id 不再属于对应 Provider 时，设置面板忽略或清理失效项，运行时跳过无效候选并继续使用项目草稿、项目默认、同项目当前模型或全局默认模型。
 - Agent 设置模态只承载项目首页运行态设置，不承接 USER/IDENTITY；USER/IDENTITY 继续由全局设置页的 Agent Mode 页面编辑。
 - `CLAUDE.md` 必须随 Agent Mode 自动创建；中文环境生成中文桥接指令，英文环境生成英文桥接指令。
 - `CLAUDE.md` 内应明确要求 Claude 读取 `AGENT.md`、`SOUL.md`、`MEMORY.md` 和 `memory/`。

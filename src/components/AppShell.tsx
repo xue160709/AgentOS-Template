@@ -84,6 +84,16 @@ type InitialModelFormState = {
   opusSupportsImages: boolean
 }
 
+type SkillRunModelPickResolution = {
+  modelPick?: ChatModelPick
+  consumedProjectDraft: boolean
+}
+
+type SkillRunModelPickCandidate = {
+  source: 'skill-override' | 'skill-explicit' | 'project-draft' | 'project-default' | 'active-thread'
+  pick?: ChatModelPick
+}
+
 /** 组合侧栏 + 工作区 + 聊天页顶栏 / Composes sidebar rail, workspace chrome, and chat surfaces */
 export function AppShell() {
   // --- Shell state / 壳层状态 ---
@@ -813,29 +823,44 @@ export function AppShell() {
   )
 
   const resolveSkillRunModelPick = useCallback(
-    async (projectId: string, skill: ProjectSkillRunRequest): Promise<ChatModelPick | undefined> => {
-      const snapshot = await window.claudeChat?.getSettings?.().catch(() => undefined)
-      if (!snapshot) return skill.modelPick
-      const settings = snapshot.settings
+    async (projectId: string, skill: ProjectSkillRunRequest): Promise<SkillRunModelPickResolution> => {
       const project = chatWorkspace?.projects.find((item) => item.id === projectId)
-      const activeThreadPick = chatWorkspace?.threads.find((thread) => thread.id === chatWorkspace.activeThreadId)?.chatState.modelPick
-      const result = project
-        ? await window.desktop?.getAgentModeSettings?.(project.path).catch(() => undefined)
-        : undefined
-      const override = result?.ok ? result.settings.skillModelOverrides[skill.path] : undefined
-      const preferred = override
-        ? validateModelPick(settings, override) ?? activeThreadPick
-        : skill.modelPick ?? activeThreadPick
-      return resolveEffectiveModelPick(settings, preferred)
+      const activeThread = chatWorkspace?.threads.find((thread) => thread.id === chatWorkspace.activeThreadId)
+      const [snapshot, result] = await Promise.all([
+        window.claudeChat?.getSettings?.().catch(() => undefined),
+        project ? window.desktop?.getAgentModeSettings?.(project.path).catch(() => undefined) : undefined,
+      ])
+      const projectModelPick = result?.ok
+        ? result.settings.projectModelPick
+        : projectId === activeProject?.id
+          ? projectDefaultModelPick
+          : undefined
+      const candidates: SkillRunModelPickCandidate[] = [
+        { source: 'skill-override', pick: result?.ok ? result.settings.skillModelOverrides[skill.path] : undefined },
+        { source: 'skill-explicit', pick: skill.modelPick },
+        { source: 'project-draft', pick: projectHomeDraftModelPicks[projectId] },
+        { source: 'project-default', pick: projectModelPick },
+        { source: 'active-thread', pick: activeThread?.projectId === projectId ? activeThread.chatState.modelPick : undefined },
+      ]
+      if (!snapshot) {
+        const selected = firstDefinedModelPickCandidate(candidates)
+        return { modelPick: selected?.pick, consumedProjectDraft: selected?.source === 'project-draft' }
+      }
+      const settings = snapshot.settings
+      const selected = firstValidModelPickCandidate(settings, candidates)
+      return {
+        modelPick: resolveEffectiveModelPick(settings, selected?.pick),
+        consumedProjectDraft: selected?.source === 'project-draft',
+      }
     },
-    [chatWorkspace],
+    [activeProject?.id, chatWorkspace, projectDefaultModelPick, projectHomeDraftModelPicks],
   )
 
   const runProjectSkill = useCallback(
     (projectId: string, skill: ProjectSkillRunRequest) => {
       void (async () => {
         setSelectedProjectSkill(null)
-        const modelPick = await resolveSkillRunModelPick(projectId, skill)
+        const { modelPick, consumedProjectDraft } = await resolveSkillRunModelPick(projectId, skill)
         if (!chatWorkspace?.projects.some((project) => project.id === projectId)) {
           createThreadInProject(projectId)
           return
@@ -866,6 +891,9 @@ export function AppShell() {
             threads: [nextThread, ...prev.threads],
           }
         })
+        if (consumedProjectDraft) {
+          setProjectHomeDraftModelPick(projectId, undefined)
+        }
         goHome()
 
         requestAnimationFrame(() => {
@@ -877,7 +905,7 @@ export function AppShell() {
         })
       })()
     },
-    [chatWorkspace?.projects, createThreadInProject, goHome, resolveSkillRunModelPick, t, updateChatWorkspace],
+    [chatWorkspace?.projects, createThreadInProject, goHome, resolveSkillRunModelPick, setProjectHomeDraftModelPick, t, updateChatWorkspace],
   )
 
   const stopProjectSkillRun = useCallback(
@@ -2127,6 +2155,23 @@ function selectInitialModelProvider(snapshot: ClaudeAgentSettingsSnapshot): Clau
     snapshot.settings.providers.find((provider) => provider.id === snapshot.settings.activeProviderId) ??
     snapshot.settings.providers[0]
   )
+}
+
+function firstDefinedModelPickCandidate(
+  candidates: SkillRunModelPickCandidate[],
+): SkillRunModelPickCandidate | undefined {
+  return candidates.find((candidate) => Boolean(candidate.pick))
+}
+
+function firstValidModelPickCandidate(
+  settings: ClaudeAgentSettingsSnapshot['settings'],
+  candidates: SkillRunModelPickCandidate[],
+): SkillRunModelPickCandidate | undefined {
+  for (const candidate of candidates) {
+    const pick = validateModelPick(settings, candidate.pick)
+    if (pick) return { ...candidate, pick }
+  }
+  return undefined
 }
 
 function readStoredBoolean(key: string, fallback: boolean): boolean {

@@ -110,6 +110,7 @@ flowchart TD
 - `ChatModelPick` 是实际运行模型的最小闭包，只保存 `providerId` 和 `anthropicModel`；它可被 thread、项目默认模型、Project Skill 覆盖和文件回滚请求复用。
 - 活动 thread 存在时，聊天模型选择只更新该 thread 的 `chatState.modelPick` 并清空不匹配的 `sessionId`；没有活动 thread 时才更新全局 `activeProviderId/activeAnthropicModel`。
 - 项目设置存在有效 `projectModelPick` 时，项目首页 composer 初始显示该模型；之后用户在项目首页 composer 中切换模型会写入当前项目的内存态草稿模型，下一次新建普通对话会继承该草稿模型并随即清空，后续新建对话重新回到项目默认模型。
+- Project Skill 手动运行会按 Skill 覆盖、显式 Skill 模型、项目首页草稿模型、项目默认模型、同项目活动 thread 模型、全局默认模型的顺序解析；每一层都必须通过 Provider/model 有效性校验，失效时跳过。
 - 全局 `activeProviderId/activeAnthropicModel` 是无项目默认模型、无效模型覆盖和无活动 thread 场景的 fallback；如果当前全局模型被删除，则自动选择当前 Provider 的第一个有效模型，仍无有效模型时遍历其它 Provider。
 - `ClaudeAgentSettingsStore.resolve(modelPick)` 会优先校验并使用请求携带的 provider/model，构造本次 SDK 的 `ANTHROPIC_*` env；校验失败时回退原有 settings/env resolve 逻辑。
 - Provider id 会去重；重复 id 会追加序号后缀。

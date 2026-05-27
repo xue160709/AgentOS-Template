@@ -68,6 +68,7 @@ type ActiveRequest = {
   agentModeSettingsOverride?: ClaudeChatSubmitPayload['agentModeSettingsOverride']
   permissionMode: ClaudePermissionMode
   seenToolUseIds: Set<string>
+  seenTaskInputToolUseIds: Set<string>
   toolNamesByUseId: Map<string, string>
   diffedToolUseIds: Set<string>
   streamBlocks: Map<number, StreamBlockState>
@@ -176,6 +177,7 @@ export class ClaudeAgentRunner {
       agentModeSettingsOverride: normalizeAgentModeSettingsOverride(payload.agentModeSettingsOverride),
       permissionMode: normalizeChatPermissionMode(payload.permissionMode),
       seenToolUseIds: new Set(),
+      seenTaskInputToolUseIds: new Set(),
       toolNamesByUseId: new Map(),
       diffedToolUseIds: new Set(),
       streamBlocks: new Map(),

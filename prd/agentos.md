@@ -78,7 +78,7 @@ flowchart TD
 - Agent 模式设置模态只承载项目首页运行态设置（项目默认模型与 Agent 文档、卡片顺序、Skills 模型覆盖、常规）；全局设置页仍承载模型 Provider、Project Skills 开关、Agent Mode USER/IDENTITY、更新和开发者设置。
 - 全局设置页和 Agent 模式设置模态共用设置界面视觉规范：设置项导航与内容区分离，内容复用分区、分组行、说明文案、焦点态和确认弹窗样式。
 - 每个聊天线程可以独立保存当前使用的模型选择；composer 模型按钮显示活动线程的模型，线程没有有效模型时回退全局 Provider 设置中的当前可用模型。
-- Project Skill 从项目首页或侧栏运行时会创建 `skill-run` 线程，并优先使用 Agent 模式 Skills 面板中按 `skill.path` 保存的模型覆盖；Skill 或模型配置失效时回退 composer/default 模型。
+- Project Skill 从项目首页或侧栏运行时会创建 `skill-run` 线程，并优先使用 Agent 模式 Skills 面板中按 `skill.path` 保存的模型覆盖；Skill 或模型配置失效时跳过该候选，继续回退目标项目草稿模型、项目默认模型、同项目当前模型和全局默认模型。
 - About 面板、设置页和发布元数据统一读取 `APP_METADATA`，避免产品名、作者、仓库、License 等信息在多处漂移。
 - Agent 运行必须通过主进程统一处理，渲染层只通过 preload 暴露的安全 API 访问。
 - 文件读取、预览和插件运行都必须限制在项目根目录内。

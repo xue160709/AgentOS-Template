@@ -128,7 +128,7 @@ flowchart TD
 - Hash 路由只把 `home`、`docs`、`settings` 识别为主视图；未知 hash 归一化为 `home`。
 - Docs 视图当前是 `DocsPage` 占位面板，只展示本地化 eyebrow、heading 和 placeholder，不读取外部文档源。
 - 侧栏项目 Skill 只展示 `scope === 'project'` 且 `kind === 'skill'` 的条目；隐藏的 Skill 路径按项目写入 localStorage。
-- Project Skill 运行入口会优先读取当前项目 Agent Mode 设置中的 `skillModelOverrides[skill.path]`；覆盖模型有效时创建带 `modelPick` 的 `skill-run` thread，无效时回退当前活动 thread/composer/default 模型。
+- Project Skill 运行入口会优先读取目标项目 Agent Mode 设置中的 `skillModelOverrides[skill.path]`；覆盖模型有效时创建带 `modelPick` 的 `skill-run` thread。覆盖模型、显式 Skill 模型、项目首页草稿模型、项目默认模型、同项目活动 thread 模型会按顺序校验，失效项会被跳过，最后回退全局默认模型。
 - `skill-run` thread 保留 `skillPath`、`skillCommand`、`skillTitle` 和 `chatState.modelPick`，因此运行后 composer 会显示本次 Skill 实际使用的模型，并可继续用该模型对话。
 - 普通 thread 的模型切换只影响当前 thread；切换到其它 thread 时 composer 根据该 thread 的 `modelPick` 重新显示。
 - 归档 `task-run` 线程时会尽力停止对应任务卡；归档 `skill-run` 线程时会尽力取消仍在运行的 request。

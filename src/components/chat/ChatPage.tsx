@@ -16,8 +16,10 @@ import {
   type DragEvent,
   type FormEvent,
   type KeyboardEvent,
+  type RefObject,
 } from 'react'
 import { flushSync } from 'react-dom'
+import { IconInline } from '../../icon-inline'
 import type {
   AgentContextCatalog,
   AgentContextSource,
@@ -48,6 +50,8 @@ import type {
   ChatFileDiffItem,
   ChatMessageAttachment,
   ChatMessageItem,
+  ChatTaskItem,
+  ChatTaskState,
   ChatState,
   ChatThinkingItem,
   ChatToolItem,
@@ -397,6 +401,8 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   const modelPopoverSurfaceRef = useRef<HTMLDivElement>(null)
   const permissionModePopoverAnchorRef = useRef<HTMLButtonElement>(null)
   const permissionModePopoverSurfaceRef = useRef<HTMLDivElement>(null)
+  const todoButtonRef = useRef<HTMLButtonElement>(null)
+  const todoPanelRef = useRef<HTMLDivElement>(null)
   const activeThreadIdRef = useRef(activeThread?.id ?? '')
   const threadScrollTopRef = useRef(new Map<string, number>())
   const threadRunStatesRef = useRef<Record<string, ThreadRunState>>(threadRunStates)
@@ -441,8 +447,15 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     width: number
     maxHeight: number
   } | null>(null)
+  const [todoPanelOpen, setTodoPanelOpen] = useState(false)
 
   const hasMessages = chatItems.length > 0
+  const activeTaskState = activeThread?.chatState.tasks
+  const visibleTaskItems = useMemo(
+    () => (activeTaskState?.items ?? []).filter((task) => task.status !== 'deleted'),
+    [activeTaskState?.items],
+  )
+  const hasVisibleTasks = visibleTaskItems.length > 0
   const activeUserInputPrompt = useMemo(() => {
     const activeThreadId = activeThread?.id ?? activeThreadIdRef.current
     if (!activeThreadId) return null
@@ -595,6 +608,33 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   useEffect(() => {
     globalDisplayModelRef.current = globalDisplayModel
   }, [globalDisplayModel])
+
+  useEffect(() => {
+    setTodoPanelOpen(false)
+  }, [activeThread?.id])
+
+  useEffect(() => {
+    if (!hasVisibleTasks) setTodoPanelOpen(false)
+  }, [hasVisibleTasks])
+
+  useEffect(() => {
+    if (!todoPanelOpen) return
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target
+      if (!(target instanceof Node)) return
+      if (todoPanelRef.current?.contains(target) || todoButtonRef.current?.contains(target)) return
+      setTodoPanelOpen(false)
+    }
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') setTodoPanelOpen(false)
+    }
+    window.addEventListener('pointerdown', onPointerDown, { capture: true })
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown, { capture: true })
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [todoPanelOpen])
 
   useEffect(() => {
     if (!activeRunState) return
@@ -1397,6 +1437,24 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
           next[idx] = { ...it, requestId: it.requestId ?? event.requestId, status: event.status, detail: event.detail ?? it.detail }
           return { ...prev, items: next }
         })
+        return
+      }
+
+      if (event.type === 'task_create') {
+        markRequestRunning(eventThreadId, event.requestId)
+        setThreadChatState(eventThreadId, (prev) => applyTaskCreateEvent(prev, event))
+        return
+      }
+
+      if (event.type === 'task_update') {
+        markRequestRunning(eventThreadId, event.requestId)
+        setThreadChatState(eventThreadId, (prev) => applyTaskUpdateEvent(prev, event))
+        return
+      }
+
+      if (event.type === 'task_list') {
+        markRequestRunning(eventThreadId, event.requestId)
+        setThreadChatState(eventThreadId, (prev) => applyTaskListEvent(prev, event))
         return
       }
 
@@ -2516,6 +2574,15 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
           onStopProjectSkillRun={onStopProjectSkillRun}
         />
       )}
+      {showThreadView && hasVisibleTasks ? (
+        <ThreadTodoFloatingPanel
+          taskState={activeTaskState}
+          buttonRef={todoButtonRef}
+          panelRef={todoPanelRef}
+          open={todoPanelOpen}
+          onOpenChange={setTodoPanelOpen}
+        />
+      ) : null}
       {activeUserInputPrompt ? (
         <AgentInputPromptModal prompt={activeUserInputPrompt} onResolve={(decision) => void resolveActiveUserInputPrompt(decision)} />
       ) : null}
@@ -2523,7 +2590,190 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   )
 })
 
+function ThreadTodoFloatingPanel({
+  taskState,
+  buttonRef,
+  panelRef,
+  open,
+  onOpenChange,
+}: {
+  taskState: ChatTaskState | undefined
+  buttonRef: RefObject<HTMLButtonElement | null>
+  panelRef: RefObject<HTMLDivElement | null>
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const { t } = useI18n()
+  const tasks = useMemo(() => (taskState?.items ?? []).filter((task) => task.status !== 'deleted'), [taskState?.items])
+  if (tasks.length === 0) return null
+
+  const completed = tasks.filter((task) => task.status === 'completed').length
+  const activeTask = tasks.find((task) => task.status === 'in_progress')
+  const progress = Math.round((completed / Math.max(1, tasks.length)) * 100)
+  const buttonLabel = t('chat.todoPanelButton', { completed, total: tasks.length })
+
+  return (
+    <div className="thread-todo-floating">
+      <button
+        ref={buttonRef}
+        type="button"
+        className={`thread-todo-trigger${open ? ' is-open' : ''}${activeTask ? ' has-active-task' : ''}`}
+        title={buttonLabel}
+        aria-label={buttonLabel}
+        aria-expanded={open}
+        aria-controls="thread-todo-panel"
+        onClick={() => onOpenChange(!open)}
+      >
+        <IconInline name="checklist" />
+        <span>{completed}/{tasks.length}</span>
+      </button>
+      {open ? (
+        <section
+          ref={panelRef}
+          id="thread-todo-panel"
+          className="thread-todo-panel"
+          aria-label={t('chat.todoPanelTitle')}
+        >
+          <header className="thread-todo-panel__header">
+            <div className="thread-todo-panel__title">
+              <IconInline name="checklist" />
+              <span>{t('chat.todoPanelTitle')}</span>
+            </div>
+            <span className="thread-todo-panel__count">{completed}/{tasks.length}</span>
+          </header>
+          <div className="thread-todo-panel__progress" aria-label={t('chat.todoPanelProgress', { completed, total: tasks.length })}>
+            <span style={{ width: `${progress}%` }} />
+          </div>
+          <div className="thread-todo-panel__body">
+            {tasks.map((task) => (
+              <article key={task.id} className={`thread-todo-item thread-todo-item--${task.status}`}>
+                <span className="thread-todo-item__marker" aria-hidden="true">
+                  {task.status === 'completed' ? <IconInline name="check" /> : null}
+                </span>
+                <div className="thread-todo-item__copy">
+                  <h3>{task.subject}</h3>
+                  {task.status === 'in_progress' && task.activeForm ? <p>{task.activeForm}</p> : task.description ? <p>{task.description}</p> : null}
+                </div>
+                <span className="thread-todo-item__status">{taskStatusLabel(task.status, t)}</span>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+    </div>
+  )
+}
+
 // --- Module-level pure helpers (no React) / 模块级纯函数（无 React 依赖）---
+
+function taskStatusLabel(status: ChatTaskItem['status'], t: (path: string, vars?: Record<string, string | number>) => string): string {
+  if (status === 'in_progress') return t('chat.todoStatusInProgress')
+  if (status === 'completed') return t('chat.todoStatusCompleted')
+  return t('chat.todoStatusPending')
+}
+
+function emptyTaskState(requestId: string, now = Date.now()): ChatTaskState {
+  return { requestId, updatedAt: now, items: [] }
+}
+
+function taskStateForRequest(prev: ChatState, requestId: string, resetOnNewRequest: boolean): ChatTaskState {
+  if (!prev.tasks) return emptyTaskState(requestId)
+  if (resetOnNewRequest && prev.tasks.requestId && prev.tasks.requestId !== requestId) {
+    return emptyTaskState(requestId)
+  }
+  return { ...prev.tasks, requestId, items: [...prev.tasks.items] }
+}
+
+function applyTaskCreateEvent(prev: ChatState, event: Extract<ClaudeChatEvent, { type: 'task_create' }>): ChatState {
+  const now = Date.now()
+  const tasks = taskStateForRequest(prev, event.requestId, true)
+  const taskId = event.taskId || `pending:${event.toolUseId}`
+  const idx = tasks.items.findIndex((task) => task.id === taskId || task.toolUseId === event.toolUseId)
+  const current = idx >= 0 ? tasks.items[idx] : undefined
+  const nextTask: ChatTaskItem = {
+    id: taskId,
+    toolUseId: event.toolUseId,
+    subject: event.subject || current?.subject || taskId,
+    description: event.description ?? current?.description,
+    activeForm: event.activeForm ?? current?.activeForm,
+    status: current?.status ?? 'pending',
+    owner: current?.owner,
+    blocks: current?.blocks,
+    blockedBy: current?.blockedBy,
+    metadata: event.metadata ?? current?.metadata,
+    createdAt: current?.createdAt ?? now,
+    updatedAt: now,
+    order: current?.order ?? tasks.items.length,
+  }
+
+  const items = idx >= 0 ? replaceAt(tasks.items, idx, nextTask) : [...tasks.items, nextTask]
+  return { ...prev, tasks: { ...tasks, updatedAt: now, items: sortTasks(items) } }
+}
+
+function applyTaskUpdateEvent(prev: ChatState, event: Extract<ClaudeChatEvent, { type: 'task_update' }>): ChatState {
+  const now = Date.now()
+  const tasks = taskStateForRequest(prev, event.requestId, false)
+  const idx = tasks.items.findIndex((task) => task.id === event.taskId)
+  const current = idx >= 0 ? tasks.items[idx] : undefined
+  const nextTask: ChatTaskItem = {
+    id: event.taskId,
+    toolUseId: current?.toolUseId ?? event.toolUseId,
+    subject: event.subject ?? current?.subject ?? event.taskId,
+    description: event.description ?? current?.description,
+    activeForm: event.activeForm ?? current?.activeForm,
+    status: event.status ?? current?.status ?? 'pending',
+    owner: event.owner ?? current?.owner,
+    blocks: mergeStringLists(current?.blocks, event.blocks),
+    blockedBy: mergeStringLists(current?.blockedBy, event.blockedBy),
+    metadata: event.metadata ?? current?.metadata,
+    createdAt: current?.createdAt ?? now,
+    updatedAt: now,
+    order: current?.order ?? tasks.items.length,
+  }
+
+  const items = idx >= 0 ? replaceAt(tasks.items, idx, nextTask) : [...tasks.items, nextTask]
+  return { ...prev, tasks: { ...tasks, updatedAt: now, items: sortTasks(items) } }
+}
+
+function applyTaskListEvent(prev: ChatState, event: Extract<ClaudeChatEvent, { type: 'task_list' }>): ChatState {
+  const now = Date.now()
+  const existing = prev.tasks?.requestId === event.requestId ? prev.tasks.items : []
+  const existingById = new Map(existing.map((task) => [task.id, task]))
+  const items = event.tasks.map((task, index): ChatTaskItem => {
+    const current = existingById.get(task.taskId)
+    return {
+      id: task.taskId,
+      toolUseId: current?.toolUseId,
+      subject: task.subject,
+      description: task.description ?? current?.description,
+      activeForm: task.activeForm ?? current?.activeForm,
+      status: task.status ?? current?.status ?? 'pending',
+      owner: task.owner ?? current?.owner,
+      blocks: task.blocks ?? current?.blocks,
+      blockedBy: task.blockedBy ?? current?.blockedBy,
+      metadata: task.metadata ?? current?.metadata,
+      createdAt: current?.createdAt ?? now,
+      updatedAt: now,
+      order: current?.order ?? index,
+    }
+  })
+  return { ...prev, tasks: { requestId: event.requestId, updatedAt: now, items: sortTasks(items) } }
+}
+
+function replaceAt<T>(items: T[], index: number, item: T): T[] {
+  const next = [...items]
+  next[index] = item
+  return next
+}
+
+function mergeStringLists(current: string[] | undefined, incoming: string[] | undefined): string[] | undefined {
+  if (!incoming || incoming.length === 0) return current
+  return [...new Set([...(current ?? []), ...incoming])]
+}
+
+function sortTasks(items: ChatTaskItem[]): ChatTaskItem[] {
+  return [...items].sort((a, b) => a.order - b.order || a.createdAt - b.createdAt)
+}
 
 function getComposerTrigger(value: string, selectionStart: number, selectionEnd: number): ComposerTrigger | null {
   if (selectionStart !== selectionEnd) return null
