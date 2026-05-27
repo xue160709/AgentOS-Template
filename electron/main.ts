@@ -116,6 +116,7 @@ app.setName(APP_NAME)
 
 const CHAT_ATTACHMENT_MAX_FILES = 8
 const CHAT_TEXT_ATTACHMENT_MAX_BYTES = 512 * 1024
+const CHAT_ATTACHMENT_MAX_TOTAL_BYTES = 24 * 1024 * 1024
 const PROJECT_FILE_PREVIEW_TEXT_MAX_BYTES = 5 * 1024 * 1024
 const PROJECT_FILE_PREVIEW_TEXT_SAMPLE_BYTES = 8192
 const CLIPBOARD_PNG_MAX_DATA_URL_LENGTH = 25_000_000
@@ -134,7 +135,7 @@ const AGENT_PROJECT_DOCUMENT_MAX_CHARS = 512_000
 const PROJECT_CONTEXT_DIR_NAME = 'Context'
 const PROJECT_CONTEXT_INSTRUCTIONS_FILE = 'CONTEXT.md'
 const PROJECT_CONTEXT_INSTRUCTIONS_MAX_CHARS = 512_000
-const CHAT_IMAGE_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024
+const CHAT_IMAGE_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024
 const CHAT_TEXT_EXTENSIONS = new Set(['.md', '.markdown', '.txt'])
 const PROJECT_FILE_PREVIEW_TEXT_EXTENSIONS = new Set([
   '.astro',
@@ -791,6 +792,14 @@ if (gotSingleInstanceLock) {
       }
       return readChatAttachments(result.filePaths, allowImages)
     })
+    ipcMain.handle('desktop:read-chat-attachments', async (_event, rawFilePaths: unknown, rawOptions: unknown) => {
+      if (!Array.isArray(rawFilePaths)) {
+        return { ok: false, message: '附件路径无效' } satisfies ClaudeChatAttachmentPickerResult
+      }
+      const filePaths = rawFilePaths.filter((filePath): filePath is string => typeof filePath === 'string' && filePath.trim().length > 0)
+      const allowImages = isRecord(rawOptions) ? rawOptions.allowImages === true : false
+      return readChatAttachments(filePaths, allowImages)
+    })
     ipcMain.handle('desktop:list-project-files', (_event, rootPath: string) => {
       return readProjectFileTree(rootPath)
     })
@@ -960,6 +969,7 @@ async function readChatAttachments(filePaths: string[], allowImages: boolean): P
   const attachments: ClaudeChatAttachment[] = []
   const skipped: Array<{ name: string; path: string; reason: string }> = []
   const selected = filePaths.slice(0, CHAT_ATTACHMENT_MAX_FILES)
+  let acceptedBytes = 0
 
   if (filePaths.length > CHAT_ATTACHMENT_MAX_FILES) {
     for (const filePath of filePaths.slice(CHAT_ATTACHMENT_MAX_FILES)) {
@@ -1000,7 +1010,12 @@ async function readChatAttachments(filePaths: string[], allowImages: boolean): P
           skipped.push({ name, path: resolvedPath, reason: '文本文件超过 512KB' })
           continue
         }
+        if (acceptedBytes + stat.size > CHAT_ATTACHMENT_MAX_TOTAL_BYTES) {
+          skipped.push({ name, path: resolvedPath, reason: '附件总大小超过 24MB' })
+          continue
+        }
         const text = await fs.readFile(resolvedPath, 'utf8')
+        acceptedBytes += stat.size
         attachments.push({
           id: createAttachmentId(attachments.length),
           kind: 'text',
@@ -1016,10 +1031,15 @@ async function readChatAttachments(filePaths: string[], allowImages: boolean): P
 
       if (imageMimeType) {
         if (stat.size > CHAT_IMAGE_ATTACHMENT_MAX_BYTES) {
-          skipped.push({ name, path: resolvedPath, reason: '图片超过 10MB' })
+          skipped.push({ name, path: resolvedPath, reason: '图片超过 5MB' })
+          continue
+        }
+        if (acceptedBytes + stat.size > CHAT_ATTACHMENT_MAX_TOTAL_BYTES) {
+          skipped.push({ name, path: resolvedPath, reason: '附件总大小超过 24MB' })
           continue
         }
         const data = await fs.readFile(resolvedPath)
+        acceptedBytes += stat.size
         const base64 = data.toString('base64')
         const image = nativeImage.createFromBuffer(data)
         const imageSize = image.isEmpty() ? undefined : image.getSize()

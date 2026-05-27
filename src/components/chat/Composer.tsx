@@ -4,13 +4,16 @@
  */
 
 import { createPortal } from 'react-dom'
+import { useState } from 'react'
 import type {
   Dispatch,
+  DragEvent,
   FormEvent,
   KeyboardEvent,
   MouseEvent,
   RefObject,
   SetStateAction,
+  ClipboardEvent,
 } from 'react'
 import type {
   ClaudeChatAttachment,
@@ -68,8 +71,10 @@ type ComposerProps = {
   onCompositionStart: () => void
   onCompositionEnd: () => void
   onInputKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void
+  onInputPaste: (event: ClipboardEvent<HTMLTextAreaElement>) => void
   onSyncComposerSelection: () => void
   onFormSubmit: (event: FormEvent<HTMLFormElement>) => void
+  onDropComposerFiles: (event: DragEvent<HTMLFormElement>) => void
   onSendClick: (event: MouseEvent<HTMLButtonElement>) => void
   onToggleSpeechRecognition: () => void
   onAddComposerAttachments: () => void
@@ -117,8 +122,10 @@ export function Composer({
   onCompositionStart,
   onCompositionEnd,
   onInputKeyDown,
+  onInputPaste,
   onSyncComposerSelection,
   onFormSubmit,
+  onDropComposerFiles,
   onSendClick,
   onToggleSpeechRecognition,
   onAddComposerAttachments,
@@ -127,6 +134,7 @@ export function Composer({
   onPickChatMenuRow,
 }: ComposerProps) {
   const { t } = useI18n()
+  const [dragDepth, setDragDepth] = useState(0)
   const hasSendText = inputValue.trim().length > 0
   const hasComposerAttachments = pendingAttachments.length > 0
   const hasUnsupportedImageAttachment =
@@ -150,10 +158,42 @@ export function Composer({
   ]
     .filter(Boolean)
     .join(' ')
+  const isDragActive = dragDepth > 0 && !isRunning
+  const formClassName = `chat-composer${isDragActive ? ' is-drag-active' : ''}`
+
+  const hasFileDrag = (event: DragEvent<HTMLFormElement>) => Array.from(event.dataTransfer.types).includes('Files')
 
   return (
     <div className="chat-composer-wrap no-drag">
-      <form className="chat-composer" id="chat-form" onSubmit={onFormSubmit}>
+      <form
+        className={formClassName}
+        id="chat-form"
+        onSubmit={onFormSubmit}
+        onDragEnter={(event) => {
+          if (isRunning || !hasFileDrag(event)) return
+          event.preventDefault()
+          event.stopPropagation()
+          setDragDepth((depth) => depth + 1)
+        }}
+        onDragOver={(event) => {
+          if (isRunning || !hasFileDrag(event)) return
+          event.preventDefault()
+          event.dataTransfer.dropEffect = 'copy'
+        }}
+        onDragLeave={(event) => {
+          if (isRunning || !hasFileDrag(event)) return
+          event.preventDefault()
+          event.stopPropagation()
+          setDragDepth((depth) => Math.max(0, depth - 1))
+        }}
+        onDrop={(event) => {
+          if (isRunning || !hasFileDrag(event)) return
+          event.preventDefault()
+          event.stopPropagation()
+          setDragDepth(0)
+          onDropComposerFiles(event)
+        }}
+      >
         {pendingAttachments.length > 0 ? (
           <div className="composer-attachments" aria-label={t('chat.attachmentsAria')}>
             {pendingAttachments.map((attachment) => (
@@ -178,6 +218,7 @@ export function Composer({
           onCompositionStart={onCompositionStart}
           onCompositionEnd={onCompositionEnd}
           onKeyDown={onInputKeyDown}
+          onPaste={onInputPaste}
           onKeyUp={onSyncComposerSelection}
           onClick={onSyncComposerSelection}
           onSelect={onSyncComposerSelection}

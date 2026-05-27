@@ -5892,6 +5892,16 @@ button.app-file-tree-row {
     0 12px 32px -26px color-mix(in oklab, var(--color-token-foreground) 44%, transparent);
 }
 
+.chat-composer.is-drag-active {
+  border-color: var(--color-token-focus-border);
+  background:
+    linear-gradient(color-mix(in oklab, var(--color-token-focus-border) 8%, transparent), color-mix(in oklab, var(--color-token-focus-border) 8%, transparent)),
+    var(--color-token-input-background);
+  box-shadow:
+    0 0 0 3px color-mix(in oklab, var(--color-token-focus-border) 16%, transparent),
+    0 12px 32px -26px color-mix(in oklab, var(--color-token-foreground) 44%, transparent);
+}
+
 .chat-input {
   width: 100%;
   min-height: 58px;

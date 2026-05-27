@@ -36,6 +36,7 @@ import type {
   AgentKnowledgeSearchOptions,
   AgentKnowledgeSearchProject,
   AgentKnowledgeSearchResult,
+  ClaudeChatAttachmentPickerResult,
 } from '../src/claude-chat-types'
 
 const CLAUDE_CHAT_EVENT_CHANNEL = 'claude-chat:event'
@@ -58,7 +59,10 @@ contextBridge.exposeInMainWorld('desktop', {
     return ipcRenderer.invoke('desktop:pick-project-directory') as Promise<string | null>
   },
   pickChatAttachments(options?: { allowImages?: boolean }) {
-    return ipcRenderer.invoke('desktop:pick-chat-attachments', options)
+    return ipcRenderer.invoke('desktop:pick-chat-attachments', options) as Promise<ClaudeChatAttachmentPickerResult>
+  },
+  readChatAttachments(filePaths: string[], options?: { allowImages?: boolean }) {
+    return ipcRenderer.invoke('desktop:read-chat-attachments', filePaths, options) as Promise<ClaudeChatAttachmentPickerResult>
   },
   listProjectFiles(rootPath: string) {
     return ipcRenderer.invoke('desktop:list-project-files', rootPath)

@@ -12,6 +12,8 @@ import {
   useMemo,
   useRef,
   useState,
+  type ClipboardEvent,
+  type DragEvent,
   type FormEvent,
   type KeyboardEvent,
 } from 'react'
@@ -21,6 +23,7 @@ import type {
   AgentContextSource,
   ChatModelPick,
   ClaudeChatAttachment,
+  ClaudeChatAttachmentPickerResult,
   ClaudeAgentSettingsSnapshot,
   ClaudeChatEvent,
   ClaudeChatSubmitPayload,
@@ -61,12 +64,16 @@ import { ChatStartView } from './ChatStartView'
 import { ChatThreadView } from './ChatThreadView'
 import { writeClipboardText } from './clipboard'
 import { Composer } from './Composer'
+import { formatBytes } from './format'
 import type { BuiltInSlashCommand, ChatModelMenuRow, ComposerSuggestion, ComposerTrigger, PermissionModeRow } from './local-types'
 import type { WorkspaceAgentModeState } from '../useWorkspaceAgentMode'
 
 const PROCESS_TRACE_TOGGLE_EVENT = 'chat-process-trace:toggle'
 const MAX_COMPOSER_SUGGESTIONS = 64
 const MAX_COMPOSER_ATTACHMENTS = 8
+const COMPOSER_ATTACHMENT_MAX_TOTAL_BYTES = 24 * 1024 * 1024
+const COMPOSER_PASTE_IMAGE_MAX_BYTES = 5 * 1024 * 1024
+const COMPOSER_PASTE_IMAGE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp'])
 const ACTIVE_SPEECH_RECOGNITION_STATUSES = new Set<SpeechRecognitionStatus>([
   'starting',
   'requesting_permission',
@@ -124,6 +131,72 @@ function shouldStartNewSpeechSegment(previous: string, next: string) {
 function escapeCssAttributeValue(value: string): string {
   if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return CSS.escape(value)
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
+
+function getNativeFilePath(file: File): string {
+  const maybeNativeFile = file as File & { path?: unknown }
+  return typeof maybeNativeFile.path === 'string' ? maybeNativeFile.path : ''
+}
+
+function dedupeFiles(files: File[]): File[] {
+  const seen = new Set<string>()
+  return files.filter((file) => {
+    const key = `${file.name}:${file.type}:${file.size}:${file.lastModified}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+function imageExtensionForMimeType(mimeType: string): string {
+  if (mimeType === 'image/jpeg') return 'jpg'
+  if (mimeType === 'image/gif') return 'gif'
+  if (mimeType === 'image/webp') return 'webp'
+  return 'png'
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('无法读取剪贴板图片'))
+    }
+    reader.onerror = () => reject(reader.error ?? new Error('无法读取剪贴板图片'))
+    reader.readAsDataURL(file)
+  })
+}
+
+function mergeComposerAttachments(
+  current: ClaudeChatAttachment[],
+  incoming: ClaudeChatAttachment[],
+): { attachments: ClaudeChatAttachment[]; skipped: Array<{ name: string; reason: string }> } {
+  const byPath = new Map(current.map((attachment) => [attachment.path, attachment]))
+  const skipped: Array<{ name: string; reason: string }> = []
+
+  for (const attachment of incoming) {
+    const existing = byPath.get(attachment.path)
+    const nextAttachments = existing
+      ? [...byPath.values()].map((item) => (item.path === attachment.path ? attachment : item))
+      : [...byPath.values(), attachment]
+
+    if (!existing && byPath.size >= MAX_COMPOSER_ATTACHMENTS) {
+      skipped.push({ name: attachment.name, reason: `一次最多添加 ${MAX_COMPOSER_ATTACHMENTS} 个文件` })
+      continue
+    }
+
+    if (totalAttachmentBytes(nextAttachments) > COMPOSER_ATTACHMENT_MAX_TOTAL_BYTES) {
+      skipped.push({ name: attachment.name, reason: '附件总大小超过 24MB' })
+      continue
+    }
+
+    byPath.set(attachment.path, attachment)
+  }
+
+  return { attachments: [...byPath.values()].slice(0, MAX_COMPOSER_ATTACHMENTS), skipped }
+}
+
+function totalAttachmentBytes(attachments: ClaudeChatAttachment[]): number {
+  return attachments.reduce((sum, attachment) => sum + Math.max(0, attachment.size || 0), 0)
 }
 
 // --- Imperative handle / 命令式句柄 ---
@@ -299,6 +372,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   const [activeModelSupportsImages, setActiveModelSupportsImages] = useState(false)
   const [claudeSettingsSnapshot, setClaudeSettingsSnapshot] = useState<ClaudeAgentSettingsSnapshot | null>(null)
   const [pendingAttachments, setPendingAttachments] = useState<ClaudeChatAttachment[]>([])
+  const pendingAttachmentsRef = useRef<ClaudeChatAttachment[]>([])
   const [agentContext, setAgentContext] = useState<AgentContextCatalog | null>(null)
   const [permissionMode, setPermissionMode] = useState<ClaudePermissionMode>(() => readStoredPermissionMode())
   const [permissionModeOpen, setPermissionModeOpen] = useState(false)
@@ -922,6 +996,7 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     scrollIntentRef.current = hasSavedScrollTop ? 'none' : 'force-bottom'
     setShowScrollButton(false)
     setModelPickerOpen(false)
+    pendingAttachmentsRef.current = []
     setPendingAttachments([])
 
     let frame = 0
@@ -1649,7 +1724,10 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       }))
     }
     setInputValue('')
-    if (!target?.threadId) setPendingAttachments([])
+    if (attachmentsForSubmit.length > 0 || !target?.threadId) {
+      pendingAttachmentsRef.current = []
+      setPendingAttachments([])
+    }
     const pendingRequestId = `pending-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
     requestStartedAtRef.current.set(pendingRequestId, requestStartedAt)
     setThreadRunState(submittingThreadId, {
@@ -1954,7 +2032,30 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
     })
   }
 
-  // --- Composer attachments via native file picker (Electron) / 通过系统文件选择器添加附件（Electron）---
+  // --- Composer attachments via picker, paste, and drag/drop / 通过选择、粘贴、拖拽添加附件 ---
+
+  const applyComposerAttachmentResult = (result: ClaudeChatAttachmentPickerResult) => {
+    if (!result.ok) {
+      onStatusChange(result.message)
+      return
+    }
+
+    if (result.attachments.length > 0) {
+      const merged = mergeComposerAttachments(pendingAttachmentsRef.current, result.attachments)
+      pendingAttachmentsRef.current = merged.attachments
+      setPendingAttachments(merged.attachments)
+      const first = result.skipped[0] ?? merged.skipped[0]
+      if (first) {
+        onStatusChange(t('chat.attachmentSkipped', { name: first.name, reason: first.reason }))
+      }
+      return
+    }
+
+    const first = result.skipped[0]
+    if (first) {
+      onStatusChange(t('chat.attachmentSkipped', { name: first.name, reason: first.reason }))
+    }
+  }
 
   const addComposerAttachments = async () => {
     const pickChatAttachments = window.desktop?.pickChatAttachments
@@ -1963,31 +2064,97 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       return
     }
 
-    const result = await pickChatAttachments({ allowImages: activeModelSupportsImages })
-    if (!result.ok) {
-      onStatusChange(result.message)
+    applyComposerAttachmentResult(await pickChatAttachments({ allowImages: activeModelSupportsImages }))
+  }
+
+  const addComposerAttachmentPaths = async (filePaths: string[]) => {
+    const readChatAttachments = window.desktop?.readChatAttachments
+    if (!readChatAttachments || isRunningRef.current || filePaths.length === 0) {
+      if (!readChatAttachments) onStatusChange(t('chat.attachmentPickerUnavailable'))
       return
     }
 
-    if (result.attachments.length > 0) {
-      setPendingAttachments((current) => {
-        const byPath = new Map(current.map((attachment) => [attachment.path, attachment]))
-        for (const attachment of result.attachments) {
-          if (byPath.size >= MAX_COMPOSER_ATTACHMENTS && !byPath.has(attachment.path)) break
-          byPath.set(attachment.path, attachment)
-        }
-        return [...byPath.values()].slice(0, MAX_COMPOSER_ATTACHMENTS)
-      })
+    applyComposerAttachmentResult(await readChatAttachments(filePaths, { allowImages: activeModelSupportsImages }))
+  }
+
+  const addComposerClipboardImages = async (files: File[]) => {
+    if (isRunningRef.current || files.length === 0) return
+
+    if (!activeModelSupportsImages) {
+      onStatusChange(t('chat.imageInputDisabledStatus'))
+      return
     }
 
-    if (result.skipped.length > 0) {
-      const first = result.skipped[0]
-      onStatusChange(t('chat.attachmentSkipped', { name: first.name, reason: first.reason }))
+    const attachments: ClaudeChatAttachment[] = []
+    const skipped: Array<{ name: string; path: string; reason: string }> = []
+    for (const [index, file] of files.slice(0, MAX_COMPOSER_ATTACHMENTS).entries()) {
+      const name = file.name || `pasted-image-${Date.now()}-${index + 1}.${imageExtensionForMimeType(file.type)}`
+      if (!COMPOSER_PASTE_IMAGE_MIME_TYPES.has(file.type)) {
+        skipped.push({ name, path: name, reason: '仅支持 PNG、JPG、GIF、WEBP' })
+        continue
+      }
+      if (file.size > COMPOSER_PASTE_IMAGE_MAX_BYTES) {
+        skipped.push({ name, path: name, reason: '图片超过 5MB' })
+        continue
+      }
+      if (totalAttachmentBytes(attachments) + file.size > COMPOSER_ATTACHMENT_MAX_TOTAL_BYTES) {
+        skipped.push({ name, path: name, reason: '附件总大小超过 24MB' })
+        continue
+      }
+      try {
+        const dataUrl = await readFileAsDataUrl(file)
+        const base64 = dataUrl.split(',', 2)[1] ?? ''
+        attachments.push({
+          id: `attachment-${Date.now()}-${index}`,
+          kind: 'image',
+          name,
+          path: `clipboard://${name}`,
+          mimeType: file.type,
+          size: file.size,
+          base64,
+          dataUrl,
+          preview: formatBytes(file.size),
+        })
+      } catch (error) {
+        skipped.push({ name, path: name, reason: error instanceof Error ? error.message : '读取失败' })
+      }
     }
+    if (files.length > MAX_COMPOSER_ATTACHMENTS) {
+      for (const file of files.slice(MAX_COMPOSER_ATTACHMENTS)) {
+        skipped.push({
+          name: file.name || 'clipboard image',
+          path: file.name || 'clipboard image',
+          reason: `一次最多添加 ${MAX_COMPOSER_ATTACHMENTS} 个文件`,
+        })
+      }
+    }
+
+    applyComposerAttachmentResult({ ok: true, attachments, skipped })
+  }
+
+  const handleComposerPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const itemFiles = Array.from(event.clipboardData.items)
+      .filter((item) => item.kind === 'file')
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => Boolean(file))
+    const files = dedupeFiles([...Array.from(event.clipboardData.files), ...itemFiles]).filter((file) => file.type.startsWith('image/'))
+    if (files.length === 0) return
+    event.preventDefault()
+    void addComposerClipboardImages(files)
+  }
+
+  const handleComposerDrop = (event: DragEvent<HTMLFormElement>) => {
+    const filePaths = Array.from(event.dataTransfer.files)
+      .map((file) => getNativeFilePath(file))
+      .filter((filePath): filePath is string => Boolean(filePath))
+    if (filePaths.length === 0) return
+    void addComposerAttachmentPaths(filePaths)
   }
 
   const removeComposerAttachment = (attachmentId: string) => {
-    setPendingAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId))
+    const next = pendingAttachmentsRef.current.filter((attachment) => attachment.id !== attachmentId)
+    pendingAttachmentsRef.current = next
+    setPendingAttachments(next)
   }
 
   const syncComposerSelection = useCallback(() => {
@@ -2273,8 +2440,10 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
       onCompositionStart={() => setIsComposingText(true)}
       onCompositionEnd={() => setIsComposingText(false)}
       onInputKeyDown={handleInputKeydown}
+      onInputPaste={handleComposerPaste}
       onSyncComposerSelection={syncComposerSelection}
       onFormSubmit={handleFormSubmit}
+      onDropComposerFiles={handleComposerDrop}
       onSendClick={handleSendClick}
       onToggleSpeechRecognition={() => void toggleSpeechRecognition()}
       onAddComposerAttachments={() => void addComposerAttachments()}

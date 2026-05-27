@@ -86,6 +86,7 @@ declare global {
       }
       pickProjectDirectory?: () => Promise<string | null>
       pickChatAttachments?: (options?: { allowImages?: boolean }) => Promise<ClaudeChatAttachmentPickerResult>
+      readChatAttachments?: (filePaths: string[], options?: { allowImages?: boolean }) => Promise<ClaudeChatAttachmentPickerResult>
       listProjectFiles?: (rootPath: string) => Promise<FileTreeResult>
       watchProjectFiles?: (rootPath: string) => Promise<ProjectFileWatchResult>
       unwatchProjectFiles?: (rootPath: string) => Promise<void>
