@@ -424,6 +424,77 @@
     "previewText": "Text",
     "previewImage": "Image"
   },
+  "statusPanel": {
+    "openTitle": "View Agent status",
+    "openAria": "Open Agent status panel",
+    "heading": "Agent status",
+    "refreshTitle": "Refresh status",
+    "refreshAria": "Refresh Agent status",
+    "loading": "Loading Agent status…",
+    "unknown": "Unknown",
+    "notReported": "Not reported yet",
+    "notEstablished": "Not established yet",
+    "notLoaded": "Not loaded",
+    "health": {
+      "unconfigured": "Not configured",
+      "idle": "Idle",
+      "running": "Running",
+      "ready": "Healthy",
+      "partial": "Needs attention",
+      "error": "Error"
+    },
+    "healthHint": {
+      "unconfigured": "No usable credentials are configured. Open Settings · Models.",
+      "idle": "Configuration is ready. Send a message to establish an Agent session.",
+      "running": "The Agent is processing the current request.",
+      "ready": "The most recent session initialized successfully.",
+      "partial": "The Agent is available, but some MCP servers need attention.",
+      "error": "The most recent Agent request failed. Review the error details."
+    },
+    "routeSection": "Model route",
+    "configuredModel": "Configured model",
+    "reportedModel": "SDK reported model",
+    "route": "Request route",
+    "endpoint": "Endpoint",
+    "authentication": "Authentication",
+    "routeValue": {
+      "anthropic-default": "Anthropic default endpoint",
+      "custom-gateway": "Custom Gateway"
+    },
+    "authValue": {
+      "api-key": "API Key",
+      "auth-token": "Auth Token",
+      "missing": "Not configured"
+    },
+    "contextSection": "Context usage",
+    "contextUnavailable": "Context statistics have not been loaded yet. Refresh an existing session or check again after the next turn.",
+    "contextTokens": "Tokens",
+    "contextProgress": "Context is {{percent}}% used",
+    "contextCategory": {
+      "commandMetadata": "Command metadata"
+    },
+    "sessionSection": "Session",
+    "sessionId": "Session ID",
+    "cwd": "Working directory",
+    "permissionMode": "Permission mode",
+    "claudeCodeVersion": "Claude Code",
+    "capabilitySection": "Capabilities",
+    "tools": "Tools",
+    "skills": "Skills",
+    "commands": "Commands",
+    "plugins": "Plugins",
+    "mcpSection": "MCP servers",
+    "noMcp": "No MCP servers were reported for this session.",
+    "capabilityUnavailable": "The capability list has not been loaded yet. Refresh an existing session or check again after the next turn.",
+    "diagnosticSection": "Diagnostics",
+    "usageSection": "Latest usage",
+    "latestTurn": "Latest turn",
+    "tokens": "Input / output",
+    "cost": "Cost",
+    "duration": "Duration",
+    "turns": "Turns",
+    "lastError": "Latest error"
+  },
   "settings": {
     "general": {
       "pageTitle": "General",
@@ -777,6 +848,7 @@
     "slashCompactDesc": "Compact the current session context while keeping what you need to continue.",
     "slashStatusTitle": "/status",
     "slashStatusDesc": "Inspect session, model, tools, and context state.",
+    "statusPanelOpened": "Agent status opened",
     "slashHelpTitle": "/help",
     "slashHelpDesc": "List slash commands available to Claude Agent in this session."
   },

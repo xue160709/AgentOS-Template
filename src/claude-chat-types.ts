@@ -387,6 +387,106 @@ export type ClaudeChatSubmitResult = {
   requestId: string
 }
 
+/** 状态面板请求：按线程读取脱敏运行态 / Status panel request for a redacted thread runtime snapshot */
+export type ClaudeAgentStatusRequest = {
+  threadId?: string
+  sessionId?: string
+  modelPick?: ChatModelPick
+  cwd?: string
+  refresh?: boolean
+}
+
+/** 状态面板健康度 / Health indicator shown by the local Agent status panel */
+export type ClaudeAgentStatusHealth = 'unconfigured' | 'idle' | 'running' | 'ready' | 'partial' | 'error'
+
+/** MCP 连接摘要 / Redacted MCP connection summary */
+export type ClaudeAgentStatusMcpServer = {
+  name: string
+  status: string
+}
+
+/** 单模型用量摘要 / Per-model usage summary */
+export type ClaudeAgentStatusModelUsage = {
+  model: string
+  inputTokens: number
+  outputTokens: number
+  cacheReadInputTokens: number
+  cacheCreationInputTokens: number
+  costUsd: number
+  contextWindow: number
+}
+
+/** 最近一次 Agent 轮次用量 / Last Agent turn usage summary */
+export type ClaudeAgentStatusUsage = {
+  costUsd: number
+  durationMs: number
+  numTurns: number
+  models: ClaudeAgentStatusModelUsage[]
+}
+
+/** `/context` 同源的上下文占用摘要 / Context-window usage summary from the same source as `/context` */
+export type ClaudeAgentStatusContextUsage = {
+  model: string
+  totalTokens: number
+  maxTokens: number
+  rawMaxTokens: number
+  percentage: number
+  autoCompactThreshold?: number
+  isAutoCompactEnabled: boolean
+  categories: {
+    name: string
+    tokens: number
+    color: string
+    isDeferred?: boolean
+  }[]
+  slashCommands?: {
+    totalCommands: number
+    includedCommands: number
+    tokens: number
+  }
+  skills?: {
+    totalSkills: number
+    includedSkills: number
+    tokens: number
+  }
+  apiUsage?: {
+    inputTokens: number
+    outputTokens: number
+    cacheCreationInputTokens: number
+    cacheReadInputTokens: number
+  }
+}
+
+/** 状态面板快照：不包含凭据原文 / Status panel snapshot without credential secrets */
+export type ClaudeAgentStatusSnapshot = {
+  threadId: string
+  health: ClaudeAgentStatusHealth
+  active: boolean
+  requestId?: string
+  sessionId?: string
+  cwd?: string
+  configSource: ClaudeAgentConfigSource
+  authentication: 'api-key' | 'auth-token' | 'missing'
+  route: 'anthropic-default' | 'custom-gateway'
+  baseUrl: string
+  endpointHost: string
+  configuredModel: string
+  reportedModel: string
+  claudeCodeVersion: string
+  apiKeySource: string
+  permissionMode: string
+  tools?: string[]
+  skills?: string[]
+  slashCommands?: string[]
+  agents?: string[]
+  mcpServers?: ClaudeAgentStatusMcpServer[]
+  plugins?: string[]
+  contextUsage?: ClaudeAgentStatusContextUsage
+  lastUsage?: ClaudeAgentStatusUsage
+  lastError?: string
+  updatedAt?: number
+}
+
 /** Agent 活动条的状态 / Status for inline agent activity rows */
 export type ClaudeChatActivityStatus = 'running' | 'done' | 'error' | 'info'
 
@@ -631,6 +731,7 @@ export type ClaudeChatAPI = {
   submit(payload: ClaudeChatSubmitPayload): Promise<ClaudeChatSubmitResult>
   cancel(requestId?: string): Promise<void>
   newThread(threadId?: string): Promise<void>
+  getStatus(payload?: ClaudeAgentStatusRequest): Promise<ClaudeAgentStatusSnapshot>
   answerPermissionRequest(payload: ClaudePermissionResponsePayload): Promise<void>
   rewindFiles(payload: ClaudeFileRewindPayload): Promise<ClaudeFileRewindResult>
   getSettings(): Promise<ClaudeAgentSettingsSnapshot>

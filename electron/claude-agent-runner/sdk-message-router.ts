@@ -4,13 +4,25 @@
  */
 
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
-import type { ClaudeChatEvent, ClaudeTaskSnapshot, ClaudeTaskStatus } from '../../src/claude-chat-types'
+import type { ClaudeAgentStatusUsage, ClaudeChatEvent, ClaudeTaskSnapshot, ClaudeTaskStatus } from '../../src/claude-chat-types'
 import { fileDiffFromPostToolUse } from './file-diff'
 
 type ThreadRuntimeState = {
   sessionId?: string
   model: string
   configSignature?: string
+  cwd?: string
+  claudeCodeVersion?: string
+  apiKeySource?: string
+  permissionMode?: string
+  tools?: string[]
+  slashCommands?: string[]
+  agents?: string[]
+  mcpServers?: { name: string; status: string }[]
+  plugins?: string[]
+  lastUsage?: ClaudeAgentStatusUsage
+  lastError?: string
+  updatedAt?: number
 }
 
 type StreamBlockState = {
@@ -71,6 +83,9 @@ export class ClaudeSdkMessageRouter {
     if (message.type === 'result') {
       const threadState = this.getThreadRuntimeState(activeRequest.threadId)
       threadState.sessionId = message.session_id
+      threadState.lastUsage = statusUsageFromResult(message)
+      threadState.lastError = message.is_error ? ('errors' in message ? message.errors.join('\n') : '') : undefined
+      threadState.updatedAt = Date.now()
       const result = 'result' in message ? message.result : message.errors.join('\n')
       if (result && !activeRequest.didEmitText) {
         this.emitAssistantDelta(activeRequest, result)
@@ -104,6 +119,17 @@ export class ClaudeSdkMessageRouter {
       const agents = Array.isArray(message.agents) ? message.agents : []
       const mcpServers = Array.isArray(message.mcp_servers) ? message.mcp_servers : []
       const plugins = Array.isArray(message.plugins) ? message.plugins.map((plugin) => plugin.name) : []
+      threadState.cwd = message.cwd || activeRequest.cwd
+      threadState.claudeCodeVersion = message.claude_code_version || ''
+      threadState.apiKeySource = message.apiKeySource || ''
+      threadState.permissionMode = message.permissionMode || ''
+      if (tools.length > 0) threadState.tools = tools
+      if (slashCommands.length > 0) threadState.slashCommands = slashCommands
+      threadState.agents = agents
+      threadState.mcpServers = mcpServers
+      threadState.plugins = plugins
+      threadState.lastError = undefined
+      threadState.updatedAt = Date.now()
       this.emit({
         type: 'session_start',
         requestId: activeRequest.requestId,
@@ -656,6 +682,23 @@ export class ClaudeSdkMessageRouter {
   }
 
 
+}
+
+function statusUsageFromResult(message: Extract<SDKMessage, { type: 'result' }>): ClaudeAgentStatusUsage {
+  return {
+    costUsd: message.total_cost_usd,
+    durationMs: message.duration_ms,
+    numTurns: message.num_turns,
+    models: Object.entries(message.modelUsage).map(([model, usage]) => ({
+      model,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      cacheReadInputTokens: usage.cacheReadInputTokens,
+      cacheCreationInputTokens: usage.cacheCreationInputTokens,
+      costUsd: usage.costUSD,
+      contextWindow: usage.contextWindow,
+    })),
+  }
 }
 
 function extractTextFromContent(content: unknown): string {

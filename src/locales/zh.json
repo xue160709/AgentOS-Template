@@ -424,6 +424,77 @@
     "previewText": "文本",
     "previewImage": "图片"
   },
+  "statusPanel": {
+    "openTitle": "查看 Agent 状态",
+    "openAria": "打开 Agent 状态面板",
+    "heading": "Agent 状态",
+    "refreshTitle": "刷新状态",
+    "refreshAria": "刷新 Agent 状态",
+    "loading": "正在读取 Agent 状态...",
+    "unknown": "未知",
+    "notReported": "尚未报告",
+    "notEstablished": "尚未建立",
+    "notLoaded": "待加载",
+    "health": {
+      "unconfigured": "未配置",
+      "idle": "待命",
+      "running": "运行中",
+      "ready": "正常",
+      "partial": "部分异常",
+      "error": "异常"
+    },
+    "healthHint": {
+      "unconfigured": "尚未配置可用凭据，请前往设置 · 模型。",
+      "idle": "配置已就绪，发送消息后会建立 Agent 会话。",
+      "running": "Agent 正在处理当前请求。",
+      "ready": "最近一次会话初始化成功。",
+      "partial": "Agent 可用，但部分 MCP 服务需要处理。",
+      "error": "最近一次 Agent 请求失败，请检查错误详情。"
+    },
+    "routeSection": "模型路由",
+    "configuredModel": "配置模型",
+    "reportedModel": "SDK 报告模型",
+    "route": "请求路由",
+    "endpoint": "Endpoint",
+    "authentication": "鉴权方式",
+    "routeValue": {
+      "anthropic-default": "Anthropic 默认地址",
+      "custom-gateway": "Custom Gateway"
+    },
+    "authValue": {
+      "api-key": "API Key",
+      "auth-token": "Auth Token",
+      "missing": "未配置"
+    },
+    "contextSection": "上下文占用",
+    "contextUnavailable": "尚未读取上下文统计。刷新已有会话，或在下一轮对话后查看。",
+    "contextTokens": "Tokens",
+    "contextProgress": "上下文已使用 {{percent}}%",
+    "contextCategory": {
+      "commandMetadata": "命令元数据"
+    },
+    "sessionSection": "会话",
+    "sessionId": "Session ID",
+    "cwd": "工作目录",
+    "permissionMode": "权限模式",
+    "claudeCodeVersion": "Claude Code",
+    "capabilitySection": "能力",
+    "tools": "Tools",
+    "skills": "Skills",
+    "commands": "Commands",
+    "plugins": "Plugins",
+    "mcpSection": "MCP 服务",
+    "noMcp": "当前会话没有报告 MCP 服务。",
+    "capabilityUnavailable": "能力清单尚未加载。刷新已有会话，或在下一轮对话后查看。",
+    "diagnosticSection": "诊断详情",
+    "usageSection": "最近用量",
+    "latestTurn": "最近一轮",
+    "tokens": "输入 / 输出",
+    "cost": "费用",
+    "duration": "耗时",
+    "turns": "轮次",
+    "lastError": "最近错误"
+  },
   "settings": {
     "general": {
       "pageTitle": "常规",
@@ -777,6 +848,7 @@
     "slashCompactDesc": "压缩当前会话上下文，保留后续继续工作需要的信息。",
     "slashStatusTitle": "/status",
     "slashStatusDesc": "查看当前会话、模型、工具和上下文状态。",
+    "statusPanelOpened": "已打开 Agent 状态",
     "slashHelpTitle": "/help",
     "slashHelpDesc": "查看 Claude Agent 可用的会话命令。"
   },

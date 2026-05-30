@@ -46,6 +46,7 @@ import type {
   ClaudeChatAttachment,
   ClaudeChatAttachmentPickerResult,
   ClaudeAgentModelProvider,
+  ClaudeAgentStatusRequest,
   ClaudeAgentSettings,
   ClaudeChatSubmitPayload,
   ClaudeFileRewindPayload,
@@ -721,6 +722,9 @@ if (gotSingleInstanceLock) {
     })
     ipcMain.handle('claude-chat:new-thread', (_event, threadId?: string) => {
       return getClaudeAgentRunner().newThread(threadId)
+    })
+    ipcMain.handle('claude-chat:get-status', (_event, payload?: ClaudeAgentStatusRequest) => {
+      return getClaudeAgentRunner().getStatus(payload)
     })
     ipcMain.handle('claude-chat:answer-permission-request', (_event, payload: ClaudePermissionResponsePayload) => {
       return getClaudeAgentRunner().answerPermissionRequest(payload)

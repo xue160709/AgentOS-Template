@@ -32,7 +32,7 @@ import type {
   ClaudePermissionMode,
   ProjectFileSearchItem,
 } from '../../claude-chat-types'
-import { CLAUDE_AGENT_SETTINGS_CHANGED_EVENT } from '../../app-events'
+import { CLAUDE_AGENT_SETTINGS_CHANGED_EVENT, OPEN_AGENT_STATUS_EVENT } from '../../app-events'
 import type { HomePluginRunItem, SpeechRecognitionStatus } from '../../desktop-types'
 import { useI18n } from '../../i18n/i18n'
 import {
@@ -1711,6 +1711,14 @@ export const ChatPage = forwardRef<ChatPageHandle, ChatPageProps>(function ChatP
   ) => {
     const text = rawText.trim()
     if (!text && attachmentsForSubmit.length === 0) return
+    if (text.toLowerCase() === '/status' && attachmentsForSubmit.length === 0) {
+      inputValueRef.current = ''
+      setInputValue('')
+      setComposerSelection({ start: 0, end: 0 })
+      window.dispatchEvent(new CustomEvent(OPEN_AGENT_STATUS_EVENT, { detail: { refresh: true } }))
+      onStatusChange(t('chat.statusPanelOpened'))
+      return
+    }
     const projectForSubmit =
       target?.project ?? (activeThread ? projects.find((project) => project.id === activeThread.projectId) : undefined) ?? activeProject
 

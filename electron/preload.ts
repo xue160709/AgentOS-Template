@@ -26,6 +26,8 @@ import type {
 import type {
   ActiveChatPickPayload,
   ClaudeAgentSettings,
+  ClaudeAgentStatusRequest,
+  ClaudeAgentStatusSnapshot,
   ClaudeChatEvent,
   ClaudeChatEventHandler,
   ClaudeFileRewindPayload,
@@ -282,6 +284,9 @@ contextBridge.exposeInMainWorld('claudeChat', {
   },
   newThread(threadId?: string) {
     return ipcRenderer.invoke('claude-chat:new-thread', threadId)
+  },
+  getStatus(payload?: ClaudeAgentStatusRequest) {
+    return ipcRenderer.invoke('claude-chat:get-status', payload) as Promise<ClaudeAgentStatusSnapshot>
   },
   answerPermissionRequest(payload: ClaudePermissionResponsePayload) {
     return ipcRenderer.invoke('claude-chat:answer-permission-request', payload)
