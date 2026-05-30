@@ -243,13 +243,15 @@ export function AppShellSidebar({
     if (!skillTip) return
     const close = () => setSkillTip(null)
     window.addEventListener('resize', close)
-    const scrollRoot = sidebarRef.current?.querySelector('.app-sidebar-scroll')
+    const scrollRoot = sidebarRef.current?.querySelector(
+      isSettingsSidebar ? '.app-sidebar-scroll' : '.app-project-list',
+    )
     scrollRoot?.addEventListener('scroll', close, { passive: true })
     return () => {
       window.removeEventListener('resize', close)
       scrollRoot?.removeEventListener('scroll', close)
     }
-  }, [skillTip, sidebarRef])
+  }, [isSettingsSidebar, skillTip, sidebarRef])
 
   useEffect(() => {
     if (!contextMenu) return
